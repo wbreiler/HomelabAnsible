@@ -1,1 +1,35 @@
-  
+- name: Update system packages on Debian-based distros
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: dist
+  when: ansible_os_family == "Debian"
+
+- name: Update system packages on Fedora
+  ansible.builtin.dnf:
+    name: "*"
+    state: stable
+  when: ansible_os_family == "Fedora"
+
+- name: Install base packages on Debian-based distros
+  ansible.builtin.apt:
+    name:
+      - curl
+      - git
+      - vim
+      - gnupg
+      - ca-certificates
+      - lsb-release
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Install base packages on Fedora-based distros
+  ansible.builtin.dnf:
+    name:
+      - curl
+      - git
+      - vim
+      - gnupg2
+      - ca-certificates
+      - redhat-lsb-core
+    state: present
+  when: ansible_os_family == "Fedora"
