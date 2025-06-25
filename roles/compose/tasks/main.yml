@@ -1,0 +1,14 @@
+---
+- name: Copy Docker Compose files
+  ansible.builtin.copy:
+    src: ../../../ComposeFiles/
+    dest: /home/{{ ansible_user }}/compose/
+    owner: pi
+    group: pi
+    mode: "0644"
+
+- name: Start Docker Compose services
+  community.docker.docker_compose:
+    project_src: /home/{{ ansible_user }}/compose/
+    state: started
+    restarted: true

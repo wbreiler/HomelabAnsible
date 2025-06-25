@@ -1,0 +1,44 @@
+- name: Add Docker GPG key for Debian
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/debian/gpg
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Add Docker repository for Debian
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=arm64] https://download.docker.com/linux/debian {{ ansible_lsb.codename }} stable"
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Install Docker on Debian
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+  when: ansible_os_family == "Debian"
+  notify:
+    - Start and enable Docker service
+
+- name: Add Docker repository for Fedora
+  ansible.builtin.command:
+    cmd: dnf config-manager --add-repo=https://download.docker.com/linux/fedora/docker-ce.repo
+  args:
+    creates: /etc/yum.repos.d/docker-ce.repo
+  when: ansible_os_family == "Fedora"
+
+- name: Install Docker on Fedora
+  ansible.builtin.dnf:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+  when: ansible_os_family == "Fedora"
+  notify:
+    - Start and enable Docker service

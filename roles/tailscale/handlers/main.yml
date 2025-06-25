@@ -1,0 +1,6 @@
+---
+- name: Start Tailscale service
+  ansible.builtin.service:
+    name: tailscaled
+    state: started
+    enabled: true

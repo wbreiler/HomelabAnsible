@@ -1,0 +1,34 @@
+- name: Add Tailscale GPG key for Debian
+  ansible.builtin.apt_key:
+    url: https://pkgs.tailscale.com/stable/debian/{{ ansible_lsb.codename }}.noarmor.gpg
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Add Tailscale repository for Debian
+  ansible.builtin.apt_repository:
+    repo: "deb https://pkgs.tailscale.com/stable/debian {{ ansible_lsb.codename }} main"
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Install Tailscale on Debian
+  ansible.builtin.apt:
+    name: tailscale
+    state: present
+  when: ansible_os_family == "Debian"
+  notify:
+    - Start Tailscale service
+
+- name: Add Tailscale repository for Fedora
+  ansible.builtin.command:
+    cmd: dnf config-manager --add-repo=https://pkgs.tailscale.com/stable/fedora/tailscale.repo
+  args:
+    creates: /etc/yum.repos.d/tailscale.repo
+  when: ansible_os_family == "Fedora"
+
+- name: Install Tailscale on Fedora
+  ansible.builtin.dnf:
+    name: tailscale
+    state: present
+  when: ansible_os_family == "Fedora"
+  notify:
+    - Start Tailscale service
