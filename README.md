@@ -87,10 +87,13 @@ This playbook is organized into the following roles:
         *   Starts and enables the `tailscale` service on system boot.
 
 *   ### `compose`
-    *   **Purpose**: Deploys applications using Docker Compose.
+    *   **Purpose**: Deploys applications using Docker Compose and ensures they start on boot.
     *   **Tasks**:
         *   Copies all files from the local `ComposeFiles/` directory to the remote server.
-        *   Runs `docker-compose up` to start all services defined in the compose files.
+        *   Creates a `systemd` service to manage the Docker Compose application.
+        *   Starts and enables the `compose-app` service, which runs `docker-compose up -d`.
+    *   **Handlers**:
+        *   Reloads `systemd` when the service definition changes.
 
 ## Contributing
 
