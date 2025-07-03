@@ -1,11 +1,9 @@
 ---
-- name: Copy Docker Compose files
-  ansible.builtin.copy:
-    src: ../../../ComposeFiles/
-    dest: /home/{{ ansible_user }}/compose/
-    owner: pi
-    group: pi
-    mode: "0644"
+- name: Add user to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
 
 - name: Copy Docker Compose project
   ansible.builtin.copy:

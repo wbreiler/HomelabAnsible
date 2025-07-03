@@ -1,4 +1,8 @@
 ---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+
 - name: Start and enable Docker service
   ansible.builtin.service:
     name: docker

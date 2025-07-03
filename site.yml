@@ -1,8 +1,0 @@
-- name: Homelab setup
-  hosts: homelab
-  become: true
-  roles:
-    - common
-    - docker
-    - tailscale
-    - compose
