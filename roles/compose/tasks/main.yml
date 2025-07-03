@@ -7,8 +7,26 @@
     group: pi
     mode: "0644"
 
+- name: Copy Docker Compose project
+  ansible.builtin.copy:
+    src: ../../../ComposeFiles/
+    dest: /home/{{ ansible_user }}/compose/
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+
+- name: Create and enable systemd service
+  ansible.builtin.template:
+    src: compose-app.service.j2
+    dest: /etc/systemd/system/compose-app.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
 - name: Start Docker Compose services
-  community.docker.docker_compose:
-    project_src: /home/{{ ansible_user }}/compose/
+  ansible.builtin.systemd:
+    name: compose-app
     state: started
-    restarted: true
+    enabled: true
+    daemon_reload: true
