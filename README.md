@@ -31,7 +31,11 @@ Before you begin, ensure you have the following:
     ```
 
 2.  **Configure the Inventory**
-    Open the `inventory.ini` file and replace the placeholder IP address with the actual IP address or hostname of your homelab server.
+    First, copy the example inventory to create your own:
+    ```bash
+    cp inventory.example.ini inventory.ini
+    ```
+    Next, open `inventory.ini` and replace the placeholder values with the actual IP address (or hostname) of your homelab server and the remote user you will connect as.
     ```ini
     [homelab]
     pi1 ansible_host=192.168.1.100
@@ -39,7 +43,6 @@ Before you begin, ensure you have the following:
     [all:vars]
     ansible_user=pi
     ```
-    Update `ansible_user` to the remote user you will be connecting as.
 
 3.  **Add Docker Compose Files**
     This playbook expects a directory named `ComposeFiles` in the root of the project. The `compose` role will copy all files from this directory to `/home/{{ ansible_user }}/compose/` on the target machine. Place your `docker-compose.yml` files here.
