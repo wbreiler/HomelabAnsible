@@ -1,3 +1,7 @@
+# "Real" inventory file
+inventory.ini
+# Dot files/folders
 .vscode/
 .ansible/
+# macOS junk
 .DS_Store
