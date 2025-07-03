@@ -5,3 +5,5 @@ inventory.ini
 .ansible/
 # macOS junk
 .DS_Store
+# Docker compose files
+ComposeFiles/
