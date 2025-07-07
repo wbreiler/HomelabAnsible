@@ -32,3 +32,13 @@
   when: ansible_os_family == "Fedora"
   notify:
     - Start Tailscale service
+
+- name: Bring Tailscale up
+  ansible.builtin.command: tailscale up
+  register: tailscale_info
+  changed_when: false
+
+- name: Display Tailscale login URL
+  ansible.builtin.debug:
+    msg: "{{ tailscale_info.stdout }}"
+  when: "'To authenticate, visit:' in tailscale_info.stdout"

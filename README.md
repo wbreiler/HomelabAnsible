@@ -45,7 +45,11 @@ Before you begin, ensure you have the following:
     ```
 
 3.  **Add Docker Compose Files**
-    This playbook expects a directory named `ComposeFiles` in the root of the project. The `compose` role will copy all files from this directory to `/home/{{ ansible_user }}/compose/` on the target machine. Place your `docker-compose.yml` files here.
+    This playbook expects a directory named `ComposeFiles` in the root of the project. Since this directory is not included in the repository, you'll need to create it first:
+    ```bash
+    mkdir ComposeFiles
+    ```
+    The `compose` role will copy all files from this directory to `/home/{{ ansible_user }}/compose/` on the target machine. Place your `docker-compose.yml` files here.
 
 ## Usage
 
@@ -61,6 +65,20 @@ To see what changes the playbook would make without actually applying them, use 
 
 ```bash
 ansible-playbook site.yml --check
+```
+
+### Running Specific Roles
+
+You can run a specific role or a set of roles by using tags. Each role is tagged with its own name.
+
+To run a single role, use the `--tags` flag with the role's name. For example, to run only the `docker` role:
+```bash
+ansible-playbook playbook.yml --tags "docker"
+```
+
+You can also run multiple roles by providing a comma-separated list of tags:
+```bash
+ansible-playbook playbook.yml --tags "common,tailscale"
 ```
 
 ## Roles Breakdown

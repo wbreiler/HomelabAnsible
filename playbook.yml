@@ -2,7 +2,11 @@
   hosts: homelab
   become: true
   roles:
-   - { role: common, tags: common }
-   - { role: docker, tags: docker }
-   - { role: tailscale, tags: tailscale }
-   - { role: compose, tags: compose }
+    - role: common
+      tags: common
+    - role: docker
+      tags: docker
+    - role: tailscale
+      tags: tailscale
+    - role: compose
+      tags: compose
