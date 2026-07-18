@@ -1,0 +1,25 @@
+---
+# vault.example.yml — example vault structure (UNENCRYPTED, commit-safe placeholder)
+#
+# Copy this file to vault.yml, fill in real values, then encrypt:
+#   ansible-vault encrypt vault.yml
+#
+# Reference in playbooks via: --ask-vault-pass  or  --vault-password-file ~/.vault_pass
+
+# Proxmox API credentials
+vault_proxmox_api_host: "10.10.30.2"         # Proxmox cluster VIP
+vault_proxmox_api_user: "root@pam"           # Proxmox API user
+vault_proxmox_api_password: "changeme"       # Proxmox root (or API token) password
+
+# Discord webhook URLs — one per Minecraft server instance
+vault_discord_webhook_atm10: "https://discord.com/api/webhooks/REPLACE_ME/REPLACE_ME"
+vault_discord_webhook_homestead: "https://discord.com/api/webhooks/REPLACE_ME/REPLACE_ME"
+vault_discord_webhook_cobbleverse: "https://discord.com/api/webhooks/REPLACE_ME/REPLACE_ME"
+
+# CurseForge API key (required for any server using PACK_SOURCE=curseforge)
+# Get one at: https://console.curseforge.com/
+vault_curseforge_api_key: "REPLACE_ME"
+
+# SSH public key injected into root's authorized_keys on each new LXC at creation time.
+# Paste the contents of your ~/.ssh/id_ed25519.pub (or id_rsa.pub) here.
+vault_ansible_pubkey: "ssh-ed25519 AAAAC3... your_key_comment"

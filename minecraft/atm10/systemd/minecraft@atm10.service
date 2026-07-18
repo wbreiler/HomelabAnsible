@@ -1,0 +1,23 @@
+[Unit]
+Description=Minecraft Server — All the Mods 10 (%i)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=minecraft
+Group=minecraft
+WorkingDirectory=/opt/minecraft
+ExecStart=/usr/bin/java \
+    @user_jvm_args.txt \
+    @libraries/net/neoforged/neoforge/21.1.228/unix_args.txt \
+    nogui
+ExecStop=/bin/kill -s TERM $MAINPID
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=minecraft@%i
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,31 @@
+# Managed by Ansible — re-running provision.yml rewrites this file.
+# Override values per-server in ansible/servers.yml under server_properties:
+#   server_properties:
+#     spawn_protection: 0
+#     allow_flight: true
+#     difficulty: hard
+{% set sp = server_properties | default({}) %}
+spawn-protection={{ sp.spawn_protection | default(16) }}
+difficulty={{ sp.difficulty | default('easy') }}
+gamemode={{ sp.gamemode | default('survival') }}
+allow-flight={{ sp.allow_flight | default(false) | string | lower }}
+pvp={{ sp.pvp | default(true) | string | lower }}
+online-mode={{ sp.online_mode | default(true) | string | lower }}
+enforce-whitelist={{ sp.enforce_whitelist | default(false) | string | lower }}
+white-list={{ sp.white_list | default(false) | string | lower }}
+max-players={{ sp.max_players | default(20) }}
+max-tick-time={{ sp.max_tick_time | default(60000) }}
+view-distance={{ sp.view_distance | default(10) }}
+simulation-distance={{ sp.simulation_distance | default(10) }}
+motd={{ sp.motd | default('A Minecraft Server') }}
+{% if sp.server_port is defined %}
+server-port={{ sp.server_port }}
+{% endif %}
+{% if sp.level_seed | default('') != '' %}
+level-seed={{ sp.level_seed }}
+{% endif %}
+{% if sp.enable_rcon | default(false) %}
+enable-rcon=true
+rcon.port={{ sp.rcon_port | default(25575) }}
+rcon.password={{ sp.rcon_password | default('') }}
+{% endif %}

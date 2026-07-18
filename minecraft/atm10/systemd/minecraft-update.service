@@ -1,0 +1,11 @@
+[Unit]
+Description=ATM10 modpack update
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/atm10-update.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atm10-update

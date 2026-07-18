@@ -1,0 +1,19 @@
+# Ansible vault — contains real credentials, never commit
+ansible/vault.yml
+
+# server.properties dumps — may contain RCON passwords
+*.properties
+
+# Ansible retry files
+*.retry
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*~

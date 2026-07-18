@@ -1,0 +1,279 @@
+---
+# provision.yml — main playbook for Minecraft LXC provisioning
+#
+# Usage:
+#   ansible-playbook provision.yml --ask-vault-pass               # all servers
+#   ansible-playbook provision.yml --ask-vault-pass -e server_filter=hestia  # one server
+#
+# Play 1: Creates LXC containers on Proxmox (runs on localhost against the API).
+# Play 2: Applies the minecraft_server role to each newly-provisioned container.
+#
+# Re-running this playbook is safe — community.proxmox.proxmox is idempotent
+# (state: present) and all role tasks are written to be idempotent.
+
+- name: Provision Minecraft LXC containers on Proxmox
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vault.yml
+
+  tasks:
+    - name: Load server definitions
+      ansible.builtin.include_vars:
+        file: servers.yml
+        name: server_defs
+      tags: always
+
+    - name: Build target server list (all servers, or filtered by -e server_filter=<hostname>)
+      ansible.builtin.set_fact:
+        target_servers: >-
+          {{
+            server_defs.servers
+            | selectattr('hostname', 'equalto', server_filter)
+            | list
+            if server_filter is defined
+            else server_defs.servers
+          }}
+      tags: always
+
+    - name: Ensure Debian 13 OS template is present on target nodes
+      community.proxmox.proxmox_template:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        validate_certs: false
+        node: "{{ item }}"
+        storage: local
+        template: "{{ debian_template.split('/')[-1] }}"
+        state: present
+      loop: "{{ target_servers | map(attribute='node') | unique | list }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Create LXC container for each server
+      community.proxmox.proxmox:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        validate_certs: false
+        node: "{{ item.node }}"
+        vmid: "{{ item.vmid }}"
+        hostname: "{{ item.hostname }}"
+        ostemplate: "{{ debian_template }}"
+        storage: "{{ proxmox_storage }}"
+        disk: "{{ proxmox_storage }}:{{ item.disk }}"
+        memory: "{{ item.memory }}"
+        cores: "{{ item.cores }}"
+        netif:
+          net0: "name=eth0,bridge={{ proxmox_bridge }},tag={{ proxmox_vlan }},ip=dhcp,type=veth"
+        unprivileged: true
+        features:
+          - nesting=1
+        pubkey: "{{ ansible_pubkey }}"
+        cmode: tty
+        state: present
+        onboot: true
+      loop: "{{ target_servers }}"
+      loop_control:
+        label: "{{ item.hostname }} (vmid {{ item.vmid }})"
+
+    - name: Start LXC containers
+      community.proxmox.proxmox:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        validate_certs: false
+        node: "{{ item.node }}"
+        vmid: "{{ item.vmid }}"
+        hostname: "{{ item.hostname }}"
+        state: started
+      loop: "{{ target_servers }}"
+      loop_control:
+        label: "{{ item.hostname }} (vmid {{ item.vmid }})"
+
+    - name: Kick DHCP client inside each container
+      ansible.builtin.command: "pct exec {{ item.vmid }} -- dhclient eth0"
+      delegate_to: "{{ proxmox_node_ips[item.node] }}"
+      vars:
+        ansible_user: root
+      changed_when: false
+      failed_when: false
+      loop: "{{ target_servers }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Obtain Proxmox API ticket for interface polling
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_api_host }}:8006/api2/json/access/ticket"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          username: "{{ proxmox_api_user }}"
+          password: "{{ proxmox_api_password }}"
+        validate_certs: false
+      register: proxmox_auth
+      no_log: true
+      tags: always
+
+    - name: Poll until each container has a DHCP address
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_api_host }}:8006/api2/json/nodes/{{ item.node }}/lxc/{{ item.vmid }}/interfaces"
+        method: GET
+        headers:
+          Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+          CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+        validate_certs: false
+      register: container_ifaces
+      until: >-
+        (container_ifaces.json.data
+         | selectattr('name', 'equalto', 'eth0')
+         | selectattr('inet', 'defined')
+         | list | length) > 0
+      retries: 24
+      delay: 5
+      loop: "{{ target_servers }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      tags: always
+
+    - name: Extract container IP addresses
+      ansible.builtin.set_fact:
+        container_ips: >-
+          {{
+            container_ips | default({}) | combine({
+              item.item.hostname: (
+                item.json.data
+                | selectattr('name', 'equalto', 'eth0')
+                | selectattr('inet', 'defined')
+                | map(attribute='inet')
+                | first
+                | split('/') | first
+              )
+            })
+          }}
+      loop: "{{ container_ifaces.results }}"
+      loop_control:
+        label: "{{ item.item.hostname }}"
+      tags: always
+
+    - name: Wait for SSH on each container
+      ansible.builtin.wait_for:
+        host: "{{ container_ips[item.hostname] }}"
+        port: 22
+        delay: 5
+        timeout: 60
+        state: started
+      loop: "{{ target_servers }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      tags: always
+
+    - name: Add provisioned containers to inventory group
+      ansible.builtin.add_host:
+        name: "{{ item.hostname }}"
+        groups: newly_provisioned
+        ansible_host: "{{ container_ips[item.hostname] }}"
+        # Pass server-specific vars through to Play 2
+        hostname: "{{ item.hostname }}"
+        vmid: "{{ item.vmid }}"
+        pack_source: "{{ item.pack_source | default('modrinth') }}"
+        modpack_slug: "{{ item.modpack_slug }}"
+        pack_name: "{{ item.pack_name }}"
+        mc_version: "{{ item.mc_version }}"
+        loader: "{{ item.loader }}"
+        instance_name: "{{ item.instance_name }}"
+        discord_webhook_url: "{{ item.discord_webhook_url | default('') }}"
+        curseforge_project_id: "{{ item.curseforge_project_id | default('') }}"
+        xmx: "{{ item.xmx }}"
+        xms: "{{ item.xms }}"
+        server_properties: "{{ item.server_properties | default({}) }}"
+        ops: "{{ item.ops | default([]) }}"
+        migrate_from: "{{ item.migrate_from | default(omit) }}"
+      loop: "{{ target_servers }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      changed_when: false
+      tags: always
+
+    - name: Get existing Proxmox backup jobs
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_api_host }}:8006/api2/json/cluster/backup"
+        method: GET
+        headers:
+          Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+          CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+        validate_certs: false
+      register: backup_jobs_result
+
+    - name: Locate Minecraft hourly backup job
+      ansible.builtin.set_fact:
+        _mc_backup_jobs: >-
+          {{
+            backup_jobs_result.json.data
+            | selectattr('comment', 'defined')
+            | selectattr('comment', 'equalto', 'Minecraft Server Backups')
+            | list
+          }}
+
+    - name: Compute merged VMID list
+      ansible.builtin.set_fact:
+        _mc_backup_vmids: >-
+          {{
+            (
+              (_mc_backup_jobs[0].vmid | default('') | string | split(',') | select() | list)
+              + (target_servers | map(attribute='vmid') | map('string') | list)
+            ) | unique | sort | join(',')
+          }}
+
+    - name: Create Minecraft hourly backup job
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_api_host }}:8006/api2/json/cluster/backup"
+        method: POST
+        headers:
+          Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+          CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+        body_format: form-urlencoded
+        body:
+          storage: "{{ proxmox_backup_storage }}"
+          schedule: "0 * * * *"
+          vmid: "{{ _mc_backup_vmids }}"
+          mode: snapshot
+          compress: zstd
+          comment: "Minecraft Server Backups"
+          enabled: 1
+        validate_certs: false
+      when: _mc_backup_jobs | length == 0
+
+    - name: Update Minecraft hourly backup job with provisioned VMIDs
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_api_host }}:8006/api2/json/cluster/backup/{{ _mc_backup_jobs[0].id }}"
+        method: PUT
+        headers:
+          Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+          CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+        body_format: form-urlencoded
+        body:
+          storage: "{{ _mc_backup_jobs[0].storage }}"
+          schedule: "{{ _mc_backup_jobs[0].schedule }}"
+          mode: "{{ _mc_backup_jobs[0].mode | default('snapshot') }}"
+          compress: "{{ _mc_backup_jobs[0].compress | default('zstd') }}"
+          comment: "{{ _mc_backup_jobs[0].comment }}"
+          enabled: "{{ _mc_backup_jobs[0].enabled | default(1) }}"
+          vmid: "{{ _mc_backup_vmids }}"
+        validate_certs: false
+      when: _mc_backup_jobs | length > 0
+      changed_when: >-
+        _mc_backup_vmids != (
+          _mc_backup_jobs[0].vmid | default('') | string | split(',') | select() | sort | join(',')
+        )
+
+
+- name: Configure Minecraft servers
+  hosts: newly_provisioned
+  gather_facts: true
+  vars_files:
+    - vault.yml
+
+  roles:
+    - minecraft_server

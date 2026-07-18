@@ -1,0 +1,44 @@
+# /etc/minecraft/update.conf
+# Configuration for update-modpack.sh
+# This file is sourced by bash; do NOT use spaces around '='.
+
+# Pack source: "modrinth" (default) or "curseforge"
+PACK_SOURCE="modrinth"
+
+# Human-friendly name used in Discord notifications and log messages.
+PACK_NAME="All the Mods 9"
+
+# Minecraft version string, exactly as it appears on Modrinth / CurseForge.
+MC_VERSION="1.21.1"
+
+# Mod loader. One of: forge, fabric, quilt, neoforge
+LOADER="neoforge"
+
+# Systemd service instance name (manages minecraft@<INSTANCE_NAME>.service).
+INSTANCE_NAME="atm9"
+
+# Discord webhook URL for update notifications. Leave empty to disable.
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+
+# Minecraft server root directory.
+MINECRAFT_DIR="/opt/minecraft"
+
+###############################################################################
+# Modrinth settings (required when PACK_SOURCE=modrinth)
+###############################################################################
+
+MODPACK_SLUG="all-the-mods-9"
+
+###############################################################################
+# CurseForge settings (required when PACK_SOURCE=curseforge)
+###############################################################################
+
+# Numeric project ID from the CurseForge URL (e.g. curseforge.com/minecraft/modpacks/all-the-mods-9 → check Files tab for the ID).
+# CURSEFORGE_PROJECT_ID="123456"
+
+# CurseForge API key. Get one at: https://console.curseforge.com/
+# CURSEFORGE_API_KEY="your-api-key-here"
+
+# MODPACK_SLUG is used as a display name in log messages.
+# Set it to any short slug you want (doesn't need to match CurseForge exactly).
+# MODPACK_SLUG="all-the-mods-9"

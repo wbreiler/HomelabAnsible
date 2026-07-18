@@ -1,0 +1,39 @@
+# /etc/systemd/system/minecraft@.service
+# Template unit — %i is replaced by systemd with the instance name
+# (e.g., `minecraft@atm9.service` → %i = atm9).
+#
+# Per-instance JVM heap sizes are read from /etc/minecraft/%i.env so that a
+# single shared unit file can serve multiple server instances with different
+# memory allocations.
+#
+# Managed by Ansible — do not edit by hand.
+
+[Unit]
+Description=Minecraft Server (%i)
+After=network.target
+Documentation=https://github.com/wbreiler/MinecraftLXCAnsible
+
+[Service]
+User=minecraft
+WorkingDirectory=/opt/minecraft
+
+# Load per-instance JVM heap variables (XMX, XMS)
+EnvironmentFile=/etc/minecraft/%i.env
+
+# NeoForge/Forge use run.sh + libraries/ instead of a server.jar; USE_RUN_SH in the
+# EnvironmentFile selects the launch path. sh -c is required so ${JVM_FLAGS} is
+# word-split into individual arguments; vanilla/Modrinth packs use that branch while
+# NeoForge/Forge JVM flags are read from user_jvm_args.txt via run.sh.
+ExecStart=/bin/sh -c 'if [ "${USE_RUN_SH}" = "true" ]; then exec /opt/minecraft/run.sh nogui; else exec /usr/bin/java ${JVM_FLAGS} -Xms${XMS} -Xmx${XMX} -jar server.jar nogui; fi'
+
+ExecStop=/bin/kill -s SIGTERM $MAINPID
+
+Restart=on-failure
+RestartSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=minecraft@%i
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Run Minecraft modpack update check nightly at 4 AM
+Requires=minecraft-update.service
+
+[Timer]
+# Fire at 04:00 local time every day.
+OnCalendar=*-*-* 04:00:00
+# If the system was off when the timer was due, run it shortly after boot.
+Persistent=true
+# Add a random delay of up to 5 minutes to avoid thundering-herd if multiple
+# servers share the same timer schedule.
+RandomizedDelaySec=5min
+Unit=minecraft-update.service
+
+[Install]
+WantedBy=timers.target

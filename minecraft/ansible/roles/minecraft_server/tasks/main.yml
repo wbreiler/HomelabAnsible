@@ -1,0 +1,691 @@
+---
+# roles/minecraft_server/tasks/main.yml
+# Configures a Debian 12/Ubuntu LXC as a Minecraft server.
+# All tasks are written to be idempotent.
+# Supports pack_source: modrinth (default), curseforge, or vanilla (modpack_slug: vanilla).
+
+###############################################################################
+# 0. Compute java_version from mc_version
+###############################################################################
+
+- name: Compute Java version for this Minecraft release
+  ansible.builtin.include_tasks: set_java_version.yml
+
+###############################################################################
+# 1. Configure apt proxy
+###############################################################################
+
+- name: Configure apt-cacher-ng proxy
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/01proxy
+    content: |
+      Acquire::http::Proxy "{{ apt_cache_url }}";
+    owner: root
+    group: root
+    mode: "0644"
+
+###############################################################################
+# 2. Update apt cache and install dependencies
+###############################################################################
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install utility packages
+  ansible.builtin.apt:
+    name: [curl, jq, unzip, rsync]
+    state: present
+
+- name: Set timezone to US/Central
+  community.general.timezone:
+    name: America/Chicago
+  tags: timezone
+
+# --- GraalVM CE (Java 21 for MC 1.21+, Java 25 for MC 26.x+) ---
+
+- name: Check installed GraalVM CE major version
+  ansible.builtin.shell:
+    cmd: /opt/graalvm-ce/bin/java -version 2>&1 | grep -oP '(?<=version ")[0-9]+'
+  register: graalvm_installed_major
+  failed_when: false
+  changed_when: false
+  when: jvm_distro == 'graalvm'
+
+- name: Set graalvm_stat for skip logic
+  ansible.builtin.set_fact:
+    graalvm_stat:
+      stat:
+        exists: "{{ graalvm_installed_major.rc == 0 and (graalvm_installed_major.stdout | trim) == (java_version | string) }}"
+  when: jvm_distro == 'graalvm'
+
+- name: Download GraalVM CE {{ java_version }}
+  ansible.builtin.get_url:
+    url: "{{ graalvm_ce_url }}"
+    dest: /tmp/graalvm-ce.tar.gz
+    mode: "0644"
+    timeout: 300
+  when: jvm_distro == 'graalvm' and not (graalvm_stat.stat.exists | default(false))
+
+- name: Create /opt/graalvm-ce
+  ansible.builtin.file:
+    path: /opt/graalvm-ce
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: jvm_distro == 'graalvm' and not (graalvm_stat.stat.exists | default(false))
+
+- name: Extract GraalVM CE
+  ansible.builtin.unarchive:
+    src: /tmp/graalvm-ce.tar.gz
+    dest: /opt/graalvm-ce
+    remote_src: true
+    extra_opts: ["--strip-components=1"]
+  when: jvm_distro == 'graalvm' and not (graalvm_stat.stat.exists | default(false))
+
+- name: Register GraalVM CE as default java
+  ansible.builtin.command:
+    cmd: update-alternatives --install /usr/bin/java java /opt/graalvm-ce/bin/java 100
+  when: jvm_distro == 'graalvm' and not (graalvm_stat.stat.exists | default(false))
+  changed_when: true
+
+- name: Remove GraalVM CE archive
+  ansible.builtin.file:
+    path: /tmp/graalvm-ce.tar.gz
+    state: absent
+  when: jvm_distro == 'graalvm'
+
+# --- Temurin (Java 17, MC 1.18–1.20.4) ---
+
+- name: Create /etc/apt/keyrings
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: jvm_distro == 'temurin'
+
+- name: Add Adoptium apt signing key
+  ansible.builtin.get_url:
+    url: https://packages.adoptium.net/artifactory/api/gpg/key/public
+    dest: /etc/apt/keyrings/adoptium.asc
+    mode: "0644"
+  when: jvm_distro == 'temurin'
+
+- name: Add Adoptium apt repository
+  ansible.builtin.deb822_repository:
+    name: adoptium
+    types: deb
+    uris: https://packages.adoptium.net/artifactory/deb
+    suites: "{{ ansible_facts['distribution_release'] }}"
+    components: main
+    signed_by: /etc/apt/keyrings/adoptium.asc
+    state: present
+  when: jvm_distro == 'temurin'
+
+- name: Install Temurin JDK {{ java_version }}
+  ansible.builtin.apt:
+    name: "temurin-{{ java_version }}-jdk"
+    state: present
+    update_cache: true
+  when: jvm_distro == 'temurin'
+
+# --- OpenJDK fallback (Java 8, MC 1.17 and below) ---
+
+- name: Install OpenJDK {{ java_version }}
+  ansible.builtin.apt:
+    name: "openjdk-{{ java_version }}-jre-headless"
+    state: present
+  when: jvm_distro == 'openjdk'
+
+###############################################################################
+# 3. Create minecraft system user
+###############################################################################
+
+- name: Create minecraft system user
+  ansible.builtin.user:
+    name: minecraft
+    system: true
+    shell: /usr/sbin/nologin
+    home: /opt/minecraft
+    create_home: false
+    comment: "Minecraft server daemon"
+
+###############################################################################
+# 4. Create required directories
+###############################################################################
+
+- name: Create Minecraft and config directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('minecraft') }}"
+    group: "{{ item.group | default('minecraft') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop:
+    - { path: /opt/minecraft }
+    - { path: /opt/minecraft/mods }
+    - { path: /opt/minecraft/world }
+    - { path: /etc/minecraft, owner: root, group: minecraft, mode: "0750" }
+
+###############################################################################
+# 5. Deploy update script and config
+# Done early so CurseForge provisioning can call the script for its download.
+###############################################################################
+
+- name: Install update-modpack.sh
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../update-script/update-modpack.sh"
+    dest: /usr/local/bin/update-modpack.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy /etc/minecraft/update.conf
+  ansible.builtin.template:
+    src: update.conf.j2
+    dest: /etc/minecraft/update.conf
+    owner: root
+    group: minecraft
+    mode: "0640"
+
+###############################################################################
+# 6. Modrinth modpack download
+###############################################################################
+
+- name: Query Modrinth API for latest release version
+  ansible.builtin.uri:
+    url: "https://api.modrinth.com/v2/project/{{ modpack_slug }}/version?game_versions=%5B%22{{ mc_version }}%22%5D&loaders=%5B%22{{ loader }}%22%5D"
+    method: GET
+    return_content: true
+    headers:
+      User-Agent: "MinecraftLXCAnsible/1.0 (will.breiler@gmail.com)"
+    status_code: 200
+  register: modrinth_versions_raw
+  when: (pack_source | default('modrinth')) == 'modrinth' and modpack_slug != 'vanilla'
+
+- name: Parse latest release version from Modrinth response
+  ansible.builtin.set_fact:
+    modrinth_latest: >-
+      {{
+        modrinth_versions_raw.json
+        | selectattr('version_type', 'equalto', 'release')
+        | sort(attribute='date_published')
+        | last
+      }}
+  when: (pack_source | default('modrinth')) == 'modrinth' and modpack_slug != 'vanilla'
+
+- name: Extract version ID and primary download URL
+  ansible.builtin.set_fact:
+    modpack_version_id: "{{ modrinth_latest.id }}"
+    modpack_direct_url: >-
+      {{
+        modrinth_latest.files
+        | selectattr('primary', 'equalto', true)
+        | map(attribute='url')
+        | first
+      }}
+  when: (pack_source | default('modrinth')) == 'modrinth' and modpack_slug != 'vanilla'
+
+- name: Read currently installed version (if any)
+  ansible.builtin.slurp:
+    src: /opt/minecraft/.current_version
+  register: current_version_file
+  failed_when: false
+  when: (pack_source | default('modrinth')) == 'modrinth' and modpack_slug != 'vanilla'
+
+- name: Set current installed version fact
+  ansible.builtin.set_fact:
+    current_version_id: >-
+      {{
+        (current_version_file.content | default('') | b64decode | trim)
+        if (current_version_file is defined and current_version_file.content is defined)
+        else ''
+      }}
+  when: (pack_source | default('modrinth')) == 'modrinth' and modpack_slug != 'vanilla'
+
+- name: Download mrpack from Modrinth
+  ansible.builtin.get_url:
+    url: "{{ modpack_direct_url }}"
+    dest: "/tmp/{{ modpack_slug }}-{{ modpack_version_id }}.mrpack"
+    mode: "0644"
+    headers:
+      User-Agent: "MinecraftLXCAnsible/1.0 (will.breiler@gmail.com)"
+    timeout: 300
+  when:
+    - (pack_source | default('modrinth')) == 'modrinth'
+    - modpack_slug != 'vanilla'
+    - current_version_id != modpack_version_id
+
+- name: Clear existing mods before extracting new version
+  ansible.builtin.file:
+    path: /opt/minecraft/mods
+    state: absent
+  when:
+    - (pack_source | default('modrinth')) == 'modrinth'
+    - modpack_slug != 'vanilla'
+    - current_version_id != modpack_version_id
+
+- name: Re-create mods directory after clearing
+  ansible.builtin.file:
+    path: /opt/minecraft/mods
+    state: directory
+    owner: minecraft
+    group: minecraft
+    mode: "0755"
+  when:
+    - (pack_source | default('modrinth')) == 'modrinth'
+    - modpack_slug != 'vanilla'
+    - current_version_id != modpack_version_id
+
+- name: Extract overrides/mods/ from mrpack into /opt/minecraft/mods/
+  ansible.builtin.command:
+    cmd: >-
+      unzip -o -j
+      /tmp/{{ modpack_slug }}-{{ modpack_version_id }}.mrpack
+      "overrides/mods/*"
+      -d /opt/minecraft/mods
+  when:
+    - (pack_source | default('modrinth')) == 'modrinth'
+    - modpack_slug != 'vanilla'
+    - current_version_id != modpack_version_id
+  changed_when: true
+  failed_when: result_extract_overrides.rc not in [0, 11]
+  register: result_extract_overrides
+
+- name: Download server-side mods from Modrinth index
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      mrpack="/tmp/{{ modpack_slug }}-{{ modpack_version_id }}.mrpack"
+      index=$(mktemp)
+      unzip -o -j "$mrpack" "modrinth.index.json" -d "$(dirname "$index")"
+      mv "$(dirname "$index")/modrinth.index.json" "$index"
+      jq -c '[.files[] | select((.env.server // "required") != "unsupported")] | .[]' "$index" \
+      | while IFS= read -r mod; do
+          url=$(echo "$mod" | jq -r '.downloads[0]')
+          filename=$(echo "$mod" | jq -r '.path | split("/") | last')
+          curl -fsSL \
+            -H "User-Agent: MinecraftLXCAnsible/1.0 (will.breiler@gmail.com)" \
+            -o "/opt/minecraft/mods/${filename}" \
+            "$url"
+        done
+      rm -f "$index"
+  args:
+    executable: /bin/bash
+  when:
+    - (pack_source | default('modrinth')) == 'modrinth'
+    - modpack_slug != 'vanilla'
+    - current_version_id != modpack_version_id
+  changed_when: true
+
+- name: Fix ownership and permissions of extracted mods
+  ansible.builtin.shell:
+    cmd: |
+      chown -R minecraft:minecraft /opt/minecraft/mods
+      find /opt/minecraft/mods -type d -exec chmod 755 {} +
+      find /opt/minecraft/mods -type f -exec chmod 644 {} +
+  when:
+    - (pack_source | default('modrinth')) == 'modrinth'
+    - modpack_slug != 'vanilla'
+  changed_when: true
+
+- name: Write current version ID to tracking file
+  ansible.builtin.copy:
+    content: "{{ modpack_version_id }}\n"
+    dest: /opt/minecraft/.current_version
+    owner: minecraft
+    group: minecraft
+    mode: "0644"
+  when:
+    - (pack_source | default('modrinth')) == 'modrinth'
+    - modpack_slug != 'vanilla'
+    - current_version_id != modpack_version_id
+
+- name: Remove downloaded mrpack temp file
+  ansible.builtin.file:
+    path: "/tmp/{{ modpack_slug }}-{{ modpack_version_id }}.mrpack"
+    state: absent
+  when:
+    - (pack_source | default('modrinth')) == 'modrinth'
+    - modpack_slug != 'vanilla'
+    - current_version_id != modpack_version_id
+
+###############################################################################
+# 7. Vanilla server setup
+###############################################################################
+
+- name: Fetch Mojang version manifest
+  ansible.builtin.uri:
+    url: "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+    method: GET
+    return_content: true
+    headers:
+      User-Agent: "MinecraftLXCAnsible/1.0 (will.breiler@gmail.com)"
+    status_code: 200
+  register: mojang_manifest
+  when: modpack_slug == "vanilla"
+
+- name: Extract version metadata URL for mc_version
+  ansible.builtin.set_fact:
+    mojang_version_meta_url: >-
+      {{
+        mojang_manifest.json.versions
+        | selectattr('id', 'equalto', mc_version)
+        | map(attribute='url')
+        | first
+      }}
+  when: modpack_slug == "vanilla"
+
+- name: Fetch individual version metadata
+  ansible.builtin.uri:
+    url: "{{ mojang_version_meta_url }}"
+    method: GET
+    return_content: true
+    headers:
+      User-Agent: "MinecraftLXCAnsible/1.0 (will.breiler@gmail.com)"
+    status_code: 200
+  register: mojang_version_meta
+  when: modpack_slug == "vanilla"
+
+- name: Extract server jar download URL
+  ansible.builtin.set_fact:
+    vanilla_server_jar_url: "{{ mojang_version_meta.json.downloads.server.url }}"
+  when: modpack_slug == "vanilla"
+
+- name: Download vanilla server jar
+  ansible.builtin.get_url:
+    url: "{{ vanilla_server_jar_url }}"
+    dest: /opt/minecraft/server.jar
+    owner: minecraft
+    group: minecraft
+    mode: "0644"
+    timeout: 300
+    checksum: "sha1:{{ mojang_version_meta.json.downloads.server.sha1 }}"
+  when: modpack_slug == "vanilla"
+
+###############################################################################
+# 8. CurseForge initial download
+# The update script handles all CurseForge API logic (server pack vs manifest).
+# --no-wait skips the 5-minute countdown during provisioning.
+###############################################################################
+
+- name: Run initial CurseForge modpack download via update-modpack.sh
+  ansible.builtin.command:
+    cmd: /usr/local/bin/update-modpack.sh --no-wait
+  when: (pack_source | default('modrinth')) == 'curseforge'
+  changed_when: true
+
+###############################################################################
+# 9. Migrate server data from an existing server (optional)
+# Set migrate_from in servers.yml to rsync the full server directory before
+# the server starts. rsync runs on the source host and pushes directly to
+# this LXC — the Ansible controller is never in the data path. Agent
+# forwarding supplies the SSH key from the controller's agent.
+#
+# Excluded from rsync (managed by this playbook):
+#   mods/  libraries/  eula.txt  server.properties  ops.json  logs/  crash-reports/
+#
+# Idempotent: skipped if /opt/minecraft/.migrated already exists.
+###############################################################################
+
+- name: Check if migration has already run
+  ansible.builtin.stat:
+    path: /opt/minecraft/.migrated
+  register: migration_sentinel
+  when: migrate_from is defined
+
+- name: Migrate server data directly from source to new server
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - -az
+      - --stats
+      - "--rsh=ssh -A -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      - --exclude=mods/
+      - --exclude=libraries/
+      - --exclude=run.sh
+      - --exclude=run.bat
+      - --exclude=user_jvm_args.txt
+      - --exclude=eula.txt
+      - --exclude=server.properties
+      - --exclude=ops.json
+      - --exclude=logs/
+      - --exclude=crash-reports/
+      - "{{ migrate_from.src_base }}/"
+      - "root@{{ hostvars[inventory_hostname]['ansible_host'] }}:/opt/minecraft/"
+  delegate_to: "{{ (migrate_from | default({})).host | default(inventory_hostname) }}"
+  when: migrate_from is defined and not migration_sentinel.stat.exists
+  changed_when: true
+
+- name: Fix ownership of migrated files
+  ansible.builtin.file:
+    path: /opt/minecraft
+    owner: minecraft
+    group: minecraft
+    recurse: true
+  when: migrate_from is defined and not migration_sentinel.stat.exists
+
+- name: Mark migration complete
+  ansible.builtin.copy:
+    content: "{{ ansible_date_time.iso8601 }}\n"
+    dest: /opt/minecraft/.migrated
+    owner: root
+    group: root
+    mode: "0444"
+  when: migrate_from is defined and not migration_sentinel.stat.exists
+
+###############################################################################
+# 9b. Deploy user_jvm_args.txt for NeoForge/Forge packs
+# NeoForge/Forge read JVM flags from this file via run.sh rather than the
+# command line. Deployed after migration so it always reflects Ansible's values.
+###############################################################################
+
+- name: Deploy user_jvm_args.txt for NeoForge/Forge packs
+  ansible.builtin.template:
+    src: user_jvm_args.txt.j2
+    dest: /opt/minecraft/user_jvm_args.txt
+    owner: minecraft
+    group: minecraft
+    mode: "0644"
+  when: (loader | default('')) in ['neoforge', 'forge']
+
+###############################################################################
+# 9c. Fabric/Quilt server setup
+# Fabric uses a named launcher jar (fabric-server-mc.X-loader.X-launcher.X.jar)
+# rather than server.jar. If one was migrated from an existing server, symlink it
+# as server.jar. If not present (fresh install), download and run the Fabric
+# installer, which creates server.jar directly.
+###############################################################################
+
+- name: Check if server.jar already exists for Fabric/Quilt pack
+  ansible.builtin.stat:
+    path: /opt/minecraft/server.jar
+  register: _server_jar_stat
+  when: (loader | default('')) in ['fabric', 'quilt']
+
+- name: Find migrated Fabric launcher jar
+  ansible.builtin.find:
+    paths: /opt/minecraft
+    patterns: "fabric-server-*.jar"
+    depth: 1
+  register: _fabric_launcher_jars
+  when:
+    - (loader | default('')) in ['fabric', 'quilt']
+    - not (_server_jar_stat.stat.exists | default(false))
+
+- name: Symlink migrated Fabric launcher jar as server.jar
+  ansible.builtin.file:
+    src: "{{ (_fabric_launcher_jars.files | sort(attribute='mtime') | last).path | basename }}"
+    dest: /opt/minecraft/server.jar
+    state: link
+    owner: minecraft
+    group: minecraft
+  when:
+    - (loader | default('')) in ['fabric', 'quilt']
+    - not (_server_jar_stat.stat.exists | default(false))
+    - (_fabric_launcher_jars.files | default([]) | length) > 0
+
+- name: Fetch latest stable Fabric installer version
+  ansible.builtin.uri:
+    url: https://meta.fabricmc.net/v2/versions/installer
+    return_content: true
+  register: _fabric_installer_meta
+  when:
+    - (loader | default('')) in ['fabric', 'quilt']
+    - not (_server_jar_stat.stat.exists | default(false))
+    - (_fabric_launcher_jars.files | default([]) | length) == 0
+
+- name: Download Fabric installer
+  ansible.builtin.get_url:
+    url: "{{ (_fabric_installer_meta.json | selectattr('stable', 'equalto', true) | first).url }}"
+    dest: /tmp/fabric-installer.jar
+    mode: "0644"
+    timeout: 120
+  when:
+    - (loader | default('')) in ['fabric', 'quilt']
+    - not (_server_jar_stat.stat.exists | default(false))
+    - (_fabric_launcher_jars.files | default([]) | length) == 0
+
+- name: Run Fabric installer to create server.jar
+  ansible.builtin.command:
+    cmd: java -jar /tmp/fabric-installer.jar server -dir /opt/minecraft -mcversion {{ mc_version }} -downloadMinecraft
+  when:
+    - (loader | default('')) in ['fabric', 'quilt']
+    - not (_server_jar_stat.stat.exists | default(false))
+    - (_fabric_launcher_jars.files | default([]) | length) == 0
+  changed_when: true
+
+- name: Remove Fabric installer
+  ansible.builtin.file:
+    path: /tmp/fabric-installer.jar
+    state: absent
+  when: (loader | default('')) in ['fabric', 'quilt']
+
+- name: Fix ownership of Fabric server files
+  ansible.builtin.file:
+    path: /opt/minecraft
+    owner: minecraft
+    group: minecraft
+    recurse: true
+  when:
+    - (loader | default('')) in ['fabric', 'quilt']
+    - not (_server_jar_stat.stat.exists | default(false))
+
+###############################################################################
+# 10. EULA, server.properties, ops.json
+###############################################################################
+
+- name: Accept Minecraft EULA
+  ansible.builtin.copy:
+    content: "eula=true\n"
+    dest: /opt/minecraft/eula.txt
+    owner: minecraft
+    group: minecraft
+    mode: "0644"
+
+- name: Deploy server.properties
+  ansible.builtin.template:
+    src: server.properties.j2
+    dest: /opt/minecraft/server.properties
+    owner: minecraft
+    group: minecraft
+    mode: "0644"
+
+- name: Look up Mojang UUIDs for ops players
+  ansible.builtin.uri:
+    url: "https://api.mojang.com/users/profiles/minecraft/{{ item }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+  register: ops_uuid_lookup
+  loop: "{{ ops | default([]) }}"
+  when: (ops | default([]) | length) > 0
+
+- name: Deploy ops.json
+  ansible.builtin.template:
+    src: ops.json.j2
+    dest: /opt/minecraft/ops.json
+    owner: minecraft
+    group: minecraft
+    mode: "0644"
+  when: (ops | default([]) | length) > 0
+
+###############################################################################
+# 11. Deploy systemd minecraft@.service template
+###############################################################################
+
+- name: Deploy minecraft@.service systemd template unit
+  ansible.builtin.template:
+    src: minecraft@.service.j2
+    dest: /etc/systemd/system/minecraft@.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+###############################################################################
+# 12. Deploy per-instance environment file (Xms / Xmx)
+###############################################################################
+
+- name: Deploy per-instance JVM environment file
+  ansible.builtin.template:
+    src: minecraft-instance.env.j2
+    dest: "/etc/minecraft/{{ instance_name }}.env"
+    owner: root
+    group: minecraft
+    mode: "0640"
+
+###############################################################################
+# 13. Deploy minecraft-update systemd units
+###############################################################################
+
+- name: Deploy minecraft-update.service
+  ansible.builtin.template:
+    src: minecraft-update.service.j2
+    dest: /etc/systemd/system/minecraft-update.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Deploy minecraft-update.timer
+  ansible.builtin.template:
+    src: minecraft-update.timer.j2
+    dest: /etc/systemd/system/minecraft-update.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+###############################################################################
+# 14. Flush handlers (daemon-reload) before enabling units
+###############################################################################
+
+- name: Flush handlers to ensure systemd is reloaded before enabling units
+  ansible.builtin.meta: flush_handlers
+
+###############################################################################
+# 15. Enable and start Minecraft server service
+###############################################################################
+
+- name: Enable and start minecraft@{{ instance_name }}.service
+  ansible.builtin.systemd:
+    name: "minecraft@{{ instance_name }}.service"
+    enabled: true
+    state: started
+    daemon_reload: false
+
+###############################################################################
+# 16. Enable and start update timer
+###############################################################################
+
+- name: Enable and start minecraft-update.timer
+  ansible.builtin.systemd:
+    name: minecraft-update.timer
+    enabled: true
+    state: started
+    daemon_reload: false

@@ -1,0 +1,21 @@
+# /etc/systemd/system/minecraft-update.service
+# One-shot service that runs the modpack update script.
+# Triggered by minecraft-update.timer (nightly at 4 AM).
+# Managed by Ansible — do not edit by hand.
+
+[Unit]
+Description=Minecraft modpack update check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/update-modpack.sh
+# Capture stdout/stderr through the journal
+StandardOutput=journal
+StandardError=journal
+# Run as root so the script can manage systemd services and write to /opt/minecraft
+User=root
+
+# Keep the service unit visible in the journal even after it finishes
+RemainAfterExit=no

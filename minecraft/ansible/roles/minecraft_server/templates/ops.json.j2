@@ -1,0 +1,9 @@
+{% set ns = namespace(items=[]) %}
+{% for result in ops_uuid_lookup.results | default([]) %}
+{%   if result.status is defined and result.status == 200 %}
+{%     set u = result.json.id %}
+{%     set uuid = u[0:8] ~ '-' ~ u[8:12] ~ '-' ~ u[12:16] ~ '-' ~ u[16:20] ~ '-' ~ u[20:] %}
+{%     set ns.items = ns.items + [{'uuid': uuid, 'name': result.json.name, 'level': 4, 'bypassesPlayerLimit': false}] %}
+{%   endif %}
+{% endfor %}
+{{ ns.items | to_nice_json }}

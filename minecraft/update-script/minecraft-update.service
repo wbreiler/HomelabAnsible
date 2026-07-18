@@ -1,0 +1,16 @@
+[Unit]
+Description=Minecraft modpack update check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/update-modpack.sh
+# Capture stdout/stderr through the journal (journalctl -u minecraft-update.service)
+StandardOutput=journal
+StandardError=journal
+# Run as root so the script can manage systemd services and write to /opt/minecraft
+User=root
+
+# Keep the service unit visible in the journal even after it finishes
+RemainAfterExit=no

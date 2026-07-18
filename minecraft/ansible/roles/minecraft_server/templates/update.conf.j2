@@ -1,0 +1,25 @@
+# /etc/minecraft/update.conf
+# Managed by Ansible — do not edit by hand.
+
+PACK_SOURCE="{{ pack_source | default('modrinth') }}"
+PACK_NAME="{{ pack_name }}"
+MC_VERSION="{{ mc_version }}"
+LOADER="{{ loader }}"
+INSTANCE_NAME="{{ instance_name }}"
+{% if discord_webhook_url | default('') %}
+DISCORD_WEBHOOK_URL="{{ discord_webhook_url }}"
+{% endif %}
+MINECRAFT_DIR="/opt/minecraft"
+
+{% if pack_source | default('modrinth') == 'modrinth' %}
+MODPACK_SLUG="{{ modpack_slug }}"
+{% endif %}
+
+{% if pack_source | default('modrinth') == 'curseforge' %}
+CURSEFORGE_PROJECT_ID="{{ curseforge_project_id }}"
+CURSEFORGE_API_KEY='{{ curseforge_api_key }}'
+MODPACK_SLUG="{{ modpack_slug }}"
+{% if exclude_cf_projects | default([]) %}
+EXCLUDE_CF_PROJECTS="{{ exclude_cf_projects | join(' ') }}"
+{% endif %}
+{% endif %}
