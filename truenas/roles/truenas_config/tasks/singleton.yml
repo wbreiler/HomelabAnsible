@@ -1,0 +1,57 @@
+---
+- name: "Query {{ singleton.name }}"
+  ansible.builtin.raw: "midclt call {{ singleton.query_method }}"
+  changed_when: false
+  register: truenas_config_singleton_query
+
+- name: "Parse {{ singleton.name }}"
+  ansible.builtin.set_fact:
+    truenas_config_singleton_current: >-
+      {{ truenas_config_singleton_query.stdout | from_json }}
+    truenas_config_singleton_needs_update: false
+  changed_when: false
+
+- name: "Detect drift in {{ singleton.name }}"
+  ansible.builtin.set_fact:
+    truenas_config_singleton_needs_update: true
+  changed_when: false
+  when: >-
+    truenas_config_singleton_current[item.key] | default(none) != item.value
+  loop: "{{ singleton.desired | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: "Report check-mode drift in {{ singleton.name }}"
+  ansible.builtin.debug:
+    msg: "{{ singleton.name }} differs from desired state"
+  changed_when: truenas_config_singleton_needs_update
+  when:
+    - ansible_check_mode or truenas_config_audit_only | default(false)
+    - truenas_config_singleton_needs_update
+
+- name: "Require management-access approval for {{ singleton.name }}"
+  ansible.builtin.assert:
+    that:
+      - truenas_allow_management_access_changes | bool
+    fail_msg: >-
+      {{ singleton.name }} drift affects management access. Set
+      truenas_allow_management_access_changes=true only for an approved,
+      rollback-protected run.
+  when:
+    - not ansible_check_mode
+    - not truenas_config_audit_only | default(false)
+    - truenas_config_singleton_needs_update
+    - singleton.requires_management_access | default(false)
+
+- name: "Update {{ singleton.name }}"
+  ansible.builtin.raw: >-
+    midclt call {{ singleton.update_method }}
+    {{ singleton.desired | to_json | quote }}
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - not truenas_config_audit_only | default(false)
+    - truenas_config_singleton_needs_update
+    - >-
+      not singleton.requires_management_access | default(false) or
+      truenas_allow_management_access_changes | bool

@@ -1,0 +1,24 @@
+---
+- name: Converge TrueNAS desired state
+  hosts: truenas
+  gather_facts: false
+
+  pre_tasks:
+    - name: Refuse mutation until explicitly enabled
+      ansible.builtin.assert:
+        that:
+          - truenas_allow_changes | bool
+        fail_msg: >-
+          Live changes are disabled. Complete and review read-only discovery,
+          capture a TrueNAS configuration backup, then explicitly set
+          truenas_allow_changes=true for the approved run.
+      tags:
+        - always
+
+  roles:
+    - role: truenas_config
+      tags:
+        - configuration
+    - role: truenas_entities
+      tags:
+        - entities

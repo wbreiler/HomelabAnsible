@@ -1,0 +1,36 @@
+---
+- name: Reconcile singleton configuration
+  ansible.builtin.include_tasks: singleton.yml
+  loop: "{{ truenas_singleton_configs }}"
+  loop_control:
+    loop_var: singleton
+    label: "{{ singleton.name }}"
+  tags:
+    - system
+    - security
+    - shares
+    - access
+
+- name: Query service enablement
+  ansible.builtin.raw: midclt call service.query
+  changed_when: false
+  register: truenas_config_service_query
+  tags:
+    - services
+
+- name: Parse service enablement
+  ansible.builtin.set_fact:
+    truenas_config_current_services: >-
+      {{ truenas_config_service_query.stdout | from_json }}
+  changed_when: false
+  tags:
+    - services
+
+- name: Reconcile service enablement
+  ansible.builtin.include_tasks: service.yml
+  loop: "{{ truenas_services | dict2items(key_name='service', value_name='enable') }}"
+  loop_control:
+    loop_var: desired_service
+    label: "{{ desired_service.service }}"
+  tags:
+    - services

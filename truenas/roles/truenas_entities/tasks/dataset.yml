@@ -1,0 +1,86 @@
+---
+- name: "Locate dataset {{ desired_dataset.name }}"
+  ansible.builtin.set_fact:
+    truenas_entities_current_dataset: >-
+      {{
+        truenas_entities_datasets |
+        selectattr('id', 'equalto', desired_dataset.name) |
+        first | default({})
+      }}
+    truenas_entities_dataset_payload: >-
+      {{
+        desired_dataset | dict2items |
+        rejectattr('key', 'in', ['name', 'type']) |
+        items2dict
+      }}
+  changed_when: false
+
+- name: "Refuse to recreate missing pool root {{ desired_dataset.name }}"
+  ansible.builtin.assert:
+    that:
+      - truenas_entities_current_dataset | length > 0
+    fail_msg: >-
+      Pool root {{ desired_dataset.name }} is missing. Pool creation is never
+      inferred from dataset desired state.
+  when: "'/' not in desired_dataset.name"
+
+- name: "Report missing dataset {{ desired_dataset.name }}"
+  ansible.builtin.debug:
+    msg: "Dataset {{ desired_dataset.name }} must be created"
+  changed_when: true
+  when:
+    - truenas_entities_current_dataset | length == 0
+    - ansible_check_mode or truenas_entities_audit_only | default(false)
+
+- name: "Create dataset {{ desired_dataset.name }}"
+  ansible.builtin.raw: >-
+    midclt call pool.dataset.create
+    {{
+      truenas_entities_dataset_payload |
+      combine({
+        'name': desired_dataset.name,
+        'type': desired_dataset.type | default('FILESYSTEM')
+      }) |
+      to_json | quote
+    }}
+  changed_when: true
+  when:
+    - truenas_entities_current_dataset | length == 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Detect drift for dataset {{ desired_dataset.name }}"
+  ansible.builtin.set_fact:
+    truenas_entities_dataset_drift: >-
+      {{
+        not (
+          truenas_entities_dataset_payload |
+          truenas_is_subset(
+            truenas_entities_current_dataset |
+            truenas_dataset_properties
+          )
+        )
+      }}
+  changed_when: false
+  when: truenas_entities_current_dataset | length > 0
+
+- name: "Report drift for dataset {{ desired_dataset.name }}"
+  ansible.builtin.debug:
+    msg: "Dataset {{ desired_dataset.name }} differs from desired state"
+  changed_when: true
+  when:
+    - truenas_entities_current_dataset | length > 0
+    - truenas_entities_dataset_drift
+    - ansible_check_mode or truenas_entities_audit_only | default(false)
+
+- name: "Update dataset {{ desired_dataset.name }}"
+  ansible.builtin.raw: >-
+    midclt call pool.dataset.update
+    {{ desired_dataset.name | quote }}
+    {{ truenas_entities_dataset_payload | to_json | quote }}
+  changed_when: true
+  when:
+    - truenas_entities_current_dataset | length > 0
+    - truenas_entities_dataset_drift
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)

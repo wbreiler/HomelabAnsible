@@ -1,0 +1,79 @@
+---
+- name: "Locate {{ truenas_entity_label }}"
+  ansible.builtin.set_fact:
+    truenas_entities_current_keyed: >-
+      {{
+        truenas_entity_current |
+        truenas_find_match(truenas_entity_match)
+      }}
+    truenas_entities_keyed_payload: >-
+      {{
+        truenas_entity_desired | dict2items |
+        rejectattr('key', 'in', truenas_entity_omit | default(['match', 'state'])) |
+        items2dict
+      }}
+  changed_when: false
+
+- name: "Report drift for {{ truenas_entity_label }}"
+  ansible.builtin.debug:
+    msg: "{{ truenas_entity_label }} differs from desired state"
+  changed_when: true
+  when:
+    - ansible_check_mode or truenas_entities_audit_only | default(false)
+    - >-
+      (truenas_entity_state == 'present' and (
+        truenas_entities_current_keyed | length == 0 or
+        not (truenas_entities_keyed_payload |
+        truenas_is_subset(truenas_entities_current_keyed))
+      )) or
+      (truenas_entity_state == 'absent' and
+      truenas_entities_current_keyed | length > 0)
+
+- name: "Create {{ truenas_entity_label }}"
+  ansible.builtin.raw: >-
+    midclt call {{ truenas_entity_method }}.create
+    {{ truenas_entities_keyed_payload | to_json | quote }}
+  changed_when: true
+  when:
+    - truenas_entity_state == 'present'
+    - truenas_entities_current_keyed | length == 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Update {{ truenas_entity_label }}"
+  ansible.builtin.raw: >-
+    midclt call {{ truenas_entity_method }}.update
+    {{ truenas_entities_current_keyed.id }}
+    {{ truenas_entities_keyed_payload | to_json | quote }}
+  changed_when: true
+  when:
+    - truenas_entity_state == 'present'
+    - truenas_entities_current_keyed | length > 0
+    - >-
+      not (truenas_entities_keyed_payload |
+      truenas_is_subset(truenas_entities_current_keyed))
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Require deletion approval for {{ truenas_entity_label }}"
+  ansible.builtin.assert:
+    that:
+      - truenas_allow_destructive_changes | bool
+    fail_msg: "{{ truenas_entity_label }} deletion requires destructive approval"
+  when:
+    - truenas_entity_state == 'absent'
+    - truenas_entities_current_keyed | length > 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Delete {{ truenas_entity_label }}"
+  ansible.builtin.raw: >-
+    midclt call {{ truenas_entity_method }}.delete
+    {{ truenas_entities_current_keyed.id }}
+  changed_when: true
+  when:
+    - truenas_entity_state == 'absent'
+    - truenas_entities_current_keyed | length > 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+    - truenas_allow_destructive_changes | bool

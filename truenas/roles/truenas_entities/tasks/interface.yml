@@ -1,0 +1,57 @@
+---
+- name: "Locate interface {{ desired_interface.name }}"
+  ansible.builtin.set_fact:
+    truenas_entities_current_interface: >-
+      {{
+        truenas_entities_interfaces |
+        selectattr('name', 'equalto', desired_interface.name) |
+        first | default({})
+      }}
+  changed_when: false
+
+- name: "Report interface drift for {{ desired_interface.name }}"
+  ansible.builtin.debug:
+    msg: "Interface {{ desired_interface.name }} differs from desired state"
+  changed_when: true
+  when:
+    - ansible_check_mode or truenas_entities_audit_only | default(false)
+    - >-
+      truenas_entities_current_interface | length == 0 or
+      not (desired_interface |
+      truenas_is_subset(truenas_entities_current_interface))
+
+- name: "Require management approval for interface {{ desired_interface.name }}"
+  ansible.builtin.assert:
+    that:
+      - truenas_allow_management_access_changes | bool
+    fail_msg: "Interface changes require management-access approval"
+  when:
+    - >-
+      truenas_entities_current_interface | length == 0 or
+      not (desired_interface |
+      truenas_is_subset(truenas_entities_current_interface))
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Update interface {{ desired_interface.name }}"
+  ansible.builtin.raw: >-
+    midclt call interface.update {{ desired_interface.name | quote }}
+    {{ desired_interface | to_json | quote }}
+  changed_when: true
+  register: truenas_entities_interface_update
+  when:
+    - truenas_entities_current_interface | length > 0
+    - >-
+      not (desired_interface |
+      truenas_is_subset(truenas_entities_current_interface))
+    - truenas_allow_management_access_changes | bool
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: Refuse implicit creation of a physical interface
+  ansible.builtin.fail:
+    msg: "Managed physical interface {{ desired_interface.name }} does not exist"
+  when:
+    - truenas_entities_current_interface | length == 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)

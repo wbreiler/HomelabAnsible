@@ -1,0 +1,43 @@
+---
+- name: "Locate group {{ desired_group.name }}"
+  ansible.builtin.set_fact:
+    truenas_entities_current_group: >-
+      {{
+        truenas_entities_groups |
+        selectattr('name', 'equalto', desired_group.name) |
+        first | default({})
+      }}
+  changed_when: false
+
+- name: "Report group drift for {{ desired_group.name }}"
+  ansible.builtin.debug:
+    msg: "Group {{ desired_group.name }} differs from desired state"
+  changed_when: true
+  when:
+    - ansible_check_mode or truenas_entities_audit_only | default(false)
+    - >-
+      truenas_entities_current_group | length == 0 or
+      not (desired_group |
+      truenas_is_subset(truenas_entities_current_group))
+
+- name: "Create group {{ desired_group.name }}"
+  ansible.builtin.raw: >-
+    midclt call group.create {{ desired_group | to_json | quote }}
+  changed_when: true
+  when:
+    - truenas_entities_current_group | length == 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Update group {{ desired_group.name }}"
+  ansible.builtin.raw: >-
+    midclt call group.update {{ truenas_entities_current_group.id }}
+    {{ desired_group | to_json | quote }}
+  changed_when: true
+  when:
+    - truenas_entities_current_group | length > 0
+    - >-
+      not (desired_group |
+      truenas_is_subset(truenas_entities_current_group))
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)

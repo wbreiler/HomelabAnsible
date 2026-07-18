@@ -1,0 +1,79 @@
+---
+- name: "Locate SMB share {{ desired_smb.name }}"
+  ansible.builtin.set_fact:
+    truenas_entities_current_smb: >-
+      {{
+        truenas_entities_smb_shares |
+        selectattr('name', 'equalto', desired_smb.name) |
+        first | default({})
+      }}
+    truenas_entities_smb_payload: >-
+      {{
+        desired_smb | dict2items |
+        rejectattr('key', 'in', ['state']) |
+        items2dict
+      }}
+  changed_when: false
+
+- name: "Report SMB share drift for {{ desired_smb.name }}"
+  ansible.builtin.debug:
+    msg: "SMB share {{ desired_smb.name }} differs from desired state"
+  changed_when: true
+  when:
+    - ansible_check_mode or truenas_entities_audit_only | default(false)
+    - >-
+      (desired_smb.state == 'present' and (
+        truenas_entities_current_smb | length == 0 or
+        not (truenas_entities_smb_payload |
+        truenas_is_subset(truenas_entities_current_smb))
+      )) or
+      (desired_smb.state == 'absent' and
+      truenas_entities_current_smb | length > 0)
+
+- name: "Create SMB share {{ desired_smb.name }}"
+  ansible.builtin.raw: >-
+    midclt call sharing.smb.create
+    {{ truenas_entities_smb_payload | to_json | quote }}
+  changed_when: true
+  when:
+    - desired_smb.state == 'present'
+    - truenas_entities_current_smb | length == 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Update SMB share {{ desired_smb.name }}"
+  ansible.builtin.raw: >-
+    midclt call sharing.smb.update
+    {{ truenas_entities_current_smb.id }}
+    {{ truenas_entities_smb_payload | to_json | quote }}
+  changed_when: true
+  when:
+    - desired_smb.state == 'present'
+    - truenas_entities_current_smb | length > 0
+    - >-
+      not (truenas_entities_smb_payload |
+      truenas_is_subset(truenas_entities_current_smb))
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Require deletion approval for SMB share {{ desired_smb.name }}"
+  ansible.builtin.assert:
+    that:
+      - truenas_allow_destructive_changes | bool
+    fail_msg: "SMB share deletion requires explicit destructive approval"
+  when:
+    - desired_smb.state == 'absent'
+    - truenas_entities_current_smb | length > 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Delete SMB share {{ desired_smb.name }}"
+  ansible.builtin.raw: >-
+    midclt call sharing.smb.delete {{ truenas_entities_current_smb.id }}
+  changed_when: true
+  when:
+    - desired_smb.state == 'absent'
+    - truenas_entities_current_smb | length > 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+    - truenas_allow_destructive_changes | bool

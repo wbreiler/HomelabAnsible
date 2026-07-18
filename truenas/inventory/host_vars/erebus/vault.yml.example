@@ -1,0 +1,8 @@
+---
+# Copy to vault.yml, replace placeholders, and encrypt with ansible-vault.
+# Never commit the unencrypted file.
+vault_plex_claim_token: replace-with-current-or-new-claim-token
+
+# Passwords cannot be recovered from TrueNAS discovery. Define them here only
+# if password reconciliation is explicitly enabled in the future.
+vault_truenas_user_passwords: {}

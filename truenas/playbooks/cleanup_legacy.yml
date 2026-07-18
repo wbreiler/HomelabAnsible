@@ -1,0 +1,176 @@
+---
+- name: Remove explicitly approved legacy pool references
+  hosts: truenas
+  gather_facts: false
+  vars:
+    legacy_smb_names: [backups, isos, lanwar]
+    legacy_nfs_path: /mnt/pool/data
+    legacy_user: bldrbackup
+    legacy_user_home: /mnt/pool/backups/storage-bldr-1
+    legacy_user_new_home: /mnt/gaia/backups/storage-bldr-1
+    replacement_home_datasets:
+      - gaia/backups
+      - gaia/backups/storage-bldr-1
+
+  pre_tasks:
+    - name: Require explicit destructive-change gate
+      ansible.builtin.assert:
+        that:
+          - truenas_allow_destructive_changes | bool
+        fail_msg: >-
+          Set truenas_allow_destructive_changes=true only for the approved
+          legacy cleanup.
+
+  tasks:
+    - name: Query SMB shares
+      ansible.builtin.raw: midclt call sharing.smb.query
+      changed_when: false
+      register: legacy_smb_query
+
+    - name: Select exact legacy SMB shares
+      ansible.builtin.set_fact:
+        legacy_smb_shares: >-
+          {{
+            legacy_smb_query.stdout | from_json |
+            selectattr('name', 'in', legacy_smb_names) | list
+          }}
+
+    - name: Verify legacy SMB deletion scope
+      ansible.builtin.assert:
+        that:
+          - legacy_smb_shares | length in [0, legacy_smb_names | length]
+          - legacy_smb_shares | map(attribute='enabled') | select | length == 0
+          - >-
+            legacy_smb_shares | map(attribute='path') |
+            reject('match', '^/mnt/pool/') | length == 0
+        fail_msg: >-
+          Refusing SMB cleanup because the live shares do not match the exact
+          disabled /mnt/pool legacy scope.
+
+    - name: Delete approved legacy SMB shares
+      ansible.builtin.raw: "midclt call sharing.smb.delete {{ item.id }}"
+      changed_when: true
+      loop: "{{ legacy_smb_shares }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Query NFS shares
+      ansible.builtin.raw: midclt call sharing.nfs.query
+      changed_when: false
+      register: legacy_nfs_query
+
+    - name: Select exact legacy NFS share
+      ansible.builtin.set_fact:
+        legacy_nfs_shares: >-
+          {{
+            legacy_nfs_query.stdout | from_json |
+            selectattr('path', 'equalto', legacy_nfs_path) | list
+          }}
+
+    - name: Verify legacy NFS deletion scope
+      ansible.builtin.assert:
+        that:
+          - legacy_nfs_shares | length in [0, 1]
+          - >-
+            legacy_nfs_shares | length == 0 or
+            not legacy_nfs_shares[0].enabled
+        fail_msg: >-
+          Refusing NFS cleanup because the live export is missing or enabled.
+
+    - name: Delete approved legacy NFS share
+      ansible.builtin.raw: >-
+        midclt call sharing.nfs.delete {{ legacy_nfs_shares[0].id }}
+      changed_when: true
+      when: legacy_nfs_shares | length == 1
+
+    - name: Query local users
+      ansible.builtin.raw: midclt call user.query
+      changed_when: false
+      register: legacy_user_query
+
+    - name: Query datasets before creating replacement home
+      ansible.builtin.raw: midclt call pool.dataset.query
+      changed_when: false
+      register: replacement_dataset_query
+
+    - name: Create missing replacement-home datasets
+      ansible.builtin.raw: >-
+        midclt call pool.dataset.create
+        {{
+          {
+            'name': item,
+            'type': 'FILESYSTEM',
+            'share_type': 'GENERIC',
+            'acltype': 'POSIX',
+            'aclmode': 'DISCARD',
+            'atime': 'OFF',
+            'compression': 'LZ4'
+          } | to_json | quote
+        }}
+      changed_when: true
+      when: >-
+        item not in
+        (replacement_dataset_query.stdout | from_json |
+        map(attribute='id') | list)
+      loop: "{{ replacement_home_datasets }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Select exact legacy account
+      ansible.builtin.set_fact:
+        legacy_users: >-
+          {{
+            legacy_user_query.stdout | from_json |
+            selectattr('username', 'equalto', legacy_user) | list
+          }}
+
+    - name: Verify legacy account-home scope
+      ansible.builtin.assert:
+        that:
+          - legacy_users | length == 1
+          - legacy_users[0].home in [legacy_user_home, legacy_user_new_home]
+        fail_msg: >-
+          Refusing account cleanup because the live account or home directory
+          does not match the approved legacy reference.
+
+    - name: Replace legacy account home with approved path
+      ansible.builtin.raw: >-
+        midclt call user.update {{ legacy_users[0].id }}
+        {{
+          {
+            'home': legacy_user_new_home,
+            'home_mode': '700'
+          } | to_json | quote
+        }}
+      changed_when: true
+      when: legacy_users[0].home != legacy_user_new_home
+
+    - name: Query replacement-home ownership and mode
+      ansible.builtin.raw: >-
+        stat -c '%u:%g:%a' {{ legacy_user_new_home | quote }}
+      changed_when: false
+      register: replacement_home_stat
+
+    - name: Set replacement-home ownership and mode through TrueNAS
+      ansible.builtin.raw: >-
+        midclt call -j filesystem.setperm
+        {{
+          {
+            'path': legacy_user_new_home,
+            'uid': legacy_users[0].uid,
+            'gid': legacy_users[0].group.bsdgrp_gid,
+            'mode': '700',
+            'options': {
+              'stripacl': true,
+              'recursive': false,
+              'traverse': false
+            }
+          } | to_json | quote
+        }}
+      changed_when: true
+      when: >-
+        replacement_home_stat.stdout | trim !=
+        (
+          (legacy_users[0].uid | string) + ':' +
+          (legacy_users[0].group.bsdgrp_gid | string) + ':700'
+        )

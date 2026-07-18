@@ -1,0 +1,23 @@
+*.retry
+*.log
+.DS_Store
+__pycache__/
+*.py[cod]
+.idea/
+.vscode/
+
+# Secrets
+.env
+*.vault
+vault-password*
+secrets.yml
+inventory/**/secrets.*
+inventory/host_vars/**/vault.yml
+
+# Discovery may contain sensitive system metadata.
+artifacts/*
+!artifacts/.gitkeep
+
+# Local Ansible state
+.ansible/
+collections/

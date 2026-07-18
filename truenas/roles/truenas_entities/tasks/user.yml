@@ -1,0 +1,93 @@
+---
+- name: "Locate user {{ desired_user.username }}"
+  ansible.builtin.set_fact:
+    truenas_entities_current_user: >-
+      {{
+        truenas_entities_users |
+        selectattr('username', 'equalto', desired_user.username) |
+        first | default({})
+      }}
+    truenas_entities_normalized_user: >-
+      {{
+        (
+          truenas_entities_users |
+          selectattr('username', 'equalto', desired_user.username) |
+          first | default({})
+        ) | truenas_normalize_user(truenas_entities_groups)
+      }}
+  changed_when: false
+
+- name: "Report user drift for {{ desired_user.username }}"
+  ansible.builtin.debug:
+    msg: "User {{ desired_user.username }} differs from desired state"
+  changed_when: true
+  when:
+    - ansible_check_mode or truenas_entities_audit_only | default(false)
+    - >-
+      truenas_entities_current_user | length == 0 or
+      not (desired_user |
+      truenas_is_subset(truenas_entities_normalized_user))
+
+- name: "Require a Vault password for missing user {{ desired_user.username }}"
+  ansible.builtin.assert:
+    that:
+      - desired_user.username in vault_truenas_user_passwords
+    fail_msg: >-
+      Creating SMB user {{ desired_user.username }} requires its password in
+      vault_truenas_user_passwords.
+  when:
+    - truenas_entities_current_user | length == 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Build user API payload for {{ desired_user.username }}"
+  ansible.builtin.set_fact:
+    truenas_entities_user_payload: >-
+      {{
+        desired_user |
+        combine({
+          'group': (
+            truenas_entities_groups |
+            selectattr('name', 'equalto', desired_user.group) |
+            map(attribute='id') | first
+          ),
+          'groups': (
+            truenas_entities_groups |
+            selectattr('name', 'in', desired_user.groups) |
+            map(attribute='id') | list
+          )
+        })
+      }}
+  changed_when: false
+
+- name: "Create user {{ desired_user.username }}"
+  ansible.builtin.raw: >-
+    midclt call user.create
+    {{
+      truenas_entities_user_payload |
+      combine({'password': vault_truenas_user_passwords[desired_user.username]}) |
+      to_json | quote
+    }}
+  changed_when: true
+  no_log: true
+  when:
+    - truenas_entities_current_user | length == 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Update user {{ desired_user.username }}"
+  ansible.builtin.raw: >-
+    midclt call user.update {{ truenas_entities_current_user.id }}
+    {{
+      truenas_entities_user_payload | dict2items |
+      rejectattr('key', 'equalto', 'username') | items2dict |
+      to_json | quote
+    }}
+  changed_when: true
+  when:
+    - truenas_entities_current_user | length > 0
+    - >-
+      not (desired_user |
+      truenas_is_subset(truenas_entities_normalized_user))
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)

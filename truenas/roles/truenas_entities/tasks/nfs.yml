@@ -1,0 +1,79 @@
+---
+- name: "Locate NFS share {{ desired_nfs.path }}"
+  ansible.builtin.set_fact:
+    truenas_entities_current_nfs: >-
+      {{
+        truenas_entities_nfs_shares |
+        selectattr('path', 'equalto', desired_nfs.path) |
+        first | default({})
+      }}
+    truenas_entities_nfs_payload: >-
+      {{
+        desired_nfs | dict2items |
+        rejectattr('key', 'in', ['state']) |
+        items2dict
+      }}
+  changed_when: false
+
+- name: "Report NFS share drift for {{ desired_nfs.path }}"
+  ansible.builtin.debug:
+    msg: "NFS share {{ desired_nfs.path }} differs from desired state"
+  changed_when: true
+  when:
+    - ansible_check_mode or truenas_entities_audit_only | default(false)
+    - >-
+      (desired_nfs.state == 'present' and (
+        truenas_entities_current_nfs | length == 0 or
+        not (truenas_entities_nfs_payload |
+        truenas_is_subset(truenas_entities_current_nfs))
+      )) or
+      (desired_nfs.state == 'absent' and
+      truenas_entities_current_nfs | length > 0)
+
+- name: "Create NFS share {{ desired_nfs.path }}"
+  ansible.builtin.raw: >-
+    midclt call sharing.nfs.create
+    {{ truenas_entities_nfs_payload | to_json | quote }}
+  changed_when: true
+  when:
+    - desired_nfs.state == 'present'
+    - truenas_entities_current_nfs | length == 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Update NFS share {{ desired_nfs.path }}"
+  ansible.builtin.raw: >-
+    midclt call sharing.nfs.update
+    {{ truenas_entities_current_nfs.id }}
+    {{ truenas_entities_nfs_payload | to_json | quote }}
+  changed_when: true
+  when:
+    - desired_nfs.state == 'present'
+    - truenas_entities_current_nfs | length > 0
+    - >-
+      not (truenas_entities_nfs_payload |
+      truenas_is_subset(truenas_entities_current_nfs))
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Require deletion approval for NFS share {{ desired_nfs.path }}"
+  ansible.builtin.assert:
+    that:
+      - truenas_allow_destructive_changes | bool
+    fail_msg: "NFS share deletion requires explicit destructive approval"
+  when:
+    - desired_nfs.state == 'absent'
+    - truenas_entities_current_nfs | length > 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Delete NFS share {{ desired_nfs.path }}"
+  ansible.builtin.raw: >-
+    midclt call sharing.nfs.delete {{ truenas_entities_current_nfs.id }}
+  changed_when: true
+  when:
+    - desired_nfs.state == 'absent'
+    - truenas_entities_current_nfs | length > 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+    - truenas_allow_destructive_changes | bool

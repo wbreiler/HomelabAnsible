@@ -1,0 +1,80 @@
+---
+- name: "Locate application {{ desired_app.name }}"
+  ansible.builtin.set_fact:
+    truenas_entities_current_app: >-
+      {{
+        truenas_entities_apps |
+        selectattr('name', 'equalto', desired_app.name) |
+        first | default({})
+      }}
+    truenas_entities_app_config: >-
+      {{
+        desired_app['custom_compose_config']
+        if desired_app['custom_app']
+        else desired_app['values']
+      }}
+  changed_when: false
+
+- name: "Report application drift for {{ desired_app.name }}"
+  ansible.builtin.debug:
+    msg: "Application {{ desired_app.name }} differs from desired state"
+  changed_when: true
+  when:
+    - ansible_check_mode or truenas_entities_audit_only | default(false)
+    - >-
+      truenas_entities_current_app | length == 0 or
+      truenas_entities_current_app.state != desired_app.state or
+      not (truenas_entities_app_config |
+      truenas_is_subset(truenas_entities_current_app.config))
+
+- name: "Create application {{ desired_app.name }}"
+  ansible.builtin.raw: >-
+    midclt call -j app.create
+    {{
+      {
+        'app_name': desired_app.name,
+        'custom_app': desired_app.custom_app,
+        'catalog_app': desired_app.catalog_app | default(none),
+        'train': desired_app.train | default(none),
+        'values': desired_app['values'] | default({}),
+        'custom_compose_config':
+          desired_app['custom_compose_config'] | default(none)
+      } | to_json | quote
+    }}
+  changed_when: true
+  when:
+    - truenas_entities_current_app | length == 0
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Update application {{ desired_app.name }}"
+  ansible.builtin.raw: >-
+    midclt call -j app.update {{ desired_app.name | quote }}
+    {{
+      (
+        {'custom_compose_config': truenas_entities_app_config}
+        if desired_app['custom_app']
+        else {'values': truenas_entities_app_config}
+      ) | to_json | quote
+    }}
+  changed_when: true
+  when:
+    - truenas_entities_current_app | length > 0
+    - >-
+      not (truenas_entities_app_config |
+      truenas_is_subset(truenas_entities_current_app.config))
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)
+
+- name: "Set application state for {{ desired_app.name }}"
+  ansible.builtin.raw: >-
+    midclt call -j app.{{
+      'start' if desired_app.state == 'RUNNING' else 'stop'
+    }} {{ desired_app.name | quote }}
+  changed_when: true
+  when:
+    - truenas_entities_current_app | length > 0
+    - truenas_entities_current_app.state != desired_app.state
+    - desired_app.state in ['RUNNING', 'STOPPED']
+    - not ansible_check_mode
+    - not truenas_entities_audit_only | default(false)

@@ -1,0 +1,172 @@
+---
+- name: Discover current TrueNAS configuration
+  hosts: truenas
+  gather_facts: false
+  vars:
+    discovery_methods:
+      # Platform and global settings
+      - system.info
+      - system.general.config
+      - system.advanced.config
+      - system.security.config
+      - system.ntpserver.query
+      - systemdataset.config
+      - update.config
+      - network.configuration.config
+      - interface.query
+      - staticroute.query
+      - dns.query
+      # Storage
+      - pool.query
+      - pool.dataset.query
+      - disk.query
+      - pool.snapshottask.query
+      - pool.scrub.query
+      - pool.resilver.config
+      - replication.query
+      - replication.config.config
+      # Identity and certificates
+      - user.query
+      - group.query
+      - privilege.query
+      - certificate.query
+      - api_key.query
+      - auth.twofactor.config
+      - directoryservices.config
+      - kerberos.config
+      - kerberos.realm.query
+      - kerberos.keytab.query
+      - keychaincredential.query
+      - acme.dns.authenticator.query
+      # Shares and service configuration
+      - sharing.smb.query
+      - sharing.nfs.query
+      - iscsi.auth.query
+      - iscsi.extent.query
+      - iscsi.global.config
+      - iscsi.initiator.query
+      - iscsi.portal.query
+      - iscsi.target.query
+      - iscsi.targetextent.query
+      - nvmet.global.config
+      - nvmet.host.query
+      - nvmet.host_subsys.query
+      - nvmet.namespace.query
+      - nvmet.port.query
+      - nvmet.port_subsys.query
+      - nvmet.subsys.query
+      - smb.config
+      - nfs.config
+      - ssh.config
+      - ftp.config
+      - snmp.config
+      - service.query
+      # Scheduled work and notifications
+      - cronjob.query
+      - initshutdownscript.query
+      - rsynctask.query
+      - cloudsync.query
+      - cloudsync.credentials.query
+      - cloud_backup.query
+      - alertservice.query
+      - alertclasses.config
+      - mail.config
+      - reporting.config
+      - reporting.exporters.query
+      - audit.config
+      - support.config
+      - ups.config
+      - tunable.query
+      # Virtualization and apps (unsupported methods are recorded, not fatal)
+      - vm.query
+      - vm.device.query
+      - virt.global.config
+      - virt.instance.query
+      - virt.volume.query
+      - docker.config
+      - docker.network.query
+      - catalog.config
+      - app.query
+      - app.registry.query
+      - app.ix_volume.query
+      # Hardware and external management
+      - ipmi.lan.query
+      - kmip.config
+      - truecommand.config
+      - tn_connect.config
+      - vmware.query
+
+  tasks:
+    - name: Query TrueNAS middleware method
+      ansible.builtin.raw: "midclt call {{ item }}"
+      changed_when: false
+      failed_when: false
+      loop: "{{ discovery_methods }}"
+      register: discovery_calls
+      tags:
+        - discovery
+
+    - name: Build local discovery record
+      ansible.builtin.set_fact:
+        discovery_record: >-
+          {{
+            discovery_record | default({}) |
+            combine({
+              item.item: {
+                'rc': item.rc,
+                'stdout': item.stdout | default(''),
+                'stderr': item.stderr | default('')
+              }
+            })
+          }}
+      no_log: true
+      loop: "{{ discovery_calls.results }}"
+      tags:
+        - discovery
+
+    - name: Query application configuration
+      ansible.builtin.raw: >-
+        midclt call app.query '[]'
+        '{"extra":{"retrieve_config":true}}'
+      changed_when: false
+      register: discovery_app_config
+      no_log: true
+      tags:
+        - discovery
+
+    - name: Add application configuration to discovery record
+      ansible.builtin.set_fact:
+        discovery_record: >-
+          {{
+            discovery_record |
+            combine({
+              'app.query_with_config': {
+                'rc': discovery_app_config.rc,
+                'stdout': discovery_app_config.stdout | default(''),
+                'stderr': discovery_app_config.stderr | default('')
+              }
+            })
+          }}
+      no_log: true
+      tags:
+        - discovery
+
+    - name: Write ignored raw discovery artifact locally
+      ansible.builtin.copy:
+        content: "{{ discovery_record | to_nice_json }}"
+        dest: "{{ playbook_dir }}/../artifacts/erebus-raw.json"
+        mode: "0600"
+      delegate_to: localhost
+      no_log: true
+      tags:
+        - discovery
+
+    - name: Explain discovery artifact handling
+      ansible.builtin.debug:
+        msg: >-
+          Raw discovery was written to artifacts/erebus-raw.json with mode
+          0600. The artifacts directory is ignored by Git because responses may
+          contain sensitive metadata. Review and sanitize it before deriving
+          committed desired state.
+      tags:
+        - discovery

@@ -1,0 +1,109 @@
+---
+- name: Audit TrueNAS desired state without mutation
+  hosts: truenas
+  gather_facts: false
+
+  tasks:
+    - name: Check managed configuration for drift
+      ansible.builtin.include_role:
+        name: truenas_config
+      vars:
+        truenas_config_audit_only: true
+
+    - name: Check managed entities for drift
+      ansible.builtin.include_role:
+        name: truenas_entities
+      vars:
+        truenas_entities_audit_only: true
+
+    - name: Query datasets for inventory audit
+      ansible.builtin.raw: midclt call pool.dataset.query
+      changed_when: false
+      register: audit_datasets
+
+    - name: Assert every desired dataset exists
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.name in
+            (audit_datasets.stdout | from_json | map(attribute='id') | list)
+        fail_msg: "Desired dataset {{ item.name }} is missing"
+        quiet: true
+      loop: "{{ truenas_datasets }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Query SMB shares for inventory audit
+      ansible.builtin.raw: midclt call sharing.smb.query
+      changed_when: false
+      register: audit_smb_shares
+
+    - name: Assert every desired SMB share exists
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.name in
+            (audit_smb_shares.stdout | from_json | map(attribute='name') | list)
+        fail_msg: "Desired SMB share {{ item.name }} is missing"
+        quiet: true
+      loop: "{{ truenas_smb_shares | selectattr('state', 'eq', 'present') }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Query NFS shares for inventory audit
+      ansible.builtin.raw: midclt call sharing.nfs.query
+      changed_when: false
+      register: audit_nfs_shares
+
+    - name: Assert every desired NFS share exists
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.path in
+            (audit_nfs_shares.stdout | from_json | map(attribute='path') | list)
+        fail_msg: "Desired NFS share {{ item.path }} is missing"
+        quiet: true
+      loop: "{{ truenas_nfs_shares | selectattr('state', 'eq', 'present') }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Query applications for inventory audit
+      ansible.builtin.raw: midclt call app.query
+      changed_when: false
+      register: audit_apps
+
+    - name: Assert every desired application exists
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.name in
+            (audit_apps.stdout | from_json | map(attribute='name') | list)
+        fail_msg: "Desired application {{ item.name }} is missing"
+        quiet: true
+      loop: "{{ truenas_apps }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Assert absent SMB shares remain absent
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.name not in
+            (audit_smb_shares.stdout | from_json | map(attribute='name') | list)
+        fail_msg: "Removed SMB share {{ item.name }} has reappeared"
+        quiet: true
+      loop: "{{ truenas_smb_shares | selectattr('state', 'eq', 'absent') }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Assert absent NFS shares remain absent
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.path not in
+            (audit_nfs_shares.stdout | from_json | map(attribute='path') | list)
+        fail_msg: "Removed NFS share {{ item.path }} has reappeared"
+        quiet: true
+      loop: "{{ truenas_nfs_shares | selectattr('state', 'eq', 'absent') }}"
+      loop_control:
+        label: "{{ item.path }}"
