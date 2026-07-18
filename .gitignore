@@ -1,0 +1,18 @@
+# OS / editor
+.DS_Store
+*.swp
+*~
+
+# Ansible fact caches and retry files
+.ansible/
+*.retry
+
+# Python
+__pycache__/
+*.pyc
+
+# Claude Code local state
+.claude/settings.local.json
+
+# Session handoff notes — local context, never committed
+HANDOFF.md
