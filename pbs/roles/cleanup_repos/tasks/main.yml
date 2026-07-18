@@ -1,0 +1,11 @@
+---
+- name: Remove PBS enterprise repository files
+  ansible.builtin.shell: |
+    rm -f /etc/apt/sources.list.d/pbs-enterprise.sources
+    rm -f /etc/apt/sources.list.d/pbs-*.list
+    rm -f /etc/apt/sources.list.d/proxmox-*.list
+  changed_when: true
+
+- name: Update apt cache after cleanup
+  ansible.builtin.apt:
+    update_cache: true

@@ -1,0 +1,5 @@
+---
+nfs_mount_path: "/mnt/pbs-nfs"
+nfs_mount_server: "192.168.4.211"
+nfs_mount_export_path: "/volume1/PBS"
+nfs_mount_opts: "rw,relatime,vers=3,rsize=131072,wsize=131072,hard,proto=tcp,noatime"

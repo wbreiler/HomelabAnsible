@@ -1,0 +1,79 @@
+---
+- name: Wait for PBS service to be ready
+  ansible.builtin.wait_for:
+    port: 8007
+    delay: 10
+    timeout: 300
+
+- name: Create datastore directory
+  ansible.builtin.file:
+    path: "{{ pbs_datastore_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Check if datastore already exists
+  ansible.builtin.shell: |
+    set -o pipefail
+    proxmox-backup-manager datastore list | grep -q "{{ pbs_datastore_name }}"
+  args:
+    executable: /bin/bash
+  register: pbs_datastore_check
+  changed_when: false
+  failed_when: false
+
+- name: Create MainStore datastore
+  ansible.builtin.shell: |
+    proxmox-backup-manager datastore create {{ pbs_datastore_name }} {{ pbs_datastore_path }}
+  when: pbs_datastore_check.rc != 0
+  register: pbs_datastore_result
+  changed_when: pbs_datastore_result.rc == 0
+  failed_when:
+    - pbs_datastore_result.rc != 0
+    - "'already exists' not in pbs_datastore_result.stderr"
+    - "'not empty' not in pbs_datastore_result.stderr"
+
+- name: Create namespaces
+  ansible.builtin.shell: |
+    set -o pipefail
+    echo "{{ users_root_password | default(ansible_password) }}" | proxmox-backup-client namespace create {{ item }} --repository {{ pbs_datastore_name }}
+  args:
+    executable: /bin/bash
+  loop: "{{ pbs_namespaces | default([]) }}"
+  register: pbs_namespace_result
+  changed_when: pbs_namespace_result.rc == 0
+  failed_when:
+    - pbs_namespace_result.rc != 0
+    - "'already exists' not in pbs_namespace_result.stderr"
+  no_log: true
+
+- name: Configure remote
+  ansible.builtin.shell: |
+    proxmox-backup-manager remote create {{ pbs_sync_remote_name }} \
+      --host {{ pbs_sync_remote_host }} \
+      --auth-id {{ pbs_sync_remote_userid }} \
+      --password {{ pbs_sync_remote_password }} \
+      --fingerprint {{ pbs_sync_remote_fingerprint }}
+  when: pbs_configure_sync_job | default(false)
+  register: pbs_remote_result
+  changed_when: pbs_remote_result.rc == 0
+  failed_when:
+    - pbs_remote_result.rc != 0
+    - "'already exists' not in pbs_remote_result.stderr"
+
+- name: Create sync job
+  ansible.builtin.shell: |
+    proxmox-backup-manager sync-job create {{ pbs_sync_job_id }} \
+      --remote {{ pbs_sync_remote_name }} \
+      --remote-store {{ pbs_sync_remote_store }} \
+      --store {{ pbs_sync_store }} \
+      --owner {{ pbs_sync_owner }} \
+      --schedule "{{ pbs_sync_schedule }}" \
+      {% if pbs_sync_max_depth is defined %}--max-depth {{ pbs_sync_max_depth }}{% endif %} \
+      {% if pbs_sync_remove_vanished %}--remove-vanished{% endif %} \
+      {% if pbs_sync_encrypted_only %}--transfer-last{% endif %}
+  when: pbs_configure_sync_job | default(false)
+  register: pbs_sync_job_result
+  changed_when: pbs_sync_job_result.rc == 0
+  failed_when:
+    - pbs_sync_job_result.rc != 0
+    - "'already exists' not in pbs_sync_job_result.stderr"

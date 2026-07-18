@@ -1,0 +1,20 @@
+---
+pbs_datastore_name: "MainStore"
+pbs_datastore_path: "/mnt/pbs-nfs/"
+
+# Sync Job Configuration
+pbs_configure_sync_job: false
+pbs_sync_job_id: "s-XXXXXXXX-XXXX"
+pbs_sync_remote_name: "pbs-nash"
+pbs_sync_remote_host: "pbs-nash.example.com"
+pbs_sync_remote_fingerprint: ""
+pbs_sync_remote_userid: "pbs-nash@pbs"
+pbs_sync_remote_password: ""
+pbs_sync_remote_store: "MainStore"
+pbs_sync_store: "MainStore"
+pbs_sync_owner: "pbs-nash@pbs"
+pbs_sync_schedule: "sat 23:30"
+pbs_sync_max_depth: 0
+pbs_sync_remove_vanished: false
+pbs_sync_encrypted_only: false
+pbs_sync_verified_only: false

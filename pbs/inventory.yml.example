@@ -1,0 +1,11 @@
+---
+# Proxmox Backup Server Inventory
+all:
+  children:
+    pbs_servers:
+      hosts:
+        pbs-nash:
+          ansible_host: 10.0.0.xxx  # Replace with your PBS server IP
+      vars:
+        ansible_user: root
+        ansible_python_interpreter: /usr/bin/python3

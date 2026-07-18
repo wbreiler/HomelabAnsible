@@ -1,0 +1,35 @@
+---
+# Main playbook to set up Proxmox Backup Server
+- name: Setup Proxmox Backup Server
+  hosts: pbs_servers
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      failed_when: false
+
+  roles:
+    - role: cleanup_repos
+      tags: ['cleanup', 'setup']
+
+    - role: tailscale
+      when: install_tailscale | default(true)
+      tags: ['tailscale', 'setup']
+
+    - role: nfs_mount
+      tags: ['nfs', 'storage', 'setup']
+
+    - role: pbs
+      tags: ['pbs', 'setup']
+
+    - role: users
+      tags: ['users', 'setup']
+
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: "PBS server {{ inventory_hostname }} setup completed successfully!"

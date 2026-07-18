@@ -1,0 +1,47 @@
+---
+# Variables for all PBS servers
+
+# User Passwords (Optional)
+# users_root_password: "CHANGE_ME_root_password"  # Optional: Uncomment to set/change root password
+
+users_pbs_users:
+  - name: pbs-nash
+    comment: "PBS Nash User"
+    password: "CHANGE_ME_nash_password"
+  - name: pbs-bldr
+    comment: "PBS Boulder User"
+    password: "CHANGE_ME_bldr_password"
+
+# NFS Configuration
+nfs_mount_server: "192.168.4.211"              # IP or hostname of your NFS server
+nfs_mount_export_path: "/volume1/PBS"          # Path exported by NFS server
+nfs_mount_path: "/mnt/pbs-nfs"                 # Local mount point
+nfs_mount_opts: "rw,relatime,vers=3,rsize=131072,wsize=131072,hard,proto=tcp,noatime"
+
+# PBS Datastore Configuration
+pbs_datastore_name: "MainStore"                # Name of the datastore
+pbs_datastore_path: "/mnt/pbs-nfs/"            # Path where datastore will be created
+
+# Sync Job Configuration (set pbs_configure_sync_job: true to enable)
+# This syncs FROM a remote PBS server TO this server (Saturday at 11:30 PM)
+pbs_configure_sync_job: true
+pbs_sync_job_id: "s-d6fc464b-9f3a"             # Unique ID for the sync job
+pbs_sync_remote_name: "pbs-nash"               # Name for the remote server
+pbs_sync_remote_host: "CHANGE_ME_pbs_nash_host"  # Remote PBS server hostname/IP
+pbs_sync_remote_userid: "pbs-nash@pbs"         # Remote user for authentication
+pbs_sync_remote_password: "CHANGE_ME_remote_password"
+pbs_sync_remote_store: "MainStore"             # Remote datastore name
+pbs_sync_store: "MainStore"                    # Local datastore to sync to
+pbs_sync_owner: "pbs-nash@pbs"                 # Owner of the sync job
+pbs_sync_schedule: "sat 23:30"                 # Schedule (Saturday 11:30 PM)
+pbs_sync_max_depth: 0                          # Max depth for namespaces (0 = unlimited)
+pbs_sync_remove_vanished: false                # Remove backups that vanished from remote
+pbs_sync_encrypted_only: false                 # Only sync encrypted backups
+pbs_sync_verified_only: false                  # Only sync verified backups
+
+# Tailscale Configuration
+install_tailscale: true
+tailscale_auth_key: "tskey-auth-XXXXXXXXXXXXXXX"  # Replace with your actual auth key
+
+# Security Note: Encrypt this file with Ansible Vault
+# Run: ansible-vault encrypt group_vars/pbs_servers.yml

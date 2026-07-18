@@ -1,0 +1,33 @@
+---
+- name: Download Tailscale GPG key
+  ansible.builtin.get_url:
+    url: https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg
+    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    mode: '0644'
+
+- name: Add Tailscale repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/debian bookworm main"
+    state: present
+    filename: tailscale
+
+- name: Update apt cache for Tailscale
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install Tailscale
+  ansible.builtin.apt:
+    name: tailscale
+    state: present
+
+- name: Start and enable Tailscale service
+  ansible.builtin.systemd:
+    name: tailscaled
+    state: started
+    enabled: true
+
+- name: Authenticate Tailscale
+  ansible.builtin.command: tailscale up --authkey {{ tailscale_auth_key }}
+  when: tailscale_auth_key is defined and tailscale_auth_key != ""
+  register: tailscale_up_result
+  changed_when: "'Success' in tailscale_up_result.stdout or tailscale_up_result.rc == 0"
