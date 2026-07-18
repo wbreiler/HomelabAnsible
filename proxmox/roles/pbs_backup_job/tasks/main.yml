@@ -1,0 +1,93 @@
+---
+# Backup jobs are cluster-wide (/etc/pve/jobs.cfg); run once on master only.
+- name: Get existing backup jobs
+  ansible.builtin.command: pvesh get /cluster/backup --output-format json
+  register: pbs_backup_job_jobs_raw
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ cluster_master_node }}"
+
+- name: Find existing backup job for storage {{ pbs_storage_id }}
+  ansible.builtin.set_fact:
+    pbs_backup_job_existing: >-
+      {{ (pbs_backup_job_jobs_raw.stdout | from_json)
+         | selectattr('storage', 'equalto', pbs_storage_id)
+         | list | first | default({}) }}
+  run_once: true
+
+- name: Normalize desired VMID selection
+  ansible.builtin.set_fact:
+    pbs_backup_job_desired_vmids: >-
+      {{ pbs_backup_job_vmids | string | regex_replace('\\s+', '') }}
+  run_once: true
+
+- name: Determine whether the existing backup job needs reconciliation
+  ansible.builtin.set_fact:
+    pbs_backup_job_needs_update: >-
+      {{
+        pbs_backup_job_existing != {}
+        and (
+          (pbs_backup_job_existing.get('schedule', '') | string) != pbs_backup_job_schedule
+          or (pbs_backup_job_existing.get('mode', '') | string) != pbs_backup_job_mode
+          or (pbs_backup_job_existing.get('compress', '') | string) != pbs_backup_job_compress
+          or (
+            pbs_backup_job_desired_vmids | length > 0
+            and (pbs_backup_job_existing.get('vmid', '') | string) != pbs_backup_job_desired_vmids
+          )
+          or (
+            pbs_backup_job_desired_vmids | length == 0
+            and (
+              pbs_backup_job_existing.get('vmid', '') | string | length > 0
+              or not (pbs_backup_job_existing.get('all', false) | bool)
+              or pbs_backup_job_existing.get('exclude', '') | string | length > 0
+              or pbs_backup_job_existing.get('pool', '') | string | length > 0
+            )
+          )
+        )
+      }}
+  run_once: true
+
+- name: Create backup job
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          'pvesh', 'create', '/cluster/backup',
+          '--storage', pbs_storage_id,
+          '--schedule', pbs_backup_job_schedule,
+          '--mode', pbs_backup_job_mode,
+          '--compress', pbs_backup_job_compress
+        ]
+        + (
+          ['--vmid', pbs_backup_job_desired_vmids]
+          if pbs_backup_job_desired_vmids | length > 0
+          else ['--all', '1']
+        )
+      }}
+  when: pbs_backup_job_existing == {}
+  run_once: true
+  delegate_to: "{{ cluster_master_node }}"
+  register: pbs_backup_job_create_result
+  changed_when: pbs_backup_job_create_result.rc == 0
+
+- name: Update backup job
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          'pvesh', 'set', '/cluster/backup/' ~ pbs_backup_job_existing.id,
+          '--schedule', pbs_backup_job_schedule,
+          '--mode', pbs_backup_job_mode,
+          '--compress', pbs_backup_job_compress
+        ]
+        + (
+          ['--vmid', pbs_backup_job_desired_vmids]
+          if pbs_backup_job_desired_vmids | length > 0
+          else ['--all', '1', '--delete', 'vmid,exclude,pool']
+        )
+      }}
+  when: pbs_backup_job_needs_update
+  run_once: true
+  delegate_to: "{{ cluster_master_node }}"
+  register: pbs_backup_job_update_result
+  changed_when: pbs_backup_job_update_result.rc == 0

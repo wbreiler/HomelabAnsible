@@ -1,0 +1,135 @@
+---
+# Main playbook to set up Proxmox cluster
+- name: Setup Proxmox Nodes
+  hosts: proxmox_cluster
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Configure repositories before package operations
+      ansible.builtin.import_role:
+        name: configure_repos
+      tags: ['repos', 'setup']
+
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - python3-requests
+          - wget
+          - curl
+        state: present
+
+  roles:
+    - role: cluster_setup
+      when: setup_cluster | default(false) | bool
+      tags: ['cluster', 'setup']
+
+    - role: pbs_storage
+      when: configure_pbs | default(true) | bool
+      tags: ['pbs', 'storage']
+
+    - role: pbs_backup_job
+      when: configure_pbs_backup_job | default(false) | bool
+      tags: ['pbs', 'backup']
+
+    - role: manage_isos
+      when: manage_isos | default(false) | bool
+      tags: ['isos', 'storage']
+
+    - role: iptag
+      when: install_iptag | default(true) | bool
+      tags: ['iptag', 'setup']
+
+    - role: download_templates
+      when: download_lxc_templates | default(true) | bool
+      tags: ['templates', 'setup']
+
+    - role: apt_cacher_ng
+      when: install_apt_cacher_ng | default(false) | bool
+      tags: ['apt_cacher_ng', 'lxc']
+
+    - role: prowlarr
+      when: install_prowlarr | default(false) | bool
+      tags: ['prowlarr', 'lxc']
+
+    - role: homebridge
+      when: install_homebridge | default(false) | bool
+      tags: ['homebridge', 'lxc']
+
+    - role: spoolman
+      when: install_spoolman | default(false) | bool
+      tags: ['spoolman', 'lxc']
+
+    - role: gitea_mirror
+      when: install_gitea_mirror | default(false) | bool
+      tags: ['gitea_mirror', 'lxc']
+
+    - role: seerr
+      when: install_seerr | default(false) | bool
+      tags: ['seerr', 'lxc']
+
+    - role: pocket_id
+      when: install_pocket_id | default(false) | bool
+      tags: ['pocket_id', 'lxc']
+
+    - role: forgejo
+      when: install_forgejo | default(false) | bool
+      tags: ['forgejo', 'lxc']
+
+    - role: sonarr
+      when: install_sonarr | default(false) | bool
+      tags: ['sonarr', 'lxc']
+
+    - role: radarr
+      when: install_radarr | default(false) | bool
+      tags: ['radarr', 'lxc']
+
+    - role: discoverr_bot
+      when: install_discoverr_bot | default(false) | bool
+      tags: ['discoverr_bot', 'lxc']
+
+    - role: gallery_dl
+      when: install_gallery_dl | default(false) | bool
+      tags: ['gallery_dl', 'lxc']
+
+    - role: stash
+      when: install_stash | default(false) | bool
+      tags: ['stash', 'lxc']
+
+    - role: update_all
+      when: run_updates | default(false) | bool
+      tags: ['update', 'maintenance']
+
+    - role: cleanup_storage
+      when: run_cleanup_storage | default(false) | bool
+      tags: ['cleanup', 'storage', 'maintenance']
+
+    - role: pbs_restore
+      when: restore_from_pbs | default(false) | bool
+      tags: ['pbs', 'restore']
+
+    - role: vm_deploy
+      when: deploy_vms | default(false) | bool
+      tags: ['vms', 'deploy']
+
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: "Proxmox node {{ inventory_hostname }} setup completed successfully!"
+
+- name: Network tuning (10G TCP + storage VLAN)
+  hosts: proxmox_cluster:pbs_nodes
+  gather_facts: true
+  become: true
+  tags: ['network', 'tuning']
+
+  pre_tasks:
+    - name: Install ifupdown2 for ifreload
+      ansible.builtin.apt:
+        name: ifupdown2
+        state: present
+      when: network_tuning_configure_vlan | default(false) | bool
+
+  roles:
+    - role: network_tuning
+      tags: ['network', 'tuning']

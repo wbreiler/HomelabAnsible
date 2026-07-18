@@ -1,0 +1,25 @@
+---
+- name: Reload Radarr systemd
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - daemon-reload
+  changed_when: true
+  listen: Restart Radarr
+
+- name: Restart Radarr service
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - radarr
+  changed_when: true
+  listen: Restart Radarr

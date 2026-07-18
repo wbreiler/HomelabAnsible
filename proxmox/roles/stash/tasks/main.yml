@@ -1,0 +1,67 @@
+---
+- name: Resolve node currently hosting Stash
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ stash_hostname }}"
+    lxc_fallback_node: "{{ stash_node }}"
+
+- name: Set up Stash LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap LXC container  # ponytail: shared bootstrap at tasks/create_lxc.yml
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ stash_hostname }}"
+        lxc_vmid: "{{ stash_vmid }}"
+        lxc_storage: "{{ stash_storage }}"
+        lxc_template: "{{ stash_template }}"
+        lxc_cores: "{{ stash_cores }}"
+        lxc_memory: "{{ stash_memory }}"
+        lxc_disk: "{{ stash_disk }}"
+        lxc_bridge: "{{ stash_bridge }}"
+        lxc_vlan: "{{ stash_vlan }}"
+        lxc_packages:
+          - nfs-common
+          - wget
+          - ffmpeg
+        lxc_nfs_server: "{{ stash_nfs_server }}"
+        lxc_nfs_export: "{{ stash_nfs_export }}"
+        lxc_nfs_mountpoint: "{{ stash_nfs_mountpoint }}"
+
+    - name: Download Stash binary
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ lxc_resolved_vmid }} --
+          bash -c "[ -f /usr/local/bin/stash ] ||
+          wget -q -O /usr/local/bin/stash {{ stash_binary_url }} &&
+          chmod +x /usr/local/bin/stash"
+      changed_when: true
+
+    - name: Template Stash service file to host tmp
+      ansible.builtin.template:
+        src: stash.service.j2
+        dest: /tmp/stash-{{ lxc_resolved_vmid }}.service
+        mode: '0644'
+
+    - name: Push service file into container
+      ansible.builtin.command:
+        cmd: >
+          pct push {{ lxc_resolved_vmid }}
+          /tmp/stash-{{ lxc_resolved_vmid }}.service
+          /etc/systemd/system/stash.service
+          --perms 644
+      changed_when: true
+
+    - name: Remove temp service file from host
+      ansible.builtin.file:
+        path: /tmp/stash-{{ lxc_resolved_vmid }}.service
+        state: absent
+
+    - name: Enable and start Stash service
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ lxc_resolved_vmid }} --
+          bash -c "systemctl daemon-reload &&
+          systemctl enable stash &&
+          systemctl start stash"
+      changed_when: true

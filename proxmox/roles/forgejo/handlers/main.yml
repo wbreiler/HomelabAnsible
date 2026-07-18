@@ -1,0 +1,25 @@
+---
+- name: Reload Forgejo systemd
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - daemon-reload
+  changed_when: true
+  listen: Restart Forgejo
+
+- name: Restart Forgejo service
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - forgejo
+  changed_when: true
+  listen: Restart Forgejo

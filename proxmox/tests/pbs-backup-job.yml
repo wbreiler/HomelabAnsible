@@ -1,0 +1,181 @@
+---
+- name: Test PBS backup job reconciliation
+  hosts: localhost
+  gather_facts: false
+  become: false
+
+  vars:
+    cluster_master_node: localhost
+    pbs_storage_id: backup-nash
+    pbs_backup_job_test_dir: /tmp/pbs-backup-job-test
+    pbs_backup_job_test_fixture: "{{ pbs_backup_job_test_dir }}/jobs.json"
+    pbs_backup_job_test_log: "{{ pbs_backup_job_test_dir }}/commands.log"
+    pbs_backup_job_test_path: >-
+      {{ pbs_backup_job_test_dir }}/bin:{{ lookup('ansible.builtin.env', 'PATH') }}
+
+  environment:
+    PATH: "{{ pbs_backup_job_test_path }}"
+    PBS_BACKUP_JOB_TEST_FIXTURE: "{{ pbs_backup_job_test_fixture }}"
+    PBS_BACKUP_JOB_TEST_LOG: "{{ pbs_backup_job_test_log }}"
+
+  tasks:
+    - name: Create fake pvesh directory
+      ansible.builtin.file:
+        path: "{{ pbs_backup_job_test_dir }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Install fake pvesh command
+      ansible.builtin.copy:
+        src: fixtures/pbs-backup-job/pvesh
+        dest: "{{ pbs_backup_job_test_dir }}/bin/pvesh"
+        mode: "0755"
+
+    - name: Test reconciliation of all managed fields
+      vars:
+        pbs_backup_job_schedule: "0/6:30"
+        pbs_backup_job_mode: snapshot
+        pbs_backup_job_compress: zstd
+        pbs_backup_job_vmids: "102,101"
+      block:
+        - name: Set divergent restricted-job fixture
+          ansible.builtin.copy:
+            content: >-
+              [{"id":"restricted","storage":"backup-nash","schedule":"daily",
+              "mode":"stop","compress":"lzo","vmid":"100,101"}]
+            dest: "{{ pbs_backup_job_test_fixture }}"
+            mode: "0600"
+
+        - name: Clear managed-field command log
+          ansible.builtin.copy:
+            content: ""
+            dest: "{{ pbs_backup_job_test_log }}"
+            mode: "0600"
+
+        - name: Reconcile divergent restricted job
+          ansible.builtin.include_role:
+            name: pbs_backup_job
+
+        - name: Read managed-field command log
+          ansible.builtin.slurp:
+            src: "{{ pbs_backup_job_test_log }}"
+          register: pbs_backup_job_managed_log
+
+        - name: Verify every managed field is sent on update
+          ansible.builtin.assert:
+            that:
+              - >-
+                pbs_backup_job_managed_log.content | b64decode | trim ==
+                'set /cluster/backup/restricted --schedule 0/6:30 --mode snapshot '
+                ~ '--compress zstd --vmid 102,101'
+
+    - name: Test restricted-to-all transition
+      vars:
+        pbs_backup_job_schedule: "0/6:30"
+        pbs_backup_job_mode: snapshot
+        pbs_backup_job_compress: zstd
+        pbs_backup_job_vmids: ""
+      block:
+        - name: Set restricted-job fixture
+          ansible.builtin.copy:
+            content: >-
+              [{"id":"to-all","storage":"backup-nash","schedule":"0/6:30",
+              "mode":"snapshot","compress":"zstd","vmid":"100,101"}]
+            dest: "{{ pbs_backup_job_test_fixture }}"
+            mode: "0600"
+
+        - name: Clear restricted-to-all command log
+          ansible.builtin.copy:
+            content: ""
+            dest: "{{ pbs_backup_job_test_log }}"
+            mode: "0600"
+
+        - name: Reconcile restricted job to all guests
+          ansible.builtin.include_role:
+            name: pbs_backup_job
+
+        - name: Read restricted-to-all command log
+          ansible.builtin.slurp:
+            src: "{{ pbs_backup_job_test_log }}"
+          register: pbs_backup_job_to_all_log
+
+        - name: Verify restricted selection is cleared
+          ansible.builtin.assert:
+            that:
+              - >-
+                pbs_backup_job_to_all_log.content | b64decode | trim ==
+                'set /cluster/backup/to-all --schedule 0/6:30 --mode snapshot '
+                ~ '--compress zstd --all 1 --delete vmid,exclude,pool'
+
+    - name: Test all-to-restricted transition
+      vars:
+        pbs_backup_job_schedule: "0/6:30"
+        pbs_backup_job_mode: snapshot
+        pbs_backup_job_compress: zstd
+        pbs_backup_job_vmids: "201,200"
+      block:
+        - name: Set all-guests job fixture
+          ansible.builtin.copy:
+            content: >-
+              [{"id":"to-restricted","storage":"backup-nash","schedule":"0/6:30",
+              "mode":"snapshot","compress":"zstd","all":1}]
+            dest: "{{ pbs_backup_job_test_fixture }}"
+            mode: "0600"
+
+        - name: Clear all-to-restricted command log
+          ansible.builtin.copy:
+            content: ""
+            dest: "{{ pbs_backup_job_test_log }}"
+            mode: "0600"
+
+        - name: Reconcile all-guests job to restricted guests
+          ansible.builtin.include_role:
+            name: pbs_backup_job
+
+        - name: Read all-to-restricted command log
+          ansible.builtin.slurp:
+            src: "{{ pbs_backup_job_test_log }}"
+          register: pbs_backup_job_to_restricted_log
+
+        - name: Verify restricted selection is set
+          ansible.builtin.assert:
+            that:
+              - >-
+                pbs_backup_job_to_restricted_log.content | b64decode | trim ==
+                'set /cluster/backup/to-restricted --schedule 0/6:30 --mode snapshot '
+                ~ '--compress zstd --vmid 201,200'
+
+    - name: Test converged job remains unchanged
+      vars:
+        pbs_backup_job_schedule: "0/6:30"
+        pbs_backup_job_mode: snapshot
+        pbs_backup_job_compress: zstd
+        pbs_backup_job_vmids: ""
+      block:
+        - name: Set converged all-guests job fixture
+          ansible.builtin.copy:
+            content: >-
+              [{"id":"converged","storage":"backup-nash","schedule":"0/6:30",
+              "mode":"snapshot","compress":"zstd","all":1}]
+            dest: "{{ pbs_backup_job_test_fixture }}"
+            mode: "0600"
+
+        - name: Clear converged-job command log
+          ansible.builtin.copy:
+            content: ""
+            dest: "{{ pbs_backup_job_test_log }}"
+            mode: "0600"
+
+        - name: Reconcile converged job
+          ansible.builtin.include_role:
+            name: pbs_backup_job
+
+        - name: Read converged-job command log
+          ansible.builtin.slurp:
+            src: "{{ pbs_backup_job_test_log }}"
+          register: pbs_backup_job_converged_log
+
+        - name: Verify converged job was not updated
+          ansible.builtin.assert:
+            that:
+              - pbs_backup_job_converged_log.content | b64decode | length == 0

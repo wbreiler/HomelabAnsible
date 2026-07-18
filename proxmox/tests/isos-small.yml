@@ -1,0 +1,30 @@
+---
+- name: Test ISO Management Role (Small File)
+  hosts: localhost
+  gather_facts: true
+  become: false
+
+  vars:
+    manage_isos_storage_path: "/tmp/test-isos"
+
+    # Test with tiny Alpine Linux ISO (~200MB instead of ~2GB)
+    manage_isos_downloads:
+      - url: "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/x86_64/alpine-virt-3.19.0-x86_64.iso"
+        filename: "alpine-virt-test.iso"
+        # Checksum omitted for testing purposes
+
+  roles:
+    - role: manage_isos
+
+  post_tasks:
+    - name: Verify download
+      ansible.builtin.stat:
+        path: "{{ manage_isos_storage_path }}/alpine-virt-test.iso"
+      register: iso_stat
+
+    - name: Show results
+      ansible.builtin.debug:
+        msg:
+          - "ISO exists: {{ iso_stat.stat.exists }}"
+          - "ISO size: {{ iso_stat.stat.size | default(0) | human_readable }}"
+          - "ISO path: {{ iso_stat.stat.path | default('N/A') }}"

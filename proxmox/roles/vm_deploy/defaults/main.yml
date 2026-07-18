@@ -1,0 +1,25 @@
+---
+# Node where Ansible coordinates VM deployment tasks (queries cluster, delegates creation)
+vm_deploy_master_node: "nyx"
+
+# Target node for new VMs: "random" to spread across cluster, or a specific node name.
+# Individual VMs can override this with a per-entry `node:` key.
+vm_deploy_node: "random"
+
+# Storage pool for VM disks: pool name (e.g. "local-lvm") or "random" to pick from
+# vm_deploy_available_storages. Individual VMs can override with a per-entry `storage:` key.
+vm_deploy_storage: "local-lvm"
+vm_deploy_available_storages:
+  - "local-lvm"
+
+# Proxmox storage ID that holds ISOs (typically "local", path /var/lib/vz/template/iso/)
+vm_deploy_iso_storage: "local"
+
+# Default network bridge
+vm_deploy_network_bridge: "vmbr0"
+
+# Start VMs immediately after creation
+vm_deploy_start_after_create: false
+
+# List of VMs to deploy — define in group_vars
+vm_deploy_vms: []

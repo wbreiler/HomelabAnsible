@@ -1,0 +1,26 @@
+---
+radarr_node: "prometheus"
+radarr_vmid: "111"
+radarr_hostname: "radarr-nash"
+radarr_storage: "local-zfs"
+radarr_template: ""  # auto-detect latest debian-1[23]-standard if empty
+radarr_cores: 2
+radarr_memory: 1024
+radarr_disk: 4
+radarr_bridge: "vmbr0"
+radarr_vlan: 40
+radarr_tags:
+  - "arr"
+
+radarr_version: "6.3.0.10514"
+radarr_release_url: >-
+  https://github.com/Radarr/Radarr/releases/download/v{{ radarr_version
+  }}/Radarr.master.{{ radarr_version }}.linux-core-x64.tar.gz
+radarr_release_checksum: "sha256:41d6455c037ff267c5ad5a0f0de4502cebe8f89ec3d051da97851933d48a4047"
+radarr_install_dir: "/opt/Radarr"
+radarr_data_dir: "/var/lib/radarr"
+radarr_backup_dir: "/opt/radarr-backups"
+radarr_user: "media"
+
+radarr_port: 7878
+radarr_health_url: "http://10.10.40.131:{{ radarr_port }}/ping"

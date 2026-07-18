@@ -1,0 +1,32 @@
+totem {
+    version: 2
+    cluster_name: {{ cluster_name }}
+    transport: knet
+    link_mode: passive
+    crypto_cipher: aes256
+    crypto_hash: sha256
+}
+
+nodelist {
+{% for host in groups['proxmox_cluster'] %}
+  node {
+    name: {{ hostvars[host].proxmox_node_name }}
+    nodeid: {{ loop.index }}
+    quorum_votes: 1
+    ring0_addr: {{ hostvars[host].ansible_host }}
+{% if hostvars[host].corosync_ring1_addr is defined %}
+    ring1_addr: {{ hostvars[host].corosync_ring1_addr }}
+{% endif %}
+  }
+{% endfor %}
+}
+
+quorum {
+    provider: corosync_votequorum
+    expected_votes: {{ groups['proxmox_cluster'] | length }}
+}
+
+logging {
+    to_syslog: yes
+    debug: off
+}

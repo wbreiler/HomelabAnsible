@@ -1,0 +1,11 @@
+---
+# Restore LXC containers from Proxmox Backup Server
+
+- name: Run PBS restore tasks on target node only
+  when: inventory_hostname == pbs_restore_node
+  block:
+    - name: Restore containers from PBS
+      ansible.builtin.include_tasks: restore_container.yml
+      loop: "{{ pbs_restore_containers | default([]) }}"
+      loop_control:
+        loop_var: restore_item

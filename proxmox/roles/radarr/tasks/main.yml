@@ -1,0 +1,359 @@
+---
+- name: Validate Radarr configuration
+  ansible.builtin.assert:
+    that:
+      - radarr_version is match('^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+      - radarr_release_url | length > 0
+      - radarr_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - radarr_port | int >= 1
+      - radarr_port | int <= 65535
+    fail_msg: >-
+      Radarr requires a pinned version with a SHA-256 checksum and a valid
+      TCP port.
+
+- name: Resolve node currently hosting Radarr
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ radarr_hostname }}"
+    lxc_fallback_node: "{{ radarr_node }}"
+
+- name: Set up Radarr LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Radarr container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ radarr_hostname }}"
+        lxc_vmid: "{{ radarr_vmid }}"
+        lxc_storage: "{{ radarr_storage }}"
+        lxc_template: "{{ radarr_template }}"
+        lxc_cores: "{{ radarr_cores }}"
+        lxc_memory: "{{ radarr_memory }}"
+        lxc_disk: "{{ radarr_disk }}"
+        lxc_bridge: "{{ radarr_bridge }}"
+        lxc_vlan: "{{ radarr_vlan }}"
+        lxc_tags: "{{ radarr_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+          - curl
+          - libicu-dev
+          - sqlite3
+          - tar
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Ensure Radarr runtime account and data directory
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            user="$1"
+            data_dir="$2"
+            changed=0
+            if ! getent group "${user}" >/dev/null; then
+              groupadd --system "${user}"
+              changed=1
+            fi
+            if ! id -u "${user}" >/dev/null 2>&1; then
+              useradd --system --gid "${user}" --home-dir "${data_dir}" \
+                --shell /usr/sbin/nologin "${user}"
+              changed=1
+            fi
+            if ! test -d "${data_dir}"; then
+              mkdir -p "${data_dir}"
+              changed=1
+            fi
+            if test "$(stat -c '%U:%G' "${data_dir}")" != "${user}:${user}"; then
+              chown "${user}:${user}" "${data_dir}"
+              changed=1
+            fi
+            if test "$(stat -c '%a' "${data_dir}")" != "755"; then
+              chmod 0755 "${data_dir}"
+              changed=1
+            fi
+            printf '%s\n' "${changed}"
+          - radarr-runtime
+          - "{{ radarr_user }}"
+          - "{{ radarr_data_dir }}"
+      register: radarr_runtime
+      changed_when: radarr_runtime.stdout | trim == '1'
+
+    - name: Read installed Radarr version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            config_file="$1"
+            port="$2"
+            key="$(sed -n 's:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p' "${config_file}")"
+            printf 'header = "X-Api-Key: %s"\n' "${key}" |
+              curl -fsS --config - \
+                "http://127.0.0.1:${port}/api/v3/system/status" |
+              grep -o '"version": *"[^"]*"' | head -1 | grep -o '[0-9][0-9.]*'
+          - radarr-version
+          - "{{ radarr_data_dir }}/config.xml"
+          - "{{ radarr_port | string }}"
+      register: radarr_installed_version
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Install pinned Radarr release
+      when: >-
+        radarr_installed_version.rc != 0 or
+        radarr_installed_version.stdout | trim != radarr_version
+      block:
+        - name: Download pinned Radarr release
+          ansible.builtin.get_url:
+            url: "{{ radarr_release_url }}"
+            dest: "/tmp/radarr-{{ radarr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            checksum: "{{ radarr_release_checksum }}"
+            mode: "0600"
+
+        - name: Push Radarr release into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/radarr-{{ radarr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+              - "/tmp/radarr-{{ radarr_version }}.tar.gz"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Deploy pinned Radarr release
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                install_dir="$1"
+                data_dir="$2"
+                archive="$3"
+                version="$4"
+                previous_version="$5"
+                backup_root="$6"
+                port="$7"
+                new_dir="${install_dir}.ansible-new"
+                old_dir="${install_dir}.ansible-old"
+                backup_dir="${backup_root}/pre-${previous_version}-to-${version}"
+                rm -rf "${new_dir}" "${old_dir}"
+                mkdir -p "${new_dir}"
+                tar -xzf "${archive}" -C "${new_dir}" --strip-components=1
+                test -f "${new_dir}/Radarr" && test -x "${new_dir}/Radarr"
+                had_service=0
+                if systemctl list-unit-files radarr.service --no-legend |
+                  grep -q '^radarr.service'; then
+                  had_service=1
+                  systemctl stop radarr
+                fi
+                rm -rf "${backup_dir}"
+                mkdir -p "${backup_dir}"
+                for data_file in config.xml radarr.db radarr.db-wal radarr.db-shm; do
+                  if test -f "${data_dir}/${data_file}"; then
+                    cp -a "${data_dir}/${data_file}" "${backup_dir}/"
+                  fi
+                done
+                if test -d "${install_dir}"; then
+                  mv "${install_dir}" "${old_dir}"
+                fi
+                if ! mv "${new_dir}" "${install_dir}"; then
+                  test ! -d "${old_dir}" || mv "${old_dir}" "${install_dir}"
+                  test "${had_service}" -eq 0 || systemctl start radarr
+                  exit 1
+                fi
+                if test "${had_service}" -eq 1; then
+                  if ! systemctl start radarr; then
+                    health_failed=1
+                  else
+                    health_failed=1
+                    for attempt in $(seq 1 12); do
+                      if curl -fsS "http://127.0.0.1:${port}/ping" >/dev/null; then
+                        health_failed=0
+                        break
+                      fi
+                      sleep 5
+                    done
+                  fi
+                  if test "${health_failed}" -ne 0; then
+                    systemctl stop radarr || true
+                    rm -rf "${install_dir}"
+                    test ! -d "${old_dir}" || mv "${old_dir}" "${install_dir}"
+                    rm -f \
+                      "${data_dir}/radarr.db" \
+                      "${data_dir}/radarr.db-wal" \
+                      "${data_dir}/radarr.db-shm"
+                    for data_file in config.xml radarr.db radarr.db-wal radarr.db-shm; do
+                      if test -f "${backup_dir}/${data_file}"; then
+                        cp -a "${backup_dir}/${data_file}" "${data_dir}/${data_file}"
+                      fi
+                    done
+                    systemctl start radarr
+                    exit 1
+                  fi
+                fi
+                rm -rf "${old_dir}" "${archive}"
+              - radarr-deploy
+              - "{{ radarr_install_dir }}"
+              - "{{ radarr_data_dir }}"
+              - "/tmp/radarr-{{ radarr_version }}.tar.gz"
+              - "{{ radarr_version }}"
+              - "{{ radarr_installed_version.stdout | trim | default('none', true) }}"
+              - "{{ radarr_backup_dir }}"
+              - "{{ radarr_port | string }}"
+          changed_when: true
+          notify: Restart Radarr
+
+        - name: Remove Radarr release from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/radarr-{{ radarr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            state: absent
+
+    - name: Check for legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /usr/bin/update
+      register: radarr_legacy_updater
+      changed_when: false
+      failed_when: radarr_legacy_updater.rc not in [0, 1]
+
+    - name: Remove legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /usr/bin/update
+      when: radarr_legacy_updater.rc == 0
+      changed_when: true
+
+    - name: Render Radarr service
+      ansible.builtin.set_fact:
+        radarr_service: "{{ lookup('template', 'radarr.service.j2') }}"
+
+    - name: Read installed Radarr service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/radarr.service
+      register: radarr_service_current
+      changed_when: false
+      failed_when: radarr_service_current.rc not in [0, 1]
+
+    - name: Install Radarr service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/radarr.service
+        stdin: "{{ radarr_service }}"
+        stdin_add_newline: false
+      when: >-
+        radarr_service_current.rc != 0 or
+        radarr_service_current.stdout != radarr_service | trim
+      changed_when: true
+      notify: Restart Radarr
+
+    - name: Enable and start Radarr
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - radarr
+      register: radarr_service_enable
+      changed_when: "'Created symlink' in radarr_service_enable.stderr"
+
+    - name: Apply Radarr changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Radarr service is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - radarr
+      changed_when: false
+
+    - name: Verify Radarr web interface
+      ansible.builtin.uri:
+        url: "{{ radarr_health_url }}"
+        status_code: 200
+        return_content: false
+      register: radarr_health
+      retries: 12
+      delay: 5
+      until: radarr_health.status == 200
+
+    - name: Verify Radarr application version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            config_file="$1"
+            port="$2"
+            key="$(sed -n 's:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p' "${config_file}")"
+            printf 'header = "X-Api-Key: %s"\n' "${key}" |
+              curl -fsS --config - \
+                "http://127.0.0.1:${port}/api/v3/system/status" |
+              grep -o '"version": *"[^"]*"' | head -1 | grep -o '[0-9][0-9.]*'
+          - radarr-version
+          - "{{ radarr_data_dir }}/config.xml"
+          - "{{ radarr_port | string }}"
+      register: radarr_version_check
+      changed_when: false
+      no_log: true
+      retries: 6
+      delay: 5
+      until: radarr_version_check.rc == 0
+      failed_when: radarr_version_check.stdout | trim != radarr_version

@@ -1,0 +1,301 @@
+---
+- name: Validate Prowlarr configuration
+  ansible.builtin.assert:
+    that:
+      - prowlarr_version | length > 0
+      - prowlarr_release_url | length > 0
+      - prowlarr_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - prowlarr_port | int >= 1
+      - prowlarr_port | int <= 65535
+    fail_msg: >-
+      Prowlarr requires a pinned version, release URL, SHA-256 checksum, and a
+      TCP port from 1 to 65535.
+
+- name: Resolve node currently hosting Prowlarr
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ prowlarr_hostname }}"
+    lxc_fallback_node: "{{ prowlarr_node }}"
+
+- name: Set up Prowlarr LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Prowlarr container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ prowlarr_hostname }}"
+        lxc_vmid: "{{ prowlarr_vmid }}"
+        lxc_storage: "{{ prowlarr_storage }}"
+        lxc_template: "{{ prowlarr_template }}"
+        lxc_cores: "{{ prowlarr_cores }}"
+        lxc_memory: "{{ prowlarr_memory }}"
+        lxc_disk: "{{ prowlarr_disk }}"
+        lxc_bridge: "{{ prowlarr_bridge }}"
+        lxc_vlan: "{{ prowlarr_vlan }}"
+        lxc_tags: "{{ prowlarr_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+          - libicu-dev
+          - sqlite3
+          - tar
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Check installed Prowlarr binary
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -x
+          - "{{ prowlarr_install_dir }}/Prowlarr"
+      register: prowlarr_binary
+      changed_when: false
+      failed_when: prowlarr_binary.rc not in [0, 1]
+
+    - name: Read managed Prowlarr version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - "{{ prowlarr_install_dir }}/.ansible-version"
+      register: prowlarr_managed_version
+      changed_when: false
+      failed_when: prowlarr_managed_version.rc not in [0, 1]
+
+    - name: Decide whether Prowlarr release installation is required
+      ansible.builtin.set_fact:
+        prowlarr_install_required: >-
+          {{
+            prowlarr_binary.rc != 0 or
+            (
+              prowlarr_managed_version.rc == 0 and
+              prowlarr_managed_version.stdout | trim != prowlarr_version
+            )
+          }}
+
+    - name: Install pinned Prowlarr release
+      when: prowlarr_install_required | bool
+      block:
+        - name: Download pinned Prowlarr release
+          ansible.builtin.get_url:
+            url: "{{ prowlarr_release_url }}"
+            dest: "/tmp/prowlarr-{{ prowlarr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            checksum: "{{ prowlarr_release_checksum }}"
+            mode: "0600"
+
+        - name: Push Prowlarr release into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/prowlarr-{{ prowlarr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+              - "/tmp/prowlarr-{{ prowlarr_version }}.tar.gz"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Stop Prowlarr before replacing its release
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - systemctl
+              - stop
+              - prowlarr
+          register: prowlarr_service_stop
+          changed_when: prowlarr_service_stop.rc == 0
+          failed_when: prowlarr_service_stop.rc not in [0, 5]
+
+        - name: Deploy pinned Prowlarr release atomically
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                install_dir="$1"
+                archive="$2"
+                new_dir="${install_dir}.ansible-new"
+                old_dir="${install_dir}.ansible-old"
+                rm -rf "${new_dir}" "${old_dir}"
+                mkdir -p "${new_dir}"
+                tar -xzf "${archive}" -C "${new_dir}" --strip-components=1
+                test -f "${new_dir}/Prowlarr" && test -x "${new_dir}/Prowlarr"
+                if test -d "${install_dir}"; then
+                  mv "${install_dir}" "${old_dir}"
+                fi
+                mv "${new_dir}" "${install_dir}"
+                chmod 0775 "${install_dir}"
+                rm -rf "${old_dir}" "${archive}"
+              - prowlarr-deploy
+              - "{{ prowlarr_install_dir }}"
+              - "/tmp/prowlarr-{{ prowlarr_version }}.tar.gz"
+          changed_when: true
+          notify: Restart Prowlarr
+
+        - name: Remove Prowlarr release from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/prowlarr-{{ prowlarr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            state: absent
+
+    - name: Check Prowlarr data directory permissions
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - stat
+          - -c
+          - "%a"
+          - "{{ prowlarr_data_dir }}"
+      register: prowlarr_data_mode
+      changed_when: false
+      failed_when: prowlarr_data_mode.rc not in [0, 1]
+
+    - name: Configure Prowlarr data directory
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - install
+          - -d
+          - -m
+          - "0775"
+          - "{{ prowlarr_data_dir }}"
+      when: >-
+        prowlarr_data_mode.rc != 0 or
+        prowlarr_data_mode.stdout | trim != '775'
+      changed_when: true
+
+    - name: Check for legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /usr/bin/update
+      register: prowlarr_legacy_updater
+      changed_when: false
+      failed_when: prowlarr_legacy_updater.rc not in [0, 1]
+
+    - name: Remove legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /usr/bin/update
+      when: prowlarr_legacy_updater.rc == 0
+      changed_when: true
+
+    - name: Record managed Prowlarr version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - "{{ prowlarr_install_dir }}/.ansible-version"
+        stdin: "{{ prowlarr_version }}"
+      when: >-
+        prowlarr_managed_version.rc != 0 or
+        prowlarr_managed_version.stdout | trim != prowlarr_version
+      changed_when: true
+
+    - name: Render Prowlarr service
+      ansible.builtin.set_fact:
+        prowlarr_service: "{{ lookup('template', 'prowlarr.service.j2') }}"
+
+    - name: Read installed Prowlarr service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/prowlarr.service
+      register: prowlarr_service_current
+      changed_when: false
+      failed_when: prowlarr_service_current.rc not in [0, 1]
+
+    - name: Install Prowlarr service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/prowlarr.service
+        stdin: "{{ prowlarr_service }}"
+        stdin_add_newline: false
+      when: >-
+        prowlarr_service_current.rc != 0 or
+        prowlarr_service_current.stdout != prowlarr_service | trim
+      changed_when: true
+      notify: Restart Prowlarr
+
+    - name: Enable and start Prowlarr
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - prowlarr
+      register: prowlarr_service_enable
+      changed_when: "'Created symlink' in prowlarr_service_enable.stderr"
+
+    - name: Apply Prowlarr changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Prowlarr service is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - prowlarr
+      changed_when: false
+
+    - name: Verify Prowlarr web interface
+      ansible.builtin.uri:
+        url: "{{ prowlarr_health_url }}"
+        status_code: 200
+        return_content: false
+      register: prowlarr_health
+      retries: 6
+      delay: 5
+      until: prowlarr_health.status == 200

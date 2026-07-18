@@ -1,0 +1,25 @@
+---
+- name: Reload Spoolman systemd
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - daemon-reload
+  changed_when: true
+  listen: Restart Spoolman
+
+- name: Restart Spoolman service
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - spoolman
+  changed_when: true
+  listen: Restart Spoolman

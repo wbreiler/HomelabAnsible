@@ -1,0 +1,25 @@
+---
+- name: Reload Seerr systemd
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - daemon-reload
+  changed_when: true
+  listen: Restart Seerr
+
+- name: Restart Seerr service
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - seerr
+  changed_when: true
+  listen: Restart Seerr

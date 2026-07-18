@@ -1,0 +1,17 @@
+---
+apt_cacher_ng_node: "atlas"
+apt_cacher_ng_vmid: "106"
+apt_cacher_ng_hostname: "apt-nash"
+apt_cacher_ng_storage: "local-zfs"
+apt_cacher_ng_template: ""  # auto-detect latest debian-1[23]-standard if empty
+apt_cacher_ng_cores: 2
+apt_cacher_ng_memory: 512
+apt_cacher_ng_disk: 25
+apt_cacher_ng_bridge: "vmbr0"
+apt_cacher_ng_vlan: 40
+apt_cacher_ng_tags:
+  - caching
+
+apt_cacher_ng_port: 3142
+# Permits HTTPS CONNECT tunneling for package repositories.
+apt_cacher_ng_pass_through_pattern: ".*"

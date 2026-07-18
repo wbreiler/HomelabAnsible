@@ -1,0 +1,64 @@
+---
+- name: Run VM deployment tasks on master node only
+  when: inventory_hostname == vm_deploy_master_node
+  block:
+    - name: Query cluster for existing VMIDs and VM names
+      ansible.builtin.command: pvesh get /cluster/resources --type vm --output-format json
+      changed_when: false
+      register: vm_deploy_pvesh_output
+      failed_when: vm_deploy_pvesh_output.rc != 0 and "not a cluster node" not in vm_deploy_pvesh_output.stderr
+
+    - name: Parse cluster resource info
+      ansible.builtin.set_fact:
+        vm_deploy_cluster_resources: "{{ vm_deploy_pvesh_output.stdout | from_json }}"
+      when: vm_deploy_pvesh_output.rc == 0
+
+    - name: Set empty cluster resources if not a cluster
+      ansible.builtin.set_fact:
+        vm_deploy_cluster_resources: []
+      when: vm_deploy_pvesh_output.rc != 0
+
+    - name: Extract existing VMIDs and names
+      ansible.builtin.set_fact:
+        vm_deploy_existing_vmids: "{{ vm_deploy_cluster_resources | map(attribute='vmid') | map('int') | list }}"
+        vm_deploy_existing_names: "{{ vm_deploy_cluster_resources | map(attribute='name') | list }}"
+
+    - name: Aggregate all available VMID ranges from inventory
+      ansible.builtin.set_fact:
+        vm_deploy_available_vmids: >-
+          {{ vm_deploy_available_vmids | default([]) + range(hostvars[item].vmid_range_start, hostvars[item].vmid_range_end + 1) | list }}
+      loop: "{{ groups['proxmox_cluster'] }}"
+
+    - name: Calculate free VMIDs
+      ansible.builtin.set_fact:
+        vm_deploy_free_vmids: "{{ vm_deploy_available_vmids | unique | difference(vm_deploy_existing_vmids) }}"
+
+    - name: Determine VMs that need to be created
+      ansible.builtin.set_fact:
+        vm_deploy_new_vms: "{{ vm_deploy_vms | rejectattr('name', 'in', vm_deploy_existing_names) | list }}"
+
+    - name: Report VMs already present
+      ansible.builtin.debug:
+        msg: "Skipping (already exists): {{ vm_deploy_vms | map(attribute='name') | select('in', vm_deploy_existing_names) | list }}"
+      when: (vm_deploy_vms | map(attribute='name') | select('in', vm_deploy_existing_names) | list) | length > 0
+
+    - name: Fail if not enough free VMIDs in 100-199 range
+      ansible.builtin.fail:
+        msg: >
+          Not enough free VMIDs in configured ranges to create {{ vm_deploy_new_vms | length }} VM(s).
+          Only {{ vm_deploy_free_vmids | length }} free IDs available.
+      when: vm_deploy_new_vms | length > vm_deploy_free_vmids | length
+
+    - name: Deploy VMs
+      ansible.builtin.include_tasks: create_vm.yml
+      loop: "{{ vm_deploy_new_vms }}"
+      loop_control:
+        index_var: vm_deploy_vm_idx
+        label: "{{ item.name }}"
+
+- name: Skip message for non-master nodes
+  ansible.builtin.debug:
+    msg: >
+      Skipping VM deployment — {{ inventory_hostname }} is not the master node
+      ({{ vm_deploy_master_node }}).
+  when: inventory_hostname != vm_deploy_master_node

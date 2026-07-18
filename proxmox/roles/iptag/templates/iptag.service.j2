@@ -1,0 +1,13 @@
+[Unit]
+Description=Proxmox guest IP tag reconciler
+After=network-online.target pve-cluster.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/iptag/iptag.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

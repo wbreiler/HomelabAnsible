@@ -1,0 +1,14 @@
+[Unit]
+Description=Spoolman
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory={{ spoolman_install_dir }}
+EnvironmentFile={{ spoolman_install_dir }}/.env
+ExecStart=/usr/bin/bash {{ spoolman_install_dir }}/scripts/start.sh
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target

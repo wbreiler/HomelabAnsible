@@ -1,0 +1,29 @@
+---
+spoolman_node: "nyx"
+spoolman_vmid: "102"
+spoolman_hostname: "spoolman-nash"
+spoolman_storage: "local-zfs"
+spoolman_template: ""  # auto-detect latest debian-1[23]-standard if empty
+spoolman_cores: 1
+spoolman_memory: 1536
+spoolman_disk: 4
+spoolman_bridge: "vmbr0"
+spoolman_vlan: 40
+spoolman_tags:
+  - "3d-printing"
+
+spoolman_version: "0.24.0"
+spoolman_release_url: >-
+  https://github.com/Donkie/Spoolman/releases/download/v{{ spoolman_version }}/spoolman.zip
+spoolman_release_checksum: "sha256:6335abba386258dba5f445957a8b2a296c39ad495a37c3e24c7dfafbad20db62"
+spoolman_install_dir: "/opt/spoolman"
+
+spoolman_uv_version: "0.11.29"
+spoolman_uv_url: >-
+  https://github.com/astral-sh/uv/releases/download/{{ spoolman_uv_version
+  }}/uv-x86_64-unknown-linux-gnu.tar.gz
+spoolman_uv_checksum: "sha256:04f8b82f5d47f0512dcd32c67a4a6f16a0ea27c81537c338fd0ad6b23cebe829"
+
+spoolman_bind_host: "0.0.0.0"
+spoolman_port: 7912
+spoolman_health_url: "http://10.10.40.223:{{ spoolman_port }}"

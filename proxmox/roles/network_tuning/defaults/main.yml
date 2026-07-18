@@ -1,0 +1,13 @@
+---
+network_tuning_configure_vlan: false  # noqa: var-naming[no-role-prefix]
+network_tuning_storage_vlan_ip: ""  # noqa: var-naming[no-role-prefix]
+network_tuning_storage_vlan_id: 20
+network_tuning_storage_vlan_parent: "vmbr0"
+
+network_tuning_sysctl_settings:
+  net.core.rmem_max: 134217728
+  net.core.wmem_max: 134217728
+  net.ipv4.tcp_rmem: "4096 87380 134217728"
+  net.ipv4.tcp_wmem: "4096 65536 134217728"
+  net.core.netdev_max_backlog: 250000
+  net.ipv4.tcp_congestion_control: bbr

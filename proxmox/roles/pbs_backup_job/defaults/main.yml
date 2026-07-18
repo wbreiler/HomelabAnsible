@@ -1,0 +1,7 @@
+---
+# ponytail: 0/6:30 = Proxmox CalendarEvent "every 6h30m starting at 00:00"
+pbs_backup_job_schedule: "0/6:30"
+pbs_backup_job_mode: "snapshot"
+pbs_backup_job_compress: "zstd"
+# Empty = back up all guests; or "100,101,102" for specific VMIDs
+pbs_backup_job_vmids: ""

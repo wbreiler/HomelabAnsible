@@ -1,0 +1,130 @@
+---
+# Shared LXC bootstrap: create container, start it, install packages, add SSH key, mount NFS.
+# Required vars: lxc_hostname, lxc_vmid, lxc_storage, lxc_template, lxc_cores, lxc_memory,
+#   lxc_disk, lxc_bridge, lxc_vlan, lxc_packages (list)
+# Optional: lxc_nfs_server, lxc_nfs_export, lxc_nfs_mountpoint (mount skipped if lxc_nfs_server is empty)
+#   lxc_tags: semicolon-delimited Proxmox tags applied when a container is created
+#   lxc_unprivileged: override container privilege mode (true=unprivileged, false=privileged).
+#     Defaults to true (unprivileged) when lxc_nfs_server is empty, false (privileged) otherwise.
+#     Note: kernel NFS mounts inside an LXC require a privileged container.
+# Sets: lxc_resolved_vmid (available to caller after include)
+
+- name: Find existing container by hostname
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      pct list | awk 'NR>1 && $3=="{{ lxc_hostname }}" {print $1}'
+    executable: /bin/bash
+  register: _lxc_existing_vmid
+  changed_when: false
+
+- name: Get next available VMID
+  ansible.builtin.command:
+    cmd: pvesh get /cluster/nextid
+  register: _lxc_next_vmid
+  changed_when: false
+  when: not lxc_vmid and not _lxc_existing_vmid.stdout
+
+- name: Resolve VMID to use
+  ansible.builtin.set_fact:
+    lxc_resolved_vmid: >-
+      {{
+        _lxc_existing_vmid.stdout if _lxc_existing_vmid.stdout
+        else (lxc_vmid if lxc_vmid else _lxc_next_vmid.stdout)
+      }}
+
+- name: Find Debian LXC template
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      ls /var/lib/vz/template/cache/ | grep -E 'debian-1[23]-standard' | sort -V | tail -1
+    executable: /bin/bash
+  register: _lxc_template_found
+  changed_when: false
+  when: not lxc_template
+
+- name: Set template path
+  ansible.builtin.set_fact:
+    lxc_template_path: >-
+      /var/lib/vz/template/cache/{{
+        lxc_template if lxc_template
+        else _lxc_template_found.stdout
+      }}
+
+- name: Create LXC container
+  ansible.builtin.command:
+    cmd: >
+      pct create {{ lxc_resolved_vmid }}
+      {{ lxc_template_path }}
+      --hostname {{ lxc_hostname }}
+      --cores {{ lxc_cores }}
+      --memory {{ lxc_memory }}
+      --rootfs {{ lxc_storage }}:{{ lxc_disk }}
+      --net0 name=eth0,bridge={{ lxc_bridge }},tag={{ lxc_vlan }},ip=dhcp
+      --unprivileged {{ 1 if (lxc_unprivileged | default(lxc_nfs_server | default('') | length == 0)) | bool else 0 }}
+      --features nesting=1
+      {% if lxc_tags | default('') | length > 0 %}--tags {{ lxc_tags }}{% endif %}
+  changed_when: true
+  when: not _lxc_existing_vmid.stdout
+
+- name: Start container
+  ansible.builtin.command:
+    cmd: pct start {{ lxc_resolved_vmid }}
+  register: _lxc_start
+  changed_when: _lxc_start.rc == 0 and 'already running' not in _lxc_start.stderr
+  failed_when: _lxc_start.rc not in [0, 255]
+
+- name: Wait for container to be ready
+  ansible.builtin.command:
+    cmd: pct exec {{ lxc_resolved_vmid }} -- echo ok
+  register: _lxc_ready
+  until: _lxc_ready.rc == 0
+  retries: 12
+  delay: 5
+  changed_when: false
+
+- name: Install packages
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ lxc_resolved_vmid }} --
+      bash -c "DEBIAN_FRONTEND=noninteractive apt-get update -qq &&
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -q {{ lxc_packages | join(' ') }}"
+  register: _lxc_apt
+  changed_when: "'0 upgraded, 0 newly installed' not in _lxc_apt.stdout"
+
+- name: Add SSH public key to container
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ lxc_resolved_vmid }} -- bash -c
+      "mkdir -p /root/.ssh && chmod 700 /root/.ssh;
+      if grep -qF '{{ lookup('file', '~/.ssh/lxc.pub') }}'
+      /root/.ssh/authorized_keys 2>/dev/null; then
+      echo unchanged; else
+      echo '{{ lookup('file', '~/.ssh/lxc.pub') }}'
+      >> /root/.ssh/authorized_keys && echo changed; fi"
+  register: _lxc_ssh_key
+  changed_when: _lxc_ssh_key.stdout | trim == 'changed'
+
+- name: Create NFS mountpoint
+  ansible.builtin.command:
+    cmd: pct exec {{ lxc_resolved_vmid }} -- mkdir -p {{ lxc_nfs_mountpoint }}
+  changed_when: false
+  when: lxc_nfs_server | default('') | length > 0
+
+- name: Add NFS fstab entry
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ lxc_resolved_vmid }} -- bash -c
+      "grep -q '{{ lxc_nfs_server }}:{{ lxc_nfs_export }}' /etc/fstab ||
+      echo '{{ lxc_nfs_server }}:{{ lxc_nfs_export }}
+      {{ lxc_nfs_mountpoint }} nfs defaults,_netdev 0 0' >> /etc/fstab"
+  changed_when: true
+  when: lxc_nfs_server | default('') | length > 0
+
+- name: Mount NFS share
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ lxc_resolved_vmid }} -- bash -c
+      "mountpoint -q {{ lxc_nfs_mountpoint }} || mount {{ lxc_nfs_mountpoint }}"
+  changed_when: true
+  when: lxc_nfs_server | default('') | length > 0

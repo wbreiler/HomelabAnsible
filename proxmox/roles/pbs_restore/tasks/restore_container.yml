@@ -1,0 +1,148 @@
+---
+# Restore a single VM or LXC container from PBS
+
+- name: "Set restore variables - VMID {{ restore_item.vmid }}"
+  ansible.builtin.set_fact:
+    pbs_restore_effective_vmid: "{{ restore_item.target_vmid | default(restore_item.vmid) }}"
+    pbs_restore_effective_storage: "{{ restore_item.target_storage | default(pbs_restore_storage) }}"
+
+- name: "Check if target VMID already exists in cluster - VMID {{ restore_item.vmid }}"
+  ansible.builtin.shell:
+    cmd: "set -o pipefail && pvesh get /cluster/resources --type vm 2>/dev/null | grep -oE '(lxc|qemu)/{{ pbs_restore_effective_vmid }}'"
+    executable: /bin/bash
+  register: pbs_restore_target_exists
+  changed_when: false
+  failed_when: false
+
+- name: "Fail if target exists and force not set - VMID {{ restore_item.vmid }}"
+  ansible.builtin.fail:
+    msg: "Target VMID {{ pbs_restore_effective_vmid }} already exists. Set force: true to overwrite."
+  when:
+    - pbs_restore_target_exists.rc == 0
+    - not (restore_item.force | default(false) | bool)
+
+- name: "List available backups - VMID {{ restore_item.vmid }}"
+  ansible.builtin.shell:
+    cmd: >
+      set -o pipefail &&
+      pvesm list {{ pbs_storage_id }} --vmid {{ restore_item.vmid }} --content backup
+      | tail -n +2 | sort -t':' -k2 -r
+    executable: /bin/bash
+  register: pbs_restore_available_backups
+  changed_when: false
+  failed_when: false
+
+- name: "Extract available backup volume IDs - VMID {{ restore_item.vmid }}"
+  ansible.builtin.set_fact:
+    pbs_restore_available_volids: >-
+      {{ pbs_restore_available_backups.stdout_lines | map('split') | map('first') | list }}
+
+- name: "Display available backups - VMID {{ restore_item.vmid }}"
+  ansible.builtin.debug:
+    msg: "Available backups: {{ pbs_restore_available_backups.stdout_lines }}"
+
+- name: "Fail if backup query failed or no backups found - VMID {{ restore_item.vmid }}"
+  ansible.builtin.fail:
+    msg: >-
+      No backups found for VMID {{ restore_item.vmid }} in PBS storage {{ pbs_storage_id }}.
+      pvesm exit code: {{ pbs_restore_available_backups.rc }}.
+      Error: {{ pbs_restore_available_backups.stderr | default('(none)') }}
+  when: pbs_restore_available_backups.rc != 0 or pbs_restore_available_volids | length == 0
+
+- name: "Fail if requested backup is unavailable - VMID {{ restore_item.vmid }}"
+  ansible.builtin.fail:
+    msg: >-
+      Requested backup {{ restore_item.backup_id }} was not found for VMID {{ restore_item.vmid }}
+      in PBS storage {{ pbs_storage_id }}.
+  when:
+    - restore_item.backup_id is defined
+    - restore_item.backup_id not in pbs_restore_available_volids
+
+- name: "Select backup to restore - VMID {{ restore_item.vmid }}"
+  ansible.builtin.set_fact:
+    pbs_restore_backup_volid: >-
+      {{
+        restore_item.backup_id
+        if restore_item.backup_id is defined
+        else pbs_restore_available_volids[0]
+      }}
+
+- name: "Resolve restore type - VMID {{ restore_item.vmid }}"
+  ansible.builtin.set_fact:
+    pbs_restore_is_vm: "{{ '/vm/' in pbs_restore_backup_volid }}"
+    pbs_restore_type: "{{ 'vm' if '/vm/' in pbs_restore_backup_volid else 'ct' }}"
+    pbs_restore_cmd: "{{ 'qm' if '/vm/' in pbs_restore_backup_volid else 'pct' }}"
+
+- name: "Display selected backup - VMID {{ restore_item.vmid }}"
+  ansible.builtin.debug:
+    msg: "Restoring {{ pbs_restore_type | upper }} from: {{ pbs_restore_backup_volid }}"
+
+- name: "Stop and destroy existing guest if force - VMID {{ restore_item.vmid }}"
+  when:
+    - pbs_restore_target_exists.rc == 0
+    - restore_item.force | default(false) | bool
+  block:
+    - name: "Set command for existing guest type - VMID {{ restore_item.vmid }}"
+      ansible.builtin.set_fact:
+        pbs_restore_existing_cmd: "{{ 'qm' if 'qemu' in pbs_restore_target_exists.stdout else 'pct' }}"
+
+    - name: "Stop existing guest - VMID {{ restore_item.vmid }}"
+      ansible.builtin.command: "{{ pbs_restore_existing_cmd }} stop {{ pbs_restore_effective_vmid }}"
+      changed_when: true
+      failed_when: false
+
+    - name: "Destroy existing guest - VMID {{ restore_item.vmid }}"
+      ansible.builtin.command: "{{ pbs_restore_existing_cmd }} destroy {{ pbs_restore_effective_vmid }}"
+      changed_when: true
+
+- name: "Remove from HA and delete config for force restore - VMID {{ restore_item.vmid }}"
+  when:
+    - pbs_restore_target_exists.rc == 0
+    - restore_item.force | default(false) | bool
+  block:
+    - name: "Remove from HA resources - VMID {{ restore_item.vmid }}"
+      ansible.builtin.shell:
+        cmd: "ha-manager remove {{ pbs_restore_type }}:{{ pbs_restore_effective_vmid }} 2>/dev/null || true"
+        executable: /bin/bash
+      changed_when: true
+
+    - name: "Remove VM/CT config file - VMID {{ restore_item.vmid }}"
+      ansible.builtin.file:
+        path: "/etc/pve/{{ 'qemu-server' if pbs_restore_is_vm | bool else 'lxc' }}/{{ pbs_restore_effective_vmid }}.conf"
+        state: absent
+
+- name: "Restore VM from PBS - VMID {{ restore_item.vmid }}"
+  ansible.builtin.shell:
+    cmd: >
+      qmrestore {{ pbs_restore_backup_volid }} {{ pbs_restore_effective_vmid }}
+      --storage {{ pbs_restore_effective_storage }}
+    executable: /bin/bash
+  register: pbs_restore_result
+  changed_when: pbs_restore_result.rc == 0
+  async: 1800
+  poll: 30
+  when: pbs_restore_is_vm | bool
+
+- name: "Restore CT from PBS - VMID {{ restore_item.vmid }}"
+  ansible.builtin.shell:
+    cmd: >
+      pct restore {{ pbs_restore_effective_vmid }} {{ pbs_restore_backup_volid }}
+      --storage {{ pbs_restore_effective_storage }}
+      {% if pbs_restore_unique | default(false) | bool %}--unique{% endif %}
+    executable: /bin/bash
+  register: pbs_restore_result
+  changed_when: pbs_restore_result.rc == 0
+  async: 1800
+  poll: 30
+  when: not (pbs_restore_is_vm | bool)
+
+- name: "Start VM/CT after restore - VMID {{ restore_item.vmid }}"
+  ansible.builtin.command: "{{ pbs_restore_cmd }} start {{ pbs_restore_effective_vmid }}"
+  changed_when: true
+  when: restore_item.start_after_restore | default(false) | bool
+
+- name: "Display restore result - VMID {{ restore_item.vmid }}"
+  ansible.builtin.debug:
+    msg: >-
+      Container {{ restore_item.vmid }} restored to VMID {{ pbs_restore_effective_vmid }}
+      {{ '(started)' if (restore_item.start_after_restore | default(false) | bool) else '' }}

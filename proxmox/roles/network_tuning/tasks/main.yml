@@ -1,0 +1,48 @@
+---
+# --- Storage VLAN interface ---
+- name: Check if storage VLAN interface already configured
+  ansible.builtin.command:
+    cmd: "grep -q '{{ network_tuning_storage_vlan_parent }}\\.{{ network_tuning_storage_vlan_id }}' /etc/network/interfaces"
+  register: network_tuning_vlan_check
+  changed_when: false
+  failed_when: false
+  when: network_tuning_configure_vlan | default(false) | bool
+
+- name: Add storage VLAN subinterface to /etc/network/interfaces
+  ansible.builtin.blockinfile:
+    path: /etc/network/interfaces
+    block: |
+      auto {{ network_tuning_storage_vlan_parent }}.{{ network_tuning_storage_vlan_id }}
+      iface {{ network_tuning_storage_vlan_parent }}.{{ network_tuning_storage_vlan_id }} inet static
+          address {{ network_tuning_storage_vlan_ip }}/24
+          vlan-raw-device {{ network_tuning_storage_vlan_parent }}
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - storage VLAN {{ network_tuning_storage_vlan_id }}"
+  when:
+    - network_tuning_configure_vlan | default(false) | bool
+    - network_tuning_storage_vlan_ip | length > 0
+    - network_tuning_vlan_check.rc != 0
+  notify: Reload network interfaces
+
+# --- tcp_bbr kernel module ---
+- name: Load tcp_bbr kernel module
+  community.general.modprobe:
+    name: tcp_bbr
+    state: present
+
+- name: Persist tcp_bbr module across reboots
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/bbr.conf
+    content: "tcp_bbr\n"
+    mode: '0644'
+
+# --- 10G TCP sysctl tuning ---
+- name: Apply 10G TCP sysctl settings
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+    sysctl_file: /etc/sysctl.conf
+  loop: "{{ network_tuning_sysctl_settings | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"

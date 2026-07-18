@@ -1,0 +1,34 @@
+---
+discoverr_bot_node: "nyx"
+discoverr_bot_vmid: ""  # auto-assign next available ID if empty
+discoverr_bot_hostname: "discoverr-bot"
+discoverr_bot_storage: "local-zfs"
+discoverr_bot_template: ""  # auto-detect latest debian-1[23]-standard if empty
+discoverr_bot_cores: 1
+discoverr_bot_memory: 512
+discoverr_bot_disk: 4
+discoverr_bot_bridge: "vmbr0"
+discoverr_bot_vlan: 40
+
+discoverr_bot_repo_url: "https://github.com/loafdaddy/discoverr-bot.git"
+# pinned commit — bump deliberately after reviewing upstream changes; set "" to track latest main
+discoverr_bot_repo_version: "452becd6dd2e487b4d892eb667e7b33c48441ce4"
+discoverr_bot_dir: "/opt/discoverr-bot"
+
+# .env values — secrets (tmdb_api_key, seerr_password, discord_token) belong in
+# group_vars/proxmox_cluster.yml (vault-encrypted), not here.
+discoverr_bot_tmdb_api_key: ""
+discoverr_bot_seerr_url: ""
+discoverr_bot_seerr_username: "Discoverr"
+discoverr_bot_seerr_password: ""
+discoverr_bot_discord_token: ""
+discoverr_bot_watch_region: "US"
+discoverr_bot_timezone: "America/Chicago"  # patches the hardcoded cron timezone in bot.js
+discoverr_bot_streaming_services: "Netflix,Disney Plus,Amazon Prime Video,Apple TV Plus"
+discoverr_bot_movie_of_day_channel_id: ""
+discoverr_bot_tv_of_day_channel_id: ""
+discoverr_bot_trending_channel_id: ""
+discoverr_bot_new_releases_channel_id: ""
+discoverr_bot_streaming_channel_id: ""
+discoverr_bot_hidden_gems_channel_id: ""
+discoverr_bot_post_on_start: false

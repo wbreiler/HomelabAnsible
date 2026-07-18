@@ -1,0 +1,57 @@
+---
+- name: "Check Apt-Cacher NG setting - {{ apt_cacher_ng_setting.key }}"
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - grep
+      - -Fqx
+      - "{{ apt_cacher_ng_setting.key }}: {{ apt_cacher_ng_setting.value }}"
+      - /etc/apt-cacher-ng/acng.conf
+  register: apt_cacher_ng_setting_check
+  changed_when: false
+  failed_when: apt_cacher_ng_setting_check.rc not in [0, 1]
+
+- name: "Configure Apt-Cacher NG setting - {{ apt_cacher_ng_setting.key }}"
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - bash
+      - -c
+      - |
+        set -eu
+        config_path="$1"
+        key="$2"
+        value="$3"
+        temp_path="${config_path}.ansible"
+        awk -v key="${key}" -v desired="${key}: ${value}" '
+          BEGIN { updated = 0 }
+          {
+            candidate = $0
+            sub(/^[#[:space:]]*/, "", candidate)
+            if (!updated && index(candidate, key ":") == 1) {
+              print desired
+              updated = 1
+            } else {
+              print
+            }
+          }
+          END {
+            if (!updated) {
+              print desired
+            }
+          }
+        ' "${config_path}" > "${temp_path}"
+        mv "${temp_path}" "${config_path}"
+      - apt-cacher-ng-config
+      - /etc/apt-cacher-ng/acng.conf
+      - "{{ apt_cacher_ng_setting.key }}"
+      - "{{ apt_cacher_ng_setting.value }}"
+  when: apt_cacher_ng_setting_check.rc == 1
+  changed_when: true
+  notify: Restart Apt-Cacher NG

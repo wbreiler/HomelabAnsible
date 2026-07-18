@@ -1,0 +1,14 @@
+[Unit]
+Description=Gitea Mirror
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory={{ gitea_mirror_install_dir }}
+ExecStart=/usr/local/bin/bun dist/server/entry.mjs
+Restart=on-failure
+RestartSec=10
+EnvironmentFile={{ gitea_mirror_env_file }}
+
+[Install]
+WantedBy=multi-user.target

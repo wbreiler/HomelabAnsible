@@ -1,0 +1,92 @@
+---
+# Set up Proxmox cluster
+- name: Check if node is already in a cluster
+  ansible.builtin.command: pvecm status
+  register: cluster_setup_status
+  changed_when: false
+  failed_when: false
+
+- name: Parse cluster status
+  ansible.builtin.set_fact:
+    cluster_setup_in_cluster: "{{ cluster_setup_status.rc == 0 }}"
+    cluster_setup_is_master: "{{ inventory_hostname == cluster_master_node }}"
+
+- name: Create cluster on master node
+  ansible.builtin.command: >
+    pvecm create {{ cluster_name }}
+    --link0 {{ hostvars[inventory_hostname].ansible_host }}
+    {% if hostvars[inventory_hostname].corosync_ring1_addr is defined %}--link1 {{ hostvars[inventory_hostname].corosync_ring1_addr }}{% endif %}
+  when:
+    - cluster_setup_is_master
+    - not cluster_setup_in_cluster
+  register: cluster_setup_create
+  changed_when: cluster_setup_create.rc == 0
+
+- name: Wait for cluster to be ready on master
+  ansible.builtin.pause:
+    seconds: 10
+  when:
+    - cluster_setup_is_master
+    - cluster_setup_create.changed
+
+- name: Install python3-pexpect for cluster join
+  ansible.builtin.apt:
+    name: python3-pexpect
+    state: present
+  when:
+    - not cluster_setup_is_master
+    - not cluster_setup_in_cluster
+    - cluster_password is defined
+    - cluster_password | length > 0
+
+- name: Join nodes to cluster (with password)
+  ansible.builtin.expect:
+    command: >
+      pvecm add {{ hostvars[cluster_master_node].ansible_host }}
+      --link0 {{ hostvars[inventory_hostname].ansible_host }}
+      {% if hostvars[inventory_hostname].corosync_ring1_addr is defined %}--link1 {{ hostvars[inventory_hostname].corosync_ring1_addr }}{% endif %}
+    responses:
+      'Please enter superuser \(root\) password': "{{ cluster_password }}"
+    timeout: 300
+  when:
+    - not cluster_setup_is_master
+    - not cluster_setup_in_cluster
+    - cluster_password is defined
+    - cluster_password | length > 0
+  register: cluster_setup_join
+  changed_when: cluster_setup_join.rc == 0
+  no_log: true
+  notify: wait for cluster sync
+
+- name: Join nodes to cluster (no password)
+  ansible.builtin.command:
+    cmd: >
+      pvecm add {{ hostvars[cluster_master_node].ansible_host }}
+      --link0 {{ hostvars[inventory_hostname].ansible_host }}
+      {% if hostvars[inventory_hostname].corosync_ring1_addr is defined %}--link1 {{ hostvars[inventory_hostname].corosync_ring1_addr }}{% endif %}
+  when:
+    - not cluster_setup_is_master
+    - not cluster_setup_in_cluster
+    - not (cluster_password is defined and cluster_password | length > 0)
+  register: cluster_setup_join
+  changed_when: cluster_setup_join.rc == 0
+  notify: wait for cluster sync
+
+
+- name: Configure cluster network (corosync)
+  ansible.builtin.template:
+    src: corosync.conf.j2
+    dest: /etc/pve/corosync.conf
+    backup: true
+    mode: '0640'
+  when:
+    - configure_corosync | default(false)
+    - cluster_setup_is_master
+  notify: restart corosync
+
+- name: Set cluster options
+  ansible.builtin.command: "pvecm expected {{ groups['proxmox_cluster'] | length }}"
+  when:
+    - cluster_setup_is_master
+    - set_expected_votes | default(false)
+  changed_when: true

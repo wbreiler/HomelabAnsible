@@ -1,0 +1,30 @@
+---
+forgejo_node: "prometheus"
+forgejo_vmid: "103"
+forgejo_hostname: "forgejo-nash"
+forgejo_storage: "local-zfs"
+forgejo_template: ""  # auto-detect latest debian-1[23]-standard if empty
+forgejo_cores: 1
+forgejo_memory: 768
+forgejo_disk: 20
+forgejo_bridge: "vmbr0"
+forgejo_vlan: 40
+forgejo_tags:
+  - "git"
+
+# Forgejo upgrades must not skip a major version. The role refuses
+# downgrades and any target more than one major ahead of the installed
+# version, so step through majors one pinned release at a time.
+forgejo_version: "13.0.4"
+forgejo_release_url: >-
+  https://codeberg.org/forgejo/forgejo/releases/download/v{{ forgejo_version
+  }}/forgejo-{{ forgejo_version }}-linux-amd64
+forgejo_release_checksum: "sha256:a120c0c1abad72933b8579090864de1f55bbc4fceb0a5de8aa09e419fc23d521"
+forgejo_install_dir: "/opt/forgejo"
+forgejo_config_file: "/etc/forgejo/app.ini"
+forgejo_work_dir: "/var/lib/forgejo"
+forgejo_backup_dir: "/opt/forgejo-backups"
+forgejo_user: "git"
+
+forgejo_port: 3000
+forgejo_health_url: "http://10.10.40.38:{{ forgejo_port }}/api/healthz"

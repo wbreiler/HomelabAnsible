@@ -1,0 +1,382 @@
+---
+- name: Validate Spoolman configuration
+  ansible.builtin.assert:
+    that:
+      - spoolman_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - spoolman_release_url | length > 0
+      - spoolman_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - spoolman_uv_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - spoolman_uv_url | length > 0
+      - spoolman_uv_checksum is match('^sha256:[0-9a-f]{64}$')
+      - spoolman_port | int >= 1
+      - spoolman_port | int <= 65535
+      - spoolman_bind_host | length > 0
+    fail_msg: >-
+      Spoolman requires pinned application and uv versions with SHA-256
+      checksums, a bind address, and a TCP port from 1 to 65535.
+
+- name: Resolve node currently hosting Spoolman
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ spoolman_hostname }}"
+    lxc_fallback_node: "{{ spoolman_node }}"
+
+- name: Set up Spoolman LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Spoolman container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ spoolman_hostname }}"
+        lxc_vmid: "{{ spoolman_vmid }}"
+        lxc_storage: "{{ spoolman_storage }}"
+        lxc_template: "{{ spoolman_template }}"
+        lxc_cores: "{{ spoolman_cores }}"
+        lxc_memory: "{{ spoolman_memory }}"
+        lxc_disk: "{{ spoolman_disk }}"
+        lxc_bridge: "{{ spoolman_bridge }}"
+        lxc_vlan: "{{ spoolman_vlan }}"
+        lxc_tags: "{{ spoolman_tags | join(';') }}"
+        lxc_packages:
+          - build-essential
+          - ca-certificates
+          - libffi-dev
+          - libpq-dev
+          - unzip
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Read installed uv version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - /usr/local/bin/uv
+          - --version
+      register: spoolman_uv_installed
+      changed_when: false
+      failed_when: spoolman_uv_installed.rc not in [0, 1]
+
+    - name: Install pinned uv runtime
+      when: >-
+        spoolman_uv_installed.rc != 0 or
+        ('uv ' ~ spoolman_uv_version) not in spoolman_uv_installed.stdout
+      block:
+        - name: Download pinned uv runtime
+          ansible.builtin.get_url:
+            url: "{{ spoolman_uv_url }}"
+            dest: "/tmp/spoolman-uv-{{ spoolman_uv_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            checksum: "{{ spoolman_uv_checksum }}"
+            mode: "0600"
+
+        - name: Push uv runtime into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/spoolman-uv-{{ spoolman_uv_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+              - "/tmp/spoolman-uv-{{ spoolman_uv_version }}.tar.gz"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Deploy pinned uv runtime
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                archive="$1"
+                work_dir="$(mktemp -d)"
+                trap 'rm -rf "${work_dir}" "${archive}"' EXIT
+                tar -xzf "${archive}" -C "${work_dir}" --strip-components=1
+                install -m 0755 "${work_dir}/uv" /usr/local/bin/uv
+              - spoolman-uv
+              - "/tmp/spoolman-uv-{{ spoolman_uv_version }}.tar.gz"
+          changed_when: true
+
+        - name: Remove uv runtime from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/spoolman-uv-{{ spoolman_uv_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            state: absent
+
+    - name: Check installed Spoolman version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - grep
+          - -Fqx
+          - "version = \"{{ spoolman_version }}\""
+          - "{{ spoolman_install_dir }}/pyproject.toml"
+      register: spoolman_installed_version
+      changed_when: false
+      failed_when: spoolman_installed_version.rc not in [0, 1]
+
+    - name: Install pinned Spoolman release
+      when: spoolman_installed_version.rc != 0
+      block:
+        - name: Download pinned Spoolman release
+          ansible.builtin.get_url:
+            url: "{{ spoolman_release_url }}"
+            dest: "/tmp/spoolman-{{ spoolman_version }}-{{ lxc_resolved_vmid }}.zip"
+            checksum: "{{ spoolman_release_checksum }}"
+            mode: "0600"
+
+        - name: Push Spoolman release into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/spoolman-{{ spoolman_version }}-{{ lxc_resolved_vmid }}.zip"
+              - "/tmp/spoolman-{{ spoolman_version }}.zip"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Build and deploy pinned Spoolman release
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                install_dir="$1"
+                archive="$2"
+                version="$3"
+                new_dir="${install_dir}.ansible-new"
+                old_dir="${install_dir}.ansible-old"
+                rm -rf "${new_dir}" "${old_dir}"
+                mkdir -p "${new_dir}"
+                unzip -q "${archive}" -d "${new_dir}"
+                if test -f "${install_dir}/.env"; then
+                  cp "${install_dir}/.env" "${new_dir}/.env"
+                else
+                  cp "${new_dir}/.env.example" "${new_dir}/.env"
+                fi
+                chmod +x "${new_dir}"/scripts/*.sh
+                (
+                  cd "${new_dir}"
+                  UV_NO_MANAGED_PYTHON=1 /usr/local/bin/uv sync \
+                    --locked \
+                    --no-dev \
+                    --python /usr/bin/python3
+                )
+                test -x "${new_dir}/.venv/bin/uvicorn"
+                printf '%s\n' "${version}" > "${new_dir}/.ansible-version"
+                if systemctl list-unit-files spoolman.service --no-legend |
+                  grep -q '^spoolman.service'; then
+                  systemctl stop spoolman
+                fi
+                if test -d "${install_dir}"; then
+                  mv "${install_dir}" "${old_dir}"
+                fi
+                if ! mv "${new_dir}" "${install_dir}"; then
+                  test ! -d "${old_dir}" || mv "${old_dir}" "${install_dir}"
+                  exit 1
+                fi
+                if ! (
+                  cd "${install_dir}"
+                  rm -rf .venv
+                  UV_NO_MANAGED_PYTHON=1 /usr/local/bin/uv sync \
+                    --locked \
+                    --no-dev \
+                    --python /usr/bin/python3
+                ); then
+                  rm -rf "${install_dir}"
+                  test ! -d "${old_dir}" || mv "${old_dir}" "${install_dir}"
+                  systemctl start spoolman || true
+                  exit 1
+                fi
+                rm -rf "${old_dir}" "${archive}"
+              - spoolman-deploy
+              - "{{ spoolman_install_dir }}"
+              - "/tmp/spoolman-{{ spoolman_version }}.zip"
+              - "{{ spoolman_version }}"
+          changed_when: true
+          notify: Restart Spoolman
+
+        - name: Remove Spoolman release from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/spoolman-{{ spoolman_version }}-{{ lxc_resolved_vmid }}.zip"
+            state: absent
+
+    - name: Check Spoolman virtual environment path
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - grep
+          - -Fqx
+          - "#!{{ spoolman_install_dir }}/.venv/bin/python"
+          - "{{ spoolman_install_dir }}/.venv/bin/uvicorn"
+      register: spoolman_venv_path
+      changed_when: false
+      failed_when: spoolman_venv_path.rc not in [0, 1]
+
+    - name: Repair Spoolman virtual environment path
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            install_dir="$1"
+            cd "${install_dir}"
+            rm -rf .venv
+            UV_NO_MANAGED_PYTHON=1 /usr/local/bin/uv sync \
+              --locked \
+              --no-dev \
+              --python /usr/bin/python3
+            test -x .venv/bin/uvicorn
+          - spoolman-venv
+          - "{{ spoolman_install_dir }}"
+      when: spoolman_venv_path.rc == 1
+      changed_when: true
+      notify: Restart Spoolman
+
+    - name: Configure Spoolman environment
+      ansible.builtin.include_tasks: configure_env.yml
+      loop:
+        - key: SPOOLMAN_HOST
+          value: "{{ spoolman_bind_host }}"
+        - key: SPOOLMAN_PORT
+          value: "{{ spoolman_port | string }}"
+      loop_control:
+        loop_var: spoolman_env_setting
+        label: "{{ spoolman_env_setting.key }}"
+
+    - name: Check for legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /usr/bin/update
+      register: spoolman_legacy_updater
+      changed_when: false
+      failed_when: spoolman_legacy_updater.rc not in [0, 1]
+
+    - name: Remove legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /usr/bin/update
+      when: spoolman_legacy_updater.rc == 0
+      changed_when: true
+
+    - name: Render Spoolman service
+      ansible.builtin.set_fact:
+        spoolman_service: "{{ lookup('template', 'spoolman.service.j2') }}"
+
+    - name: Read installed Spoolman service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/spoolman.service
+      register: spoolman_service_current
+      changed_when: false
+      failed_when: spoolman_service_current.rc not in [0, 1]
+
+    - name: Install Spoolman service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/spoolman.service
+        stdin: "{{ spoolman_service }}"
+        stdin_add_newline: false
+      when: >-
+        spoolman_service_current.rc != 0 or
+        spoolman_service_current.stdout != spoolman_service | trim
+      changed_when: true
+      notify: Restart Spoolman
+
+    - name: Enable and start Spoolman
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - spoolman
+      register: spoolman_service_enable
+      changed_when: "'Created symlink' in spoolman_service_enable.stderr"
+
+    - name: Apply Spoolman changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Spoolman service is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - spoolman
+      changed_when: false
+
+    - name: Verify Spoolman web interface
+      ansible.builtin.uri:
+        url: "{{ spoolman_health_url }}"
+        status_code: 200
+        return_content: false
+      register: spoolman_health
+      retries: 12
+      delay: 5
+      until: spoolman_health.status == 200
+
+    - name: Verify Spoolman application version
+      ansible.builtin.uri:
+        url: "{{ spoolman_health_url }}/api/v1/info"
+        status_code: 200
+        return_content: true
+      register: spoolman_info
+      retries: 12
+      delay: 5
+      until:
+        - spoolman_info.status == 200
+        - spoolman_info.json.version == spoolman_version

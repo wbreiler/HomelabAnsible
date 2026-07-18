@@ -1,0 +1,12 @@
+---
+- name: Restart Prowlarr
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - prowlarr
+  changed_when: true

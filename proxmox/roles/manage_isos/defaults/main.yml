@@ -1,0 +1,47 @@
+---
+# Default variables for ISO management
+manage_isos_storage_path: "/var/lib/vz/template/iso"
+
+# Destructive behavior is opt-in: leave both false to only download/mount,
+# never touch pre-existing files in manage_isos_storage_path.
+# Kill in-progress wget downloads matching manage_isos_storage_path and remove their .part files.
+manage_isos_cancel_in_progress: false
+# Delete any *.iso in manage_isos_storage_path not present in the configured lists below.
+manage_isos_prune_unmanaged: false
+
+# Local HTTP ISO server
+manage_isos_http_base_url: "http://10.10.20.3:8888"
+manage_isos_http_files: []
+# manage_isos_http_files:
+#   - Windows11_25H2_EnglishInternational_x64.iso
+#   - ubuntu-24.04.4-live-server-amd64.iso
+#   - ubuntu-26.04-live-server-amd64.iso
+#   - fedora-44-amd64-netinst.iso
+#   - rocky-10.2-amd64-DVD-1.iso
+#   - debian-13.5.0-amd64-netinst.iso
+#   - debian-12.14.0-amd64-netinst.iso
+
+# NFS configuration
+manage_isos_use_nfs: false
+manage_isos_nfs_mount_point: "/mnt/iso_nfs"
+# manage_isos_nfs_server: "192.168.1.100"
+# manage_isos_nfs_export: "/export/isos"
+# manage_isos_nfs_mount_opts: "ro,noauto"
+
+# SMB/CIFS configuration
+manage_isos_use_smb: false
+manage_isos_smb_mount_point: "/mnt/iso_smb"
+# manage_isos_smb_server: "192.168.1.100"
+# manage_isos_smb_share: "isos"
+# manage_isos_smb_mount_opts: "ro,guest,noauto"
+
+# List of ISO filenames to copy from network share
+# manage_isos_files_to_copy:
+#   - ubuntu-22.04.iso
+#   - debian-12.iso
+
+# Direct download URLs (alternative to network shares)
+# manage_isos_downloads:
+#   - url: "https://releases.ubuntu.com/22.04/ubuntu-22.04.3-live-server-amd64.iso"
+#     filename: "ubuntu-22.04.iso"
+#     checksum: "sha256:xxxxx"  # Optional but recommended

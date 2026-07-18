@@ -1,0 +1,12 @@
+---
+- name: Restart Apt-Cacher NG
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - apt-cacher-ng
+  changed_when: true

@@ -1,0 +1,6 @@
+# Managed by Ansible. Local edits will be replaced.
+CIDR_LIST={{ iptag_allowed_cidrs | join(',') }}
+TAG_FORMAT={{ {1: 'last_two_octets', 2: 'last_octet', 3: 'full'}[iptag_tag_format_choice | int] }}
+LOOP_INTERVAL={{ iptag_loop_interval | int }}
+DEBUG={{ iptag_debug | bool | lower }}
+COMMAND_TIMEOUT={{ iptag_command_timeout | int }}

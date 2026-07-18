@@ -1,0 +1,128 @@
+---
+- name: Resolve node currently hosting gallery-dl
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ gallery_dl_hostname }}"
+    lxc_fallback_node: "{{ gallery_dl_node }}"
+
+- name: Set up gallery-dl LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap LXC container  # ponytail: shared bootstrap at tasks/create_lxc.yml
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ gallery_dl_hostname }}"
+        lxc_vmid: "{{ gallery_dl_vmid }}"
+        lxc_storage: "{{ gallery_dl_storage }}"
+        lxc_template: "{{ gallery_dl_template }}"
+        lxc_cores: "{{ gallery_dl_cores }}"
+        lxc_memory: "{{ gallery_dl_memory }}"
+        lxc_disk: "{{ gallery_dl_disk }}"
+        lxc_bridge: "{{ gallery_dl_bridge }}"
+        lxc_vlan: "{{ gallery_dl_vlan }}"
+        lxc_packages:
+          - nfs-common
+          - python3-pip
+        lxc_nfs_server: "{{ gallery_dl_nfs_server }}"
+        lxc_nfs_export: "{{ gallery_dl_nfs_export }}"
+        lxc_nfs_mountpoint: "{{ gallery_dl_nfs_mountpoint }}"
+
+    - name: Install gallery-dl
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ lxc_resolved_vmid }} --
+          pip3 install --break-system-packages --quiet gallery-dl
+      register: gallery_dl_pip
+      changed_when: "'already satisfied' not in gallery_dl_pip.stdout"
+
+    - name: Create output directory on NFS
+      ansible.builtin.command:
+        cmd: pct exec {{ lxc_resolved_vmid }} -- mkdir -p {{ gallery_dl_output_dir }}
+      changed_when: false
+
+    - name: Ensure config dir exists in container
+      ansible.builtin.command:
+        cmd: pct exec {{ lxc_resolved_vmid }} -- mkdir -p /root/.config/gallery-dl
+      changed_when: false
+
+    - name: Template gallery-dl config to host tmp
+      ansible.builtin.template:
+        src: config.json.j2
+        dest: /tmp/gallery-dl-config-{{ lxc_resolved_vmid }}.json
+        mode: '0644'
+
+    - name: Push gallery-dl config into container
+      ansible.builtin.command:
+        cmd: >
+          pct push {{ lxc_resolved_vmid }}
+          /tmp/gallery-dl-config-{{ lxc_resolved_vmid }}.json
+          /root/.config/gallery-dl/config.json
+          --perms 644
+      changed_when: true
+
+    - name: Remove temp config from host
+      ansible.builtin.file:
+        path: /tmp/gallery-dl-config-{{ lxc_resolved_vmid }}.json
+        state: absent
+
+    - name: Push cookies file into container
+      when: gallery_dl_cookies_file and (gallery_dl_cookies_file | length > 0)
+      block:
+        - name: Check cookies file exists locally
+          ansible.builtin.stat:
+            path: "{{ gallery_dl_cookies_file }}"
+          register: gallery_dl_cookies_stat
+          delegate_to: localhost
+          become: false
+
+        - name: Copy cookies to host tmp
+          ansible.builtin.copy:
+            src: "{{ gallery_dl_cookies_file }}"
+            dest: /tmp/gallery-dl-cookies-{{ lxc_resolved_vmid }}.txt
+            mode: '0600'
+          when: gallery_dl_cookies_stat.stat.exists
+
+        - name: Push cookies file into container
+          ansible.builtin.command:
+            cmd: >
+              pct push {{ lxc_resolved_vmid }}
+              /tmp/gallery-dl-cookies-{{ lxc_resolved_vmid }}.txt
+              /root/.config/gallery-dl/cookies.txt
+              --perms 600
+          changed_when: true
+          when: gallery_dl_cookies_stat.stat.exists
+
+        - name: Remove cookies from host tmp
+          ansible.builtin.file:
+            path: /tmp/gallery-dl-cookies-{{ lxc_resolved_vmid }}.txt
+            state: absent
+          when: gallery_dl_cookies_stat.stat.exists
+
+        - name: Warn if cookies file missing
+          ansible.builtin.debug:
+            msg: "WARNING: {{ gallery_dl_cookies_file }} not found — skipping cookies. Twitter/X downloads may fail."
+          when: not gallery_dl_cookies_stat.stat.exists
+
+    - name: Template gallery-dl script to host tmp
+      ansible.builtin.template:
+        src: gallery-dl.sh.j2
+        dest: /tmp/gallery-dl-{{ lxc_resolved_vmid }}.sh
+        mode: '0755'
+
+    - name: Push gallery-dl script into container
+      ansible.builtin.command:
+        cmd: pct push {{ lxc_resolved_vmid }} /tmp/gallery-dl-{{ lxc_resolved_vmid }}.sh /root/gallery-dl.sh --perms 755
+      changed_when: true
+
+    - name: Remove temp script from host
+      ansible.builtin.file:
+        path: /tmp/gallery-dl-{{ lxc_resolved_vmid }}.sh
+        state: absent
+
+    - name: Add weekly cron job
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ lxc_resolved_vmid }} -- bash -c
+          "crontab -l 2>/dev/null | grep -q gallery-dl.sh ||
+          (crontab -l 2>/dev/null; echo '0 {{ gallery_dl_cron_hour }} * * {{ gallery_dl_cron_weekday }} /root/gallery-dl.sh') | crontab -"
+      changed_when: true

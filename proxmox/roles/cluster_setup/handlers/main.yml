@@ -1,0 +1,12 @@
+---
+# Handlers for cluster setup
+- name: Restart corosync
+  ansible.builtin.systemd:
+    name: corosync
+    state: restarted
+  listen: restart corosync
+
+- name: Wait for cluster sync
+  ansible.builtin.pause:
+    seconds: 15
+  listen: wait for cluster sync

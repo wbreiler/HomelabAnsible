@@ -1,0 +1,16 @@
+---
+# Example host_vars configuration for a Proxmox node
+# Copy this file to host_vars/<hostname>.yml and customize for each node
+
+# PBS (Proxmox Backup Server) Configuration
+# All nodes share a single namespace for centralized backup management
+pbs_username: "pbs-nash@pbs"  # PBS user (format: username@realm)
+pbs_namespace: "pve-nash"     # Shared namespace across all nodes
+
+# Note: PBS server, datastore, and password are configured in group_vars/proxmox_cluster.yml
+# This file only contains node-specific PBS settings
+
+# Corosync ring1 address (dedicated cluster sync network, separate from management).
+# This should be the IP of this node on the ring1 interface (e.g. 10.10.50.x).
+# The ring0 address is automatically taken from ansible_host (management IP).
+corosync_ring1_addr: "10.10.50.X"

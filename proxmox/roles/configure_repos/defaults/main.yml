@@ -1,0 +1,4 @@
+---
+configure_apt_proxy: true  # noqa: var-naming[no-role-prefix]
+apt_proxy_host: "10.10.40.175"  # noqa: var-naming[no-role-prefix]
+apt_proxy_port: 3142  # noqa: var-naming[no-role-prefix]

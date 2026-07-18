@@ -1,0 +1,141 @@
+---
+- name: Validate Apt-Cacher NG configuration
+  ansible.builtin.assert:
+    that:
+      - apt_cacher_ng_port | int >= 1
+      - apt_cacher_ng_port | int <= 65535
+      - apt_cacher_ng_pass_through_pattern | length > 0
+    fail_msg: >-
+      Apt-Cacher NG requires a TCP port from 1 to 65535 and a non-empty
+      pass-through pattern.
+
+- name: Resolve node currently hosting Apt-Cacher NG
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ apt_cacher_ng_hostname }}"
+    lxc_fallback_node: "{{ apt_cacher_ng_node }}"
+
+- name: Set up Apt-Cacher NG LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Apt-Cacher NG container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ apt_cacher_ng_hostname }}"
+        lxc_vmid: "{{ apt_cacher_ng_vmid }}"
+        lxc_storage: "{{ apt_cacher_ng_storage }}"
+        lxc_template: "{{ apt_cacher_ng_template }}"
+        lxc_cores: "{{ apt_cacher_ng_cores }}"
+        lxc_memory: "{{ apt_cacher_ng_memory }}"
+        lxc_disk: "{{ apt_cacher_ng_disk }}"
+        lxc_bridge: "{{ apt_cacher_ng_bridge }}"
+        lxc_vlan: "{{ apt_cacher_ng_vlan }}"
+        lxc_tags: "{{ apt_cacher_ng_tags | join(';') }}"
+        lxc_packages:
+          - apt-cacher-ng
+          - avahi-daemon
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Check for legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /usr/bin/update
+      register: apt_cacher_ng_legacy_updater
+      changed_when: false
+      failed_when: apt_cacher_ng_legacy_updater.rc not in [0, 1]
+
+    - name: Remove legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /usr/bin/update
+      when: apt_cacher_ng_legacy_updater.rc == 0
+      changed_when: true
+
+    - name: Configure Apt-Cacher NG service
+      ansible.builtin.include_tasks: configure_setting.yml
+      loop:
+        - key: Port
+          value: "{{ apt_cacher_ng_port }}"
+        - key: PassThroughPattern
+          value: "{{ apt_cacher_ng_pass_through_pattern }}"
+      loop_control:
+        loop_var: apt_cacher_ng_setting
+        label: "{{ apt_cacher_ng_setting.key }}"
+
+    - name: Render Apt-Cacher NG self-proxy configuration
+      ansible.builtin.set_fact:
+        apt_cacher_ng_proxy_config: "{{ lookup('template', '00aptproxy.conf.j2') }}"
+
+    - name: Read installed Apt-Cacher NG self-proxy configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/apt/apt.conf.d/00aptproxy.conf
+      register: apt_cacher_ng_proxy_config_current
+      changed_when: false
+      failed_when: apt_cacher_ng_proxy_config_current.rc not in [0, 1]
+
+    - name: Configure container to use its Apt-Cacher NG cache
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/apt/apt.conf.d/00aptproxy.conf
+        stdin: "{{ apt_cacher_ng_proxy_config }}"
+        stdin_add_newline: false
+      when: >-
+        apt_cacher_ng_proxy_config_current.rc != 0 or
+        apt_cacher_ng_proxy_config_current.stdout !=
+        apt_cacher_ng_proxy_config | trim
+      changed_when: true
+
+    - name: Enable and start Apt-Cacher NG
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - apt-cacher-ng
+      register: apt_cacher_ng_service_enable
+      changed_when: "'Created symlink' in apt_cacher_ng_service_enable.stderr"
+
+    - name: Apply Apt-Cacher NG configuration changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Apt-Cacher NG is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - apt-cacher-ng
+      changed_when: false

@@ -1,0 +1,25 @@
+---
+- name: Reload Sonarr systemd
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - daemon-reload
+  changed_when: true
+  listen: Restart Sonarr
+
+- name: Restart Sonarr service
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - sonarr
+  changed_when: true
+  listen: Restart Sonarr

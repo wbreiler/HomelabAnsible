@@ -1,0 +1,13 @@
+[Unit]
+Description=Stash
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/stash --host 0.0.0.0 --port {{ stash_port }}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

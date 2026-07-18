@@ -1,0 +1,26 @@
+---
+gallery_dl_node: "nyx"
+gallery_dl_vmid: ""  # auto-assign next available ID if empty
+gallery_dl_hostname: "gallery-dl"
+gallery_dl_storage: "local-zfs"
+gallery_dl_template: ""  # auto-detect latest debian-1[23]-standard if empty
+gallery_dl_cores: 1
+gallery_dl_memory: 512
+gallery_dl_disk: 4
+gallery_dl_bridge: "vmbr0"
+gallery_dl_vlan: 40
+
+gallery_dl_nfs_server: "10.10.20.3"
+gallery_dl_nfs_export: "/mnt/pool/vault"
+gallery_dl_nfs_mountpoint: "/mnt/vault"
+gallery_dl_output_dir: "/mnt/vault/twitter"
+
+gallery_dl_profiles: []  # list of Twitter/X usernames, e.g. ["user1", "user2"]
+gallery_dl_cookies_file: "files/gallery-dl-cookies.txt"  # local path, gitignored; empty to skip
+gallery_dl_extra_args: ""  # extra gallery-dl flags appended to every invocation
+
+gallery_dl_sleep_request: 1.5  # seconds between API requests; avoids Twitter/X rate limits
+gallery_dl_retries: 8          # retry more on transient failures
+
+gallery_dl_cron_hour: "2"
+gallery_dl_cron_weekday: "0"  # Sunday

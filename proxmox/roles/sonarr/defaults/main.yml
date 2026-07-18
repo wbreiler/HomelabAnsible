@@ -1,0 +1,26 @@
+---
+sonarr_node: "atlas"
+sonarr_vmid: "110"
+sonarr_hostname: "sonarr-nash"
+sonarr_storage: "local-zfs"
+sonarr_template: ""  # auto-detect latest debian-1[23]-standard if empty
+sonarr_cores: 2
+sonarr_memory: 1024
+sonarr_disk: 4
+sonarr_bridge: "vmbr0"
+sonarr_vlan: 40
+sonarr_tags:
+  - "arr"
+
+sonarr_version: "4.0.19.2979"
+sonarr_release_url: >-
+  https://github.com/Sonarr/Sonarr/releases/download/v{{ sonarr_version
+  }}/Sonarr.main.{{ sonarr_version }}.linux-x64.tar.gz
+sonarr_release_checksum: "sha256:b691b3584c31c0b5514058dee81071c923f63d59a37d19e32f92fa13eaa153db"
+sonarr_install_dir: "/opt/Sonarr"
+sonarr_data_dir: "/var/lib/sonarr"
+sonarr_backup_dir: "/opt/sonarr-backups"
+sonarr_user: "media"
+
+sonarr_port: 8989
+sonarr_health_url: "http://10.10.40.52:{{ sonarr_port }}/ping"

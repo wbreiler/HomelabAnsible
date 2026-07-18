@@ -1,0 +1,14 @@
+#!/bin/bash
+LOGFILE="/var/log/gallery-dl-$(date +%Y%m%d_%H%M%S).log"
+exec >> "$LOGFILE" 2>&1
+
+find /var/log -name 'gallery-dl-*.log' -mtime +30 -delete
+
+echo "=== gallery-dl run started at $(date) ==="
+
+{% for profile in gallery_dl_profiles %}
+echo "--- downloading {{ profile }} ---"
+gallery-dl {% if gallery_dl_cookies_file and gallery_dl_cookies_stat is defined and gallery_dl_cookies_stat.stat.exists %}--cookies /root/.config/gallery-dl/cookies.txt {% endif %}{{ gallery_dl_extra_args }} --dest "{{ gallery_dl_output_dir }}" "https://x.com/{{ profile }}"
+{% endfor %}
+
+echo "=== completed at $(date) ==="

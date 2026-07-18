@@ -1,0 +1,367 @@
+---
+# Variables for all Proxmox nodes in the cluster
+
+# Cluster Configuration
+setup_cluster: true  # Set to true to create/join Proxmox cluster
+cluster_name: "cluster"  # Name for your Proxmox cluster
+cluster_master_node: "nyx"  # First node that creates the cluster
+cluster_password: ""  # Optional: Password for joining cluster (leave empty to use SSH keys)
+configure_corosync: false  # Set to true to use custom corosync config template
+set_expected_votes: false  # Set to true to configure expected votes
+
+# PBS (Proxmox Backup Server) Configuration
+# The cluster master host's pbs_username and pbs_namespace are used for the
+# shared cluster storage entry; see host_vars/example.yml.
+configure_pbs: true
+pbs_storage_id: "backup-nash"
+pbs_server: "10.10.20.2"  # Replace with your PBS server IP/hostname
+pbs_datastore: "backups"     # Replace with your PBS datastore name
+pbs_password: "your-pbs-password"  # Replace with your PBS password (or use vault)
+pbs_fingerprint: ""  # Optional: PBS server fingerprint for verification
+
+# PBS Backup Job — creates/reconciles a scheduled backup job on the cluster
+# master targeting pbs_storage_id above. Set to true to manage it here instead
+# of by hand in the Proxmox UI.
+configure_pbs_backup_job: false
+# pbs_backup_job_schedule: "0/6:30"  # Proxmox CalendarEvent, e.g. every 6h30m
+# pbs_backup_job_mode: "snapshot"
+# pbs_backup_job_compress: "zstd"
+# pbs_backup_job_vmids: ""  # Empty = all guests; or "100,101,102" for specific VMIDs
+
+# ISO Management Configuration
+manage_isos: true  # Set to true to enable automated ISO management
+
+# Both destructive controls default to false; set explicitly to opt in.
+# manage_isos_cancel_in_progress: true  # Kill in-progress wget downloads and remove .part files
+# manage_isos_prune_unmanaged: true     # Delete *.iso files not in the lists below
+
+# Option 1: Local HTTP ISO server (10.10.20.3:8080)
+manage_isos_http_files:
+  - debian-12.14.0-amd64-netinst.iso
+  - debian-13.5.0-amd64-netinst.iso
+  - fedora-44-amd64-netinst.iso
+  - haiku-r1beta5-amd64-anyboot.iso
+  - hannah-montana-linux-x86-basic.iso
+  - rocky-10.2-amd64-dvd.iso
+  - ubuntu-24.04.4-amd64-live-server.iso
+  - ubuntu-26.04-amd64-live-server.iso
+  - windows-11-25h2-amd64.iso
+  - windows-98se-amd64.iso
+  - windows-vista-amd64.iso
+
+# Option 2: Download ISOs directly from URLs
+# manage_isos_downloads:
+#   - url: "https://releases.ubuntu.com/22.04/ubuntu-22.04.3-live-server-amd64.iso"
+#     filename: "ubuntu-22.04.iso"
+#     checksum: "sha256:xxxxx"  # Optional but recommended for verification
+
+# Option 4: Use NFS share for ISOs
+# manage_isos_use_nfs: true
+# manage_isos_nfs_server: "192.168.1.100"
+# manage_isos_nfs_export: "/export/isos"
+# manage_isos_nfs_mount_opts: "ro,noauto"
+# manage_isos_files_to_copy:
+#   - ubuntu-22.04.iso
+#   - debian-12.iso
+
+# Option 5: Use SMB/CIFS share for ISOs
+# manage_isos_use_smb: true
+# manage_isos_smb_server: "192.168.1.100"
+# manage_isos_smb_share: "isos"
+# manage_isos_smb_mount_opts: "ro,username=user,password=pass"  # Use vault for credentials
+# manage_isos_files_to_copy:
+#   - ubuntu-22.04.iso
+#   - debian-12.iso
+
+# Security Note: Consider using Ansible Vault for sensitive data
+# Run: ansible-vault encrypt group_vars/proxmox_cluster.yml
+
+# IP-Tag — installs a systemd service on each PVE host that tags LXC containers
+# and VMs with their IP addresses in the Proxmox UI
+install_iptag: true
+# iptag_tag_format_choice: 2  # 1=last two octets, 2=last octet, 3=full
+# iptag_loop_interval: 300
+# iptag_allowed_cidrs:
+#   - 192.168.0.0/16
+#   - 10.0.0.0/8
+#   - 100.64.0.0/10
+# iptag_debug: false
+# iptag_command_timeout: 8
+
+# LXC template downloads — fetches latest version of each template on all nodes
+download_lxc_templates: true
+# lxc_templates:           # override in group_vars to customise the list
+#   - debian-12-standard
+#   - debian-13-standard
+#   - ubuntu-24.04-standard
+#   - ubuntu-26.04-standard
+#   - alpine-3.23-default
+
+# =============================================================================
+# Storage Cleanup Configuration
+# =============================================================================
+run_cleanup_storage: false
+# cleanup_storage_zfs_pool: "rpool"       # ZFS pool name (default: rpool)
+# cleanup_storage_zfs_dataset: "data"     # Dataset under pool (default: data)
+# cleanup_storage_report_missing_datasets: true   # Report CT configs with missing ZFS datasets
+# cleanup_storage_destroy_stale: false    # Set true to actually destroy stale volumes (default: dry-run)
+
+# =============================================================================
+# Standalone App LXCs
+# =============================================================================
+# Each defaults off. Secrets (API keys, tokens, passwords) belong in the
+# vault-encrypted group_vars, not host_vars or defaults.
+
+install_apt_cacher_ng: false
+# apt_cacher_ng_node: "atlas"
+# apt_cacher_ng_vmid: "106"
+# apt_cacher_ng_hostname: "apt-nash"
+# apt_cacher_ng_storage: "local-zfs"
+# apt_cacher_ng_vlan: 40
+# apt_cacher_ng_port: 3142
+
+install_prowlarr: false
+# prowlarr_node: "atlas"
+# prowlarr_vmid: "104"
+# prowlarr_hostname: "prowlarr-nash"
+# prowlarr_version: "2.3.0.5236"
+
+install_homebridge: false
+# homebridge_node: "prometheus"
+# homebridge_vmid: "105"
+# homebridge_hostname: "homebridge-nash"
+# homebridge_version: "2.0.5"
+
+install_spoolman: false
+# spoolman_node: "nyx"
+# spoolman_vmid: "102"
+# spoolman_hostname: "spoolman-nash"
+# spoolman_version: "0.24.0"
+
+install_gitea_mirror: false
+# gitea_mirror_node: "atlas"
+# gitea_mirror_vmid: "119"
+# gitea_mirror_hostname: "git-mirror-nash"
+# gitea_mirror_version: "3.21.0"
+
+install_seerr: false
+# seerr_node: "atlas"
+# seerr_vmid: "117"
+# seerr_hostname: "overseerr-nash"
+# seerr_version: "3.3.0"
+
+install_pocket_id: false
+# pocket_id_node: "nyx"
+# pocket_id_vmid: "100"
+# pocket_id_hostname: "pocketid-nash"
+# pocket_id_version: "2.11.0"
+
+install_forgejo: false
+# forgejo_node: "prometheus"
+# forgejo_vmid: "103"
+# forgejo_hostname: "forgejo-nash"
+# forgejo_version: "13.0.4"  # never skip a major; upgrade one major at a time
+
+install_sonarr: false
+# sonarr_node: "atlas"
+# sonarr_vmid: "110"
+# sonarr_hostname: "sonarr-nash"
+# sonarr_version: "4.0.19.2979"
+
+install_radarr: false
+# radarr_node: "prometheus"
+# radarr_vmid: "111"
+# radarr_hostname: "radarr-nash"
+# radarr_version: "6.3.0.10514"
+
+install_discoverr_bot: false
+# discoverr_bot_node: "nyx"
+# discoverr_bot_tmdb_api_key: ""
+# discoverr_bot_seerr_url: ""
+# discoverr_bot_seerr_password: ""
+# discoverr_bot_discord_token: ""
+
+install_gallery_dl: false
+# gallery_dl_node: "nyx"
+# gallery_dl_profiles:
+#   - user1
+#   - user2
+
+install_stash: false
+# stash_node: "nyx"
+
+# =============================================================================
+# System Updates Configuration
+# =============================================================================
+run_updates: false  # Set to true to run system updates
+update_nodes: true  # Update Proxmox host nodes
+update_lxcs: true   # Update LXC containers
+update_reboot_if_required: false  # Auto-reboot if kernel updated
+
+# Skip specific containers during updates (by VMID)
+# update_skip_vmids:
+#   - 100
+
+# =============================================================================
+# PBS Restore Configuration
+# =============================================================================
+restore_from_pbs: false  # Set to true to restore containers
+pbs_restore_node: "nyx"  # Target node for restore
+pbs_restore_storage: "local-lvm"  # Default storage for restored containers
+
+# Containers to restore from PBS backups
+# pbs_restore_containers:
+#   - vmid: 100  # Restore latest backup
+#   - vmid: 101
+#     target_vmid: 201  # Restore to different VMID
+#     target_storage: "local-zfs"
+#     start_after_restore: true
+#     force: true  # Overwrite existing
+
+# =============================================================================
+# VM Deployment Configuration
+# =============================================================================
+deploy_vms: false  # Set to true to deploy VMs
+
+# Node that coordinates deployment. Defaults to "nyx" in the role.
+# vm_deploy_master_node: "nyx"
+
+# Where to create VMs: "random" to spread across cluster, or a specific node name.
+# Individual VMs can override this with a per-entry `node:` key.
+vm_deploy_node: "random"
+
+# Storage pool for VM disks: pool name or "random" to pick from vm_deploy_available_storages.
+# Individual VMs can override this with a per-entry `storage:` key.
+vm_deploy_storage: "local-lvm"
+vm_deploy_available_storages:
+  - "local-lvm"
+
+# Proxmox storage ID where ISOs live (usually "local")
+vm_deploy_iso_storage: "local"
+
+# Network bridge for all VMs (per-VM `bridge:` key overrides this)
+vm_deploy_network_bridge: "vmbr0"
+
+# Start VMs immediately after creation
+vm_deploy_start_after_create: false
+
+# VMs to deploy. VMIDs are auto-assigned sequentially from the next free ID in 100-199.
+# Idempotent: VMs already present (by name) are skipped on re-runs.
+#
+# Required per VM:
+#   name        - VM name (also used as idempotency key)
+#   iso         - ISO filename (must exist in vm_deploy_iso_storage:/iso/)
+#   ostype      - Proxmox OS type: l26, l24, win11, win10, wvista, wxp, other, etc.
+#   memory      - RAM in MB
+#   cores       - vCPU count
+#   disk_size   - Disk size in GB
+#   disk_bus    - "virtio" (default), "scsi", or "ide" (required for legacy OSes)
+#   bios        - "seabios" (default) or "ovmf" (UEFI; auto-adds EFI disk)
+#   machine     - "q35" (default) or "pc" (i440fx, for legacy OSes)
+#   net_model   - "virtio" (default) or "e1000" / "rtl8139" for legacy OSes
+#   tpm         - true to add a TPM 2.0 device (required for Windows 11)
+#
+# Optional per VM:
+#   node        - override vm_deploy_node for this VM
+#   storage     - override vm_deploy_storage for this VM
+#   bridge      - override vm_deploy_network_bridge for this VM
+vm_deploy_vms:
+  - name: debian-12
+    iso: debian-12.14.0-amd64-netinst.iso
+    ostype: l26
+    machine: q35
+    bios: ovmf
+    cores: 2
+    memory: 2048
+    disk_size: 20
+    disk_bus: virtio
+    net_model: virtio
+
+  - name: debian-13
+    iso: debian-13.5.0-amd64-netinst.iso
+    ostype: l26
+    machine: q35
+    bios: ovmf
+    cores: 2
+    memory: 2048
+    disk_size: 20
+    disk_bus: virtio
+    net_model: virtio
+
+  - name: fedora-44
+    iso: fedora-44-amd64-netinst.iso
+    ostype: l26
+    machine: q35
+    bios: ovmf
+    cores: 2
+    memory: 2048
+    disk_size: 20
+    disk_bus: virtio
+    net_model: virtio
+
+  - name: hannah-montana-linux
+    iso: hannah-montana-linux-x86-basic.iso
+    ostype: l24
+    machine: pc
+    bios: seabios
+    cores: 1
+    memory: 512
+    disk_size: 8
+    disk_bus: ide
+    net_model: rtl8139
+
+  - name: ubuntu-26.04
+    iso: ubuntu-26.04-amd64-live-server.iso
+    ostype: l26
+    machine: q35
+    bios: ovmf
+    cores: 2
+    memory: 2048
+    disk_size: 20
+    disk_bus: virtio
+    net_model: virtio
+
+  - name: windows-11-25h2
+    iso: windows-11-25h2-amd64.iso
+    ostype: win11
+    machine: q35
+    bios: ovmf
+    tpm: true
+    cores: 4
+    memory: 8192
+    disk_size: 128
+    disk_bus: scsi
+    net_model: e1000
+
+  - name: windows-98se
+    iso: windows-98se-amd64.iso
+    ostype: other
+    machine: pc
+    bios: seabios
+    cores: 1
+    memory: 512
+    disk_size: 4
+    disk_bus: ide
+    net_model: rtl8139
+
+  - name: windows-vista
+    iso: windows-vista-amd64.iso
+    ostype: wvista
+    machine: pc
+    bios: seabios
+    cores: 2
+    memory: 2048
+    disk_size: 40
+    disk_bus: ide
+    net_model: e1000
+
+  - name: rocky-10.2
+    iso: rocky-10.2-amd64-dvd.iso
+    ostype: l26
+    machine: q35
+    bios: ovmf
+    cores: 2
+    memory: 2048
+    disk_size: 20
+    disk_bus: virtio
+    net_model: virtio

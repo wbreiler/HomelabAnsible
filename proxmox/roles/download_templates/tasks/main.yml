@@ -1,0 +1,46 @@
+---
+- name: Update pveam template list
+  ansible.builtin.command: pveam update
+  changed_when: false
+
+- name: Get already cached templates
+  ansible.builtin.command: pveam list {{ template_storage }}
+  register: download_templates_cached
+  changed_when: false
+
+- name: Resolve latest filename for each template prefix
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      pveam available | awk '{print $2}' | grep '^{{ item }}' | tail -1
+    executable: /bin/bash
+  loop: "{{ lxc_templates }}"
+  loop_control:
+    label: "{{ item }}"
+  register: download_templates_resolved
+  changed_when: false
+  failed_when: download_templates_resolved.stdout == ''
+
+- name: Fire off parallel template downloads
+  ansible.builtin.command: pveam download {{ template_storage }} {{ item.stdout }}
+  loop: "{{ download_templates_resolved.results }}"
+  loop_control:
+    label: "{{ item.stdout }}"
+  when: item.stdout not in download_templates_cached.stdout
+  async: 600
+  poll: 0
+  register: download_templates_jobs
+  changed_when: false
+
+- name: Wait for all template downloads to complete
+  ansible.builtin.async_status:
+    jid: "{{ item.ansible_job_id }}"
+  loop: "{{ download_templates_jobs.results }}"
+  loop_control:
+    label: "{{ item.item.stdout }}"
+  when: item.ansible_job_id is defined
+  register: download_templates_status
+  until: download_templates_status.finished
+  retries: 40
+  delay: 15
+  changed_when: download_templates_status.rc == 0

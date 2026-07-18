@@ -1,0 +1,430 @@
+---
+- name: Validate Seerr configuration
+  ansible.builtin.assert:
+    that:
+      - seerr_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - seerr_release_url | length > 0
+      - seerr_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - seerr_pnpm_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - seerr_pnpm_url | length > 0
+      - seerr_pnpm_checksum is match('^sha256:[0-9a-f]{64}$')
+      - seerr_node_major is match('^[0-9]+$')
+      - seerr_port | int >= 1
+      - seerr_port | int <= 65535
+    fail_msg: >-
+      Seerr requires pinned application and pnpm versions with SHA-256
+      checksums, a Node.js major version, and a valid TCP port.
+
+- name: Resolve node currently hosting Seerr
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ seerr_hostname }}"
+    lxc_fallback_node: "{{ seerr_node }}"
+
+- name: Set up Seerr LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Seerr container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ seerr_hostname }}"
+        lxc_vmid: "{{ seerr_vmid }}"
+        lxc_storage: "{{ seerr_storage }}"
+        lxc_template: "{{ seerr_template }}"
+        lxc_cores: "{{ seerr_cores }}"
+        lxc_memory: "{{ seerr_memory }}"
+        lxc_disk: "{{ seerr_disk }}"
+        lxc_bridge: "{{ seerr_bridge }}"
+        lxc_vlan: "{{ seerr_vlan }}"
+        lxc_tags: "{{ seerr_tags | join(';') }}"
+        lxc_packages:
+          - build-essential
+          - ca-certificates
+          - curl
+          - python3-setuptools
+          - sqlite3
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Read installed Node.js version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - node --version
+      register: seerr_node_installed
+      changed_when: false
+      failed_when: seerr_node_installed.rc not in [0, 1, 127]
+
+    - name: Require the pinned Node.js major version
+      ansible.builtin.assert:
+        that:
+          - seerr_node_installed.rc == 0
+          - seerr_node_installed.stdout | trim is match('^v' + seerr_node_major + '\.')
+        fail_msg: >-
+          Seerr requires Node.js {{ seerr_node_major }}.x from the NodeSource
+          repository inside the container; found
+          '{{ seerr_node_installed.stdout | trim | default("none", true) }}'.
+
+    - name: Check for unmigrated Overseerr installation
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - test -d /opt/overseerr && test ! -d {{ seerr_install_dir | quote }}
+      register: seerr_unmigrated_overseerr
+      changed_when: false
+      failed_when: seerr_unmigrated_overseerr.rc not in [0, 1]
+
+    - name: Refuse to overwrite an unmigrated Overseerr installation
+      ansible.builtin.assert:
+        that:
+          - seerr_unmigrated_overseerr.rc == 1
+        fail_msg: >-
+          Found /opt/overseerr without {{ seerr_install_dir }}. Migrate the
+          Overseerr configuration to Seerr manually before enabling this role,
+          or it would deploy Seerr with an empty configuration.
+
+    - name: Read installed Seerr version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - node -e "console.log(require('{{ seerr_install_dir }}/package.json').version)"
+      register: seerr_installed_version
+      changed_when: false
+      failed_when: seerr_installed_version.rc not in [0, 1]
+
+    - name: Check Seerr SQLite database
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -f
+          - "{{ seerr_install_dir }}/config/db/db.sqlite3"
+      register: seerr_sqlite_database
+      changed_when: false
+      failed_when: seerr_sqlite_database.rc not in [0, 1]
+
+    - name: Verify Seerr SQLite database integrity
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - sqlite3
+          - "{{ seerr_install_dir }}/config/db/db.sqlite3"
+          - "PRAGMA integrity_check;"
+      register: seerr_sqlite_integrity
+      when: seerr_sqlite_database.rc == 0
+      changed_when: false
+      failed_when: seerr_sqlite_integrity.stdout | trim != 'ok'
+
+    - name: Install pinned Seerr release
+      when: >-
+        seerr_installed_version.rc != 0 or
+        seerr_installed_version.stdout | trim != seerr_version
+      block:
+        - name: Download pinned Seerr release
+          ansible.builtin.get_url:
+            url: "{{ seerr_release_url }}"
+            dest: "/tmp/seerr-{{ seerr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            checksum: "{{ seerr_release_checksum }}"
+            mode: "0600"
+
+        - name: Download pinned pnpm build tool
+          ansible.builtin.get_url:
+            url: "{{ seerr_pnpm_url }}"
+            dest: "/tmp/seerr-pnpm-{{ seerr_pnpm_version }}-{{ lxc_resolved_vmid }}"
+            checksum: "{{ seerr_pnpm_checksum }}"
+            mode: "0600"
+
+        - name: Push Seerr release into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/seerr-{{ seerr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+              - "/tmp/seerr-{{ seerr_version }}.tar.gz"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Push pnpm build tool into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/seerr-pnpm-{{ seerr_pnpm_version }}-{{ lxc_resolved_vmid }}"
+              - "/tmp/seerr-pnpm-{{ seerr_pnpm_version }}"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Build and deploy pinned Seerr release
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                install_dir="$1"
+                conf_file="$2"
+                archive="$3"
+                pnpm_file="$4"
+                version="$5"
+                previous_version="$6"
+                backup_root="$7"
+                port="$8"
+                new_dir="${install_dir}.ansible-new"
+                old_dir="${install_dir}.ansible-old"
+                backup_dir="${backup_root}/pre-${previous_version}-to-${version}"
+                rm -rf "${new_dir}" "${old_dir}"
+                mkdir -p "${new_dir}"
+                tar -xzf "${archive}" -C "${new_dir}" --strip-components=1
+                install -d -m 0755 /opt/pnpm
+                install -m 0755 "${pnpm_file}" /opt/pnpm/pnpm
+                (
+                  cd "${new_dir}"
+                  export CYPRESS_INSTALL_BINARY=0
+                  /opt/pnpm/pnpm install --frozen-lockfile
+                  export NODE_OPTIONS=--max-old-space-size=3072
+                  /opt/pnpm/pnpm build
+                )
+                test -f "${new_dir}/dist/index.js"
+                had_service=0
+                if systemctl list-unit-files seerr.service --no-legend |
+                  grep -q '^seerr.service'; then
+                  had_service=1
+                  systemctl stop seerr
+                fi
+                rm -rf "${backup_dir}"
+                mkdir -p "${backup_dir}"
+                if test -d "${install_dir}/config"; then
+                  cp -a "${install_dir}/config" "${backup_dir}/config"
+                  rm -rf "${new_dir}/config"
+                  cp -a "${install_dir}/config" "${new_dir}/config"
+                fi
+                if test -f "${conf_file}"; then
+                  cp -a "${conf_file}" "${backup_dir}/seerr.conf"
+                fi
+                if test -d "${install_dir}"; then
+                  mv "${install_dir}" "${old_dir}"
+                fi
+                if ! mv "${new_dir}" "${install_dir}"; then
+                  test ! -d "${old_dir}" || mv "${old_dir}" "${install_dir}"
+                  test "${had_service}" -eq 0 || systemctl start seerr
+                  exit 1
+                fi
+                if test "${had_service}" -eq 1; then
+                  if ! systemctl start seerr; then
+                    health_failed=1
+                  else
+                    health_failed=1
+                    for attempt in $(seq 1 12); do
+                      if curl -fsS "http://127.0.0.1:${port}/api/v1/status" >/dev/null; then
+                        health_failed=0
+                        break
+                      fi
+                      sleep 5
+                    done
+                  fi
+                  if test "${health_failed}" -ne 0; then
+                    systemctl stop seerr || true
+                    rm -rf "${install_dir}"
+                    test ! -d "${old_dir}" || mv "${old_dir}" "${install_dir}"
+                    if test -f "${backup_dir}/seerr.conf"; then
+                      cp -a "${backup_dir}/seerr.conf" "${conf_file}"
+                    fi
+                    systemctl start seerr
+                    exit 1
+                  fi
+                fi
+                rm -rf "${old_dir}" "${archive}" "${pnpm_file}"
+              - seerr-deploy
+              - "{{ seerr_install_dir }}"
+              - "{{ seerr_conf_file }}"
+              - "/tmp/seerr-{{ seerr_version }}.tar.gz"
+              - "/tmp/seerr-pnpm-{{ seerr_pnpm_version }}"
+              - "{{ seerr_version }}"
+              - "{{ seerr_installed_version.stdout | trim | default('none', true) }}"
+              - "{{ seerr_backup_dir }}"
+              - "{{ seerr_port | string }}"
+          changed_when: true
+          notify: Restart Seerr
+
+        - name: Remove Seerr release from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/seerr-{{ seerr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            state: absent
+
+        - name: Remove pnpm build tool from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/seerr-pnpm-{{ seerr_pnpm_version }}-{{ lxc_resolved_vmid }}"
+            state: absent
+
+    - name: Check Seerr configuration file
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -f
+          - "{{ seerr_conf_file }}"
+      register: seerr_conf_file_check
+      changed_when: false
+      failed_when: seerr_conf_file_check.rc not in [0, 1]
+
+    - name: Create initial Seerr configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            conf_file="$1"
+            port="$2"
+            mkdir -p "$(dirname "${conf_file}")"
+            {
+              printf 'PORT=%s\n' "${port}"
+              printf '%s\n' 'HOST=0.0.0.0'
+            } > "${conf_file}"
+          - seerr-conf
+          - "{{ seerr_conf_file }}"
+          - "{{ seerr_port | string }}"
+      when: seerr_conf_file_check.rc == 1
+      changed_when: true
+      notify: Restart Seerr
+
+    - name: Check for legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /usr/bin/update
+      register: seerr_legacy_updater
+      changed_when: false
+      failed_when: seerr_legacy_updater.rc not in [0, 1]
+
+    - name: Remove legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /usr/bin/update
+      when: seerr_legacy_updater.rc == 0
+      changed_when: true
+
+    - name: Render Seerr service
+      ansible.builtin.set_fact:
+        seerr_service: "{{ lookup('template', 'seerr.service.j2') }}"
+
+    - name: Read installed Seerr service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/seerr.service
+      register: seerr_service_current
+      changed_when: false
+      failed_when: seerr_service_current.rc not in [0, 1]
+
+    - name: Install Seerr service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/seerr.service
+        stdin: "{{ seerr_service }}"
+        stdin_add_newline: false
+      when: >-
+        seerr_service_current.rc != 0 or
+        seerr_service_current.stdout != seerr_service | trim
+      changed_when: true
+      notify: Restart Seerr
+
+    - name: Enable and start Seerr
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - seerr
+      register: seerr_service_enable
+      changed_when: "'Created symlink' in seerr_service_enable.stderr"
+
+    - name: Apply Seerr changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Seerr service is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - seerr
+      changed_when: false
+
+    - name: Verify Seerr API health and version
+      ansible.builtin.uri:
+        url: "{{ seerr_health_url }}"
+        status_code: 200
+        return_content: true
+      register: seerr_health
+      retries: 12
+      delay: 5
+      until: seerr_health.status == 200
+      failed_when: >-
+        seerr_health.status != 200 or
+        (seerr_health.json.version | default('')) != seerr_version

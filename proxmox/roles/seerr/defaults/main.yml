@@ -1,0 +1,32 @@
+---
+seerr_node: "atlas"
+seerr_vmid: "117"
+seerr_hostname: "overseerr-nash"
+seerr_storage: "helios"
+seerr_template: ""  # auto-detect latest debian-1[23]-standard if empty
+seerr_cores: 4
+seerr_memory: 4096
+seerr_disk: 8
+seerr_bridge: "vmbr0"
+seerr_vlan: 40
+seerr_tags:
+  - "media"
+
+seerr_version: "3.3.0"
+seerr_release_url: >-
+  https://codeload.github.com/seerr-team/seerr/tar.gz/refs/tags/v{{ seerr_version }}
+seerr_release_checksum: "sha256:3a6caf9266f7525c3ac2aecb666f5939034e383296761bdea14ad3105237721c"
+seerr_install_dir: "/opt/seerr"
+seerr_conf_file: "/etc/seerr/seerr.conf"
+seerr_backup_dir: "/opt/seerr-backups"
+
+# pnpm is only needed at build time; the Node.js 22 runtime comes from the
+# NodeSource apt repository and is updated by update_all like any package.
+seerr_pnpm_version: "10.34.4"
+seerr_pnpm_url: >-
+  https://github.com/pnpm/pnpm/releases/download/v{{ seerr_pnpm_version }}/pnpm-linux-x64
+seerr_pnpm_checksum: "sha256:e02c01738ce850754cf00111fd97bec24de550e1e963690486f02d9dae1a2193"
+seerr_node_major: "22"
+
+seerr_port: 5055
+seerr_health_url: "http://10.10.40.172:{{ seerr_port }}/api/v1/status"

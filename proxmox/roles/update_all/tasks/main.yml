@@ -1,0 +1,101 @@
+---
+# Update Proxmox nodes and LXC containers
+
+- name: Update Proxmox host
+  when: update_nodes | default(true) | bool
+  block:
+    - name: Update apt cache on Proxmox host
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Upgrade all packages on Proxmox host
+      ansible.builtin.apt:
+        upgrade: dist
+        autoremove: true
+        autoclean: true
+      register: update_all_node_result
+      async: "{{ update_apt_timeout | default(600) }}"
+      poll: 30
+
+    - name: Check if reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: update_all_reboot_required
+
+    - name: Display reboot status
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: Reboot required"
+      when: update_all_reboot_required.stat.exists
+
+    - name: Reboot if required and configured
+      ansible.builtin.reboot:
+        msg: "Rebooting due to kernel update"
+        reboot_timeout: 300
+      when:
+        - update_reboot_if_required | default(false) | bool
+        - update_all_reboot_required.stat.exists
+
+- name: Update LXC containers
+  when: update_lxcs | default(true) | bool
+  block:
+    - name: Get list of running LXC containers
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          pct list | grep running | awk '{print $1}'
+        executable: /bin/bash
+      register: update_all_running_lxcs
+      changed_when: false
+
+    - name: Build list of containers to update (excluding skipped VMIDs)
+      ansible.builtin.set_fact:
+        update_all_target_lxcs: >-
+          {{
+            update_all_running_lxcs.stdout_lines
+            | reject('in', update_skip_vmids | default([]) | map('string') | list)
+            | list
+          }}
+
+    - name: Display containers to update
+      ansible.builtin.debug:
+        msg: "Updating LXCs on {{ inventory_hostname }}: {{ update_all_target_lxcs }}"
+
+    - name: Fire off parallel LXC updates
+      ansible.builtin.shell:
+        cmd: |
+          pct exec {{ vmid }} -- bash -c '
+            if command -v apt-get >/dev/null 2>&1; then
+              apt-get update -qq
+              DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y -qq
+              apt-get autoremove -y -qq && apt-get autoclean -qq
+            elif command -v apk >/dev/null 2>&1; then
+              apk update && apk upgrade
+            fi
+          '
+        executable: /bin/bash
+      loop: "{{ update_all_target_lxcs }}"
+      loop_control:
+        label: "LXC {{ vmid }}"
+        loop_var: vmid
+      when: update_all_target_lxcs | length > 0
+      async: "{{ update_apt_timeout | default(600) }}"
+      poll: 0
+      register: update_all_lxc_jobs
+      changed_when: false
+
+    - name: Wait for all LXC updates to complete
+      ansible.builtin.async_status:
+        jid: "{{ item.ansible_job_id }}"
+      loop: "{{ update_all_lxc_jobs.results }}"
+      loop_control:
+        label: "LXC {{ item.vmid }}"
+      when: item.ansible_job_id is defined
+      register: update_all_lxc_status
+      until: update_all_lxc_status.finished
+      retries: 40
+      delay: 15
+      changed_when: update_all_lxc_status.rc == 0
+
+- name: Display update summary
+  ansible.builtin.debug:
+    msg: "Update completed on {{ inventory_hostname }}"

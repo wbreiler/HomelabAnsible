@@ -1,0 +1,23 @@
+---
+prowlarr_node: "atlas"
+prowlarr_vmid: "104"
+prowlarr_hostname: "prowlarr-nash"
+prowlarr_storage: "local-zfs"
+prowlarr_template: ""  # auto-detect latest debian-1[23]-standard if empty
+prowlarr_cores: 1
+prowlarr_memory: 1024
+prowlarr_disk: 4
+prowlarr_bridge: "vmbr0"
+prowlarr_vlan: 40
+prowlarr_tags:
+  - media
+
+prowlarr_version: "2.3.0.5236"
+prowlarr_release_url: >-
+  https://github.com/Prowlarr/Prowlarr/releases/download/v{{ prowlarr_version
+  }}/Prowlarr.master.{{ prowlarr_version }}.linux-core-x64.tar.gz
+prowlarr_release_checksum: "sha256:50900ed274bd76abadfefa78ba7ec7077fbe28662a0860a638692a879bc1a6fa"
+prowlarr_install_dir: "/opt/Prowlarr"
+prowlarr_data_dir: "/var/lib/prowlarr"
+prowlarr_port: 9696
+prowlarr_health_url: "http://10.10.40.87:{{ prowlarr_port }}"

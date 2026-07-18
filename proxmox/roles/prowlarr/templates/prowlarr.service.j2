@@ -1,0 +1,14 @@
+[Unit]
+Description=Prowlarr Daemon
+After=network.target
+
+[Service]
+UMask=0002
+Type=simple
+ExecStart={{ prowlarr_install_dir }}/Prowlarr -nobrowser -data={{ prowlarr_data_dir }}/
+TimeoutStopSec=20
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

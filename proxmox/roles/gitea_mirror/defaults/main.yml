@@ -1,0 +1,33 @@
+---
+gitea_mirror_node: "atlas"
+gitea_mirror_vmid: "119"
+gitea_mirror_hostname: "git-mirror-nash"
+gitea_mirror_storage: "local-zfs"
+gitea_mirror_template: ""  # auto-detect latest debian-1[23]-standard if empty
+gitea_mirror_cores: 1
+gitea_mirror_memory: 2048
+gitea_mirror_disk: 6
+gitea_mirror_bridge: "vmbr0"
+gitea_mirror_vlan: 40
+gitea_mirror_tags:
+  - "automation"
+  - "git"
+
+gitea_mirror_version: "3.21.0"
+gitea_mirror_release_url: >-
+  https://codeload.github.com/RayLabsHQ/gitea-mirror/tar.gz/refs/tags/v{{ gitea_mirror_version }}
+gitea_mirror_release_checksum: "sha256:6cb91915305ea05f835358f4867e41e51dc86bdc6027b11d9ac25cce752293f4"
+gitea_mirror_install_dir: "/opt/gitea-mirror"
+gitea_mirror_env_file: "/opt/gitea-mirror.env"
+gitea_mirror_backup_dir: "/opt/gitea-mirror-backups"
+
+gitea_mirror_bun_version: "1.3.14"
+gitea_mirror_bun_url: >-
+  https://github.com/oven-sh/bun/releases/download/bun-v{{ gitea_mirror_bun_version
+  }}/bun-linux-x64.zip
+gitea_mirror_bun_checksum: "sha256:951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f"
+
+gitea_mirror_bind_host: "0.0.0.0"
+gitea_mirror_port: 4321
+gitea_mirror_auth_url: "http://10.10.40.183:{{ gitea_mirror_port }}"
+gitea_mirror_health_url: "http://10.10.40.183:{{ gitea_mirror_port }}"

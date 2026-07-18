@@ -1,0 +1,19 @@
+---
+# Default variables for system updates
+
+# Update Proxmox host nodes
+update_nodes: true  # noqa: var-naming[no-role-prefix]
+
+# Update LXC containers
+update_lxcs: true  # noqa: var-naming[no-role-prefix]
+
+# Automatically reboot nodes if kernel was updated
+update_reboot_if_required: false  # noqa: var-naming[no-role-prefix]
+
+# Timeout for apt operations (in seconds)
+update_apt_timeout: 600  # noqa: var-naming[no-role-prefix]
+
+# Skip containers by VMID (e.g., to skip critical containers)
+# update_skip_vmids:
+#   - 100
+#   - 101

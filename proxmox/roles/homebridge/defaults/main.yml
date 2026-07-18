@@ -1,0 +1,20 @@
+---
+homebridge_node: "prometheus"
+homebridge_vmid: "105"
+homebridge_hostname: "homebridge-nash"
+homebridge_storage: "local-zfs"
+homebridge_template: ""  # auto-detect latest debian-1[23]-standard if empty
+homebridge_cores: 1
+homebridge_memory: 1024
+homebridge_disk: 4
+homebridge_bridge: "vmbr0"
+homebridge_vlan: 40
+homebridge_tags:
+  - smarthome
+
+homebridge_version: "2.0.5"
+homebridge_repository_url: "https://repo.homebridge.io"
+homebridge_repository_key_url: "https://repo.homebridge.io/KEY.gpg"
+homebridge_repository_key_checksum: "sha256:1932a64468cdba913cb8818e934262fdbdfc5f86193bb2d293256d8d246baabe"
+homebridge_port: 8581
+homebridge_health_url: "http://10.10.40.237:{{ homebridge_port }}"

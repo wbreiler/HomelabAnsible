@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+case "$1" in
+    get)
+        /bin/cat "$PBS_BACKUP_JOB_TEST_FIXTURE"
+        ;;
+    create|set)
+        /usr/bin/printf '%s\n' "$*" >> "$PBS_BACKUP_JOB_TEST_LOG"
+        ;;
+    *)
+        /usr/bin/printf 'Unexpected pvesh operation: %s\n' "$1" >&2
+        exit 1
+        ;;
+esac

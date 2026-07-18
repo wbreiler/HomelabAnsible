@@ -1,0 +1,49 @@
+---
+# Proxmox storage configuration is cluster-wide. Configure it only on the
+# designated master so host runs cannot race or overwrite one another.
+- name: Install pexpect for secure PBS password prompt
+  ansible.builtin.apt:
+    name: python3-pexpect
+    state: present
+  when: inventory_hostname == cluster_master_node
+
+- name: Check if PBS storage already exists
+  ansible.builtin.shell:
+    cmd: "set -o pipefail && pvesm status | grep -q '{{ pbs_storage_id }}'"
+    executable: /bin/bash
+  register: pbs_storage_exists
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == cluster_master_node
+
+- name: Remove existing PBS storage if present
+  ansible.builtin.command: pvesm remove {{ pbs_storage_id }}
+  when:
+    - inventory_hostname == cluster_master_node
+    - pbs_storage_exists.rc == 0
+  register: pbs_storage_remove_result
+  changed_when: pbs_storage_remove_result.rc == 0
+
+- name: Add PBS storage to Proxmox
+  ansible.builtin.expect:
+    command: >
+      pvesm add pbs {{ pbs_storage_id | quote }}
+      --server {{ pbs_server | quote }}
+      --datastore {{ pbs_datastore | quote }}
+      --username {{ pbs_username | quote }}
+      --content backup
+      {% if pbs_namespace | default('') %}--namespace {{ pbs_namespace | quote }}{% endif %}
+      {% if pbs_fingerprint | default('') %}--fingerprint {{ pbs_fingerprint | quote }}{% endif %}
+      --password
+    responses:
+      '(?i)Enter Password:': "{{ pbs_password }}"
+    timeout: 120
+  register: pbs_storage_add_result
+  changed_when: pbs_storage_add_result.rc == 0
+  no_log: true
+  when: inventory_hostname == cluster_master_node
+
+- name: Display PBS storage status
+  ansible.builtin.debug:
+    msg: "PBS storage '{{ pbs_storage_id }}' has been configured with namespace {{ pbs_namespace | default('none') }}"
+  when: inventory_hostname == cluster_master_node

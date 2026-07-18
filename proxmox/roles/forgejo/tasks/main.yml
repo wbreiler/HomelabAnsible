@@ -1,0 +1,347 @@
+---
+- name: Validate Forgejo configuration
+  ansible.builtin.assert:
+    that:
+      - forgejo_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - forgejo_release_url | length > 0
+      - forgejo_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - forgejo_port | int >= 1
+      - forgejo_port | int <= 65535
+    fail_msg: >-
+      Forgejo requires a pinned version with a SHA-256 checksum and a valid
+      TCP port.
+
+- name: Resolve node currently hosting Forgejo
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ forgejo_hostname }}"
+    lxc_fallback_node: "{{ forgejo_node }}"
+
+- name: Set up Forgejo LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Forgejo container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ forgejo_hostname }}"
+        lxc_vmid: "{{ forgejo_vmid }}"
+        lxc_storage: "{{ forgejo_storage }}"
+        lxc_template: "{{ forgejo_template }}"
+        lxc_cores: "{{ forgejo_cores }}"
+        lxc_memory: "{{ forgejo_memory }}"
+        lxc_disk: "{{ forgejo_disk }}"
+        lxc_bridge: "{{ forgejo_bridge }}"
+        lxc_vlan: "{{ forgejo_vlan }}"
+        lxc_tags: "{{ forgejo_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+          - curl
+          - git
+          - git-lfs
+          - sqlite3
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Read installed Forgejo version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - /usr/local/bin/forgejo --version
+      register: forgejo_installed_raw
+      changed_when: false
+      failed_when: forgejo_installed_raw.rc not in [0, 1, 126, 127]
+
+    - name: Parse installed Forgejo version
+      ansible.builtin.set_fact:
+        forgejo_installed_version: >-
+          {{ (forgejo_installed_raw.stdout | trim | split)[2] | default('')
+             | split('+') | first
+             if forgejo_installed_raw.rc == 0 else '' }}
+
+    - name: Refuse downgrades and skipped major versions
+      ansible.builtin.assert:
+        that:
+          - forgejo_version is version(forgejo_installed_version, '>=')
+          - >-
+            (forgejo_version | split('.') | first | int) <=
+            (forgejo_installed_version | split('.') | first | int) + 1
+        fail_msg: >-
+          Installed Forgejo is {{ forgejo_installed_version }} and the pinned
+          target is {{ forgejo_version }}. Forgejo does not support downgrades
+          or skipping a major version — upgrade one major at a time, reviewing
+          the release notes for each.
+      when: forgejo_installed_version | length > 0
+
+    - name: Check Forgejo SQLite database
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -f
+          - "{{ forgejo_work_dir }}/data/forgejo.db"
+      register: forgejo_sqlite_database
+      changed_when: false
+      failed_when: forgejo_sqlite_database.rc not in [0, 1]
+
+    - name: Verify Forgejo SQLite database integrity
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - sqlite3
+          - "{{ forgejo_work_dir }}/data/forgejo.db"
+          - "PRAGMA integrity_check;"
+      register: forgejo_sqlite_integrity
+      when: forgejo_sqlite_database.rc == 0
+      changed_when: false
+      failed_when: forgejo_sqlite_integrity.stdout | trim != 'ok'
+
+    - name: Install pinned Forgejo release
+      when: forgejo_installed_version != forgejo_version
+      block:
+        - name: Download pinned Forgejo release
+          ansible.builtin.get_url:
+            url: "{{ forgejo_release_url }}"
+            dest: "/tmp/forgejo-{{ forgejo_version }}-{{ lxc_resolved_vmid }}"
+            checksum: "{{ forgejo_release_checksum }}"
+            mode: "0600"
+
+        - name: Push Forgejo release into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/forgejo-{{ forgejo_version }}-{{ lxc_resolved_vmid }}"
+              - "/tmp/forgejo-{{ forgejo_version }}"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Deploy pinned Forgejo release
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                install_dir="$1"
+                config_file="$2"
+                work_dir="$3"
+                binary_file="$4"
+                version="$5"
+                previous_version="$6"
+                backup_root="$7"
+                port="$8"
+                backup_dir="${backup_root}/pre-${previous_version}-to-${version}"
+                new_binary="${install_dir}/forgejo-${version}-linux-amd64"
+                install -d -m 0755 "${install_dir}"
+                install -m 0755 "${binary_file}" "${new_binary}.staged"
+                "${new_binary}.staged" --version >/dev/null
+                old_binary="$(readlink -f /usr/local/bin/forgejo || true)"
+                had_service=0
+                if systemctl list-unit-files forgejo.service --no-legend |
+                  grep -q '^forgejo.service'; then
+                  had_service=1
+                  systemctl stop forgejo
+                fi
+                rm -rf "${backup_dir}"
+                mkdir -p "${backup_dir}"
+                if test -n "${old_binary}" && test -f "${old_binary}"; then
+                  cp -a "${old_binary}" "${backup_dir}/"
+                fi
+                cp -a "${config_file}" "${backup_dir}/app.ini"
+                for db_file in "${work_dir}/data/forgejo.db" \
+                  "${work_dir}/data/forgejo.db-wal" \
+                  "${work_dir}/data/forgejo.db-shm"; do
+                  if test -f "${db_file}"; then
+                    cp -a "${db_file}" "${backup_dir}/"
+                  fi
+                done
+                mv "${new_binary}.staged" "${new_binary}"
+                ln -sfn "${new_binary}" /usr/local/bin/forgejo
+                if test "${had_service}" -eq 1; then
+                  if ! systemctl start forgejo; then
+                    health_failed=1
+                  else
+                    health_failed=1
+                    for attempt in $(seq 1 24); do
+                      if curl -fsS "http://127.0.0.1:${port}/api/healthz" >/dev/null; then
+                        health_failed=0
+                        break
+                      fi
+                      sleep 5
+                    done
+                  fi
+                  if test "${health_failed}" -ne 0; then
+                    systemctl stop forgejo || true
+                    if test -n "${old_binary}" && test -f "${backup_dir}/$(basename "${old_binary}")"; then
+                      cp -a "${backup_dir}/$(basename "${old_binary}")" "${old_binary}"
+                      ln -sfn "${old_binary}" /usr/local/bin/forgejo
+                    fi
+                    rm -f "${work_dir}/data/forgejo.db" \
+                      "${work_dir}/data/forgejo.db-wal" \
+                      "${work_dir}/data/forgejo.db-shm"
+                    for db_file in forgejo.db forgejo.db-wal forgejo.db-shm; do
+                      if test -f "${backup_dir}/${db_file}"; then
+                        cp -a "${backup_dir}/${db_file}" "${work_dir}/data/${db_file}"
+                      fi
+                    done
+                    cp -a "${backup_dir}/app.ini" "${config_file}"
+                    rm -f "${new_binary}"
+                    systemctl start forgejo
+                    exit 1
+                  fi
+                fi
+                if test -n "${old_binary}" && test "${old_binary}" != "${new_binary}"; then
+                  rm -f "${old_binary}"
+                fi
+                rm -f "${binary_file}"
+              - forgejo-deploy
+              - "{{ forgejo_install_dir }}"
+              - "{{ forgejo_config_file }}"
+              - "{{ forgejo_work_dir }}"
+              - "/tmp/forgejo-{{ forgejo_version }}"
+              - "{{ forgejo_version }}"
+              - "{{ forgejo_installed_version | default('none', true) }}"
+              - "{{ forgejo_backup_dir }}"
+              - "{{ forgejo_port | string }}"
+          changed_when: true
+          notify: Restart Forgejo
+
+        - name: Remove Forgejo release from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/forgejo-{{ forgejo_version }}-{{ lxc_resolved_vmid }}"
+            state: absent
+
+    - name: Check for legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /usr/bin/update
+      register: forgejo_legacy_updater
+      changed_when: false
+      failed_when: forgejo_legacy_updater.rc not in [0, 1]
+
+    - name: Remove legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /usr/bin/update
+      when: forgejo_legacy_updater.rc == 0
+      changed_when: true
+
+    - name: Render Forgejo service
+      ansible.builtin.set_fact:
+        forgejo_service: "{{ lookup('template', 'forgejo.service.j2') }}"
+
+    - name: Read installed Forgejo service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/forgejo.service
+      register: forgejo_service_current
+      changed_when: false
+      failed_when: forgejo_service_current.rc not in [0, 1]
+
+    - name: Install Forgejo service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/forgejo.service
+        stdin: "{{ forgejo_service }}"
+        stdin_add_newline: false
+      when: >-
+        forgejo_service_current.rc != 0 or
+        forgejo_service_current.stdout != forgejo_service | trim
+      changed_when: true
+      notify: Restart Forgejo
+
+    - name: Enable and start Forgejo
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - forgejo
+      register: forgejo_service_enable
+      changed_when: "'Created symlink' in forgejo_service_enable.stderr"
+
+    - name: Apply Forgejo changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Forgejo service is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - forgejo
+      changed_when: false
+
+    - name: Verify Forgejo web health
+      ansible.builtin.uri:
+        url: "{{ forgejo_health_url }}"
+        status_code: 200
+        return_content: false
+      register: forgejo_health
+      retries: 12
+      delay: 5
+      until: forgejo_health.status == 200
+
+    - name: Verify Forgejo application version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - /usr/local/bin/forgejo --version
+      register: forgejo_version_check
+      changed_when: false
+      failed_when: >-
+        (forgejo_version_check.stdout | trim | split)[2] | split('+') | first
+        != forgejo_version

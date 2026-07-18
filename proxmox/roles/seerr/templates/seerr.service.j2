@@ -1,0 +1,15 @@
+[Unit]
+Description=Seerr Service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile={{ seerr_conf_file }}
+Environment=NODE_ENV=production
+Type=exec
+Restart=on-failure
+WorkingDirectory={{ seerr_install_dir }}
+ExecStart=/usr/bin/node dist/index.js
+
+[Install]
+WantedBy=multi-user.target

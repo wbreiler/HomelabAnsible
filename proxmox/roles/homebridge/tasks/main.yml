@@ -1,0 +1,332 @@
+---
+- name: Validate Homebridge configuration
+  ansible.builtin.assert:
+    that:
+      - homebridge_version | length > 0
+      - homebridge_repository_url | length > 0
+      - homebridge_repository_key_url | length > 0
+      - homebridge_repository_key_checksum is match('^sha256:[0-9a-f]{64}$')
+      - homebridge_port | int >= 1
+      - homebridge_port | int <= 65535
+    fail_msg: >-
+      Homebridge requires a pinned package version, repository URL,
+      checksum-verified signing key, and a TCP port from 1 to 65535.
+
+- name: Resolve node currently hosting Homebridge
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ homebridge_hostname }}"
+    lxc_fallback_node: "{{ homebridge_node }}"
+
+- name: Set up Homebridge LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Homebridge container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ homebridge_hostname }}"
+        lxc_vmid: "{{ homebridge_vmid }}"
+        lxc_storage: "{{ homebridge_storage }}"
+        lxc_template: "{{ homebridge_template }}"
+        lxc_cores: "{{ homebridge_cores }}"
+        lxc_memory: "{{ homebridge_memory }}"
+        lxc_disk: "{{ homebridge_disk }}"
+        lxc_bridge: "{{ homebridge_bridge }}"
+        lxc_vlan: "{{ homebridge_vlan }}"
+        lxc_tags: "{{ homebridge_tags | join(';') }}"
+        lxc_packages:
+          - avahi-daemon
+          - ca-certificates
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Check installed Homebridge repository key
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - sha256sum
+          - /etc/apt/keyrings/homebridge.asc
+      register: homebridge_repository_key_current
+      changed_when: false
+      failed_when: homebridge_repository_key_current.rc not in [0, 1]
+
+    - name: Decide whether Homebridge repository key update is required
+      ansible.builtin.set_fact:
+        homebridge_repository_key_needs_update: >-
+          {{
+            homebridge_repository_key_current.rc != 0 or
+            (
+              homebridge_repository_key_checksum
+              | regex_replace('^sha256:', '')
+            ) not in homebridge_repository_key_current.stdout
+          }}
+
+    - name: Install checksum-verified Homebridge repository key
+      when: homebridge_repository_key_needs_update | bool
+      block:
+        - name: Download Homebridge repository key
+          ansible.builtin.get_url:
+            url: "{{ homebridge_repository_key_url }}"
+            dest: "/tmp/homebridge-{{ lxc_resolved_vmid }}.asc"
+            checksum: "{{ homebridge_repository_key_checksum }}"
+            mode: "0600"
+
+        - name: Create Homebridge keyring directory
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - install
+              - -d
+              - -m
+              - "0755"
+              - /etc/apt/keyrings
+          changed_when: false
+
+        - name: Push Homebridge repository key into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/homebridge-{{ lxc_resolved_vmid }}.asc"
+              - /etc/apt/keyrings/homebridge.asc
+              - --perms
+              - "0644"
+          register: homebridge_repository_key_update
+          changed_when: true
+
+        - name: Remove Homebridge repository key from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/homebridge-{{ lxc_resolved_vmid }}.asc"
+            state: absent
+
+    - name: Render Homebridge repository configuration
+      ansible.builtin.set_fact:
+        homebridge_repository_source: "{{ lookup('template', 'homebridge.sources.j2') }}"
+
+    - name: Read installed Homebridge repository configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/apt/sources.list.d/homebridge.sources
+      register: homebridge_repository_source_current
+      changed_when: false
+      failed_when: homebridge_repository_source_current.rc not in [0, 1]
+
+    - name: Decide whether Homebridge repository configuration update is required
+      ansible.builtin.set_fact:
+        homebridge_repository_source_needs_update: >-
+          {{
+            homebridge_repository_source_current.rc != 0 or
+            homebridge_repository_source_current.stdout
+            != homebridge_repository_source | trim
+          }}
+
+    - name: Install Homebridge repository configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/apt/sources.list.d/homebridge.sources
+        stdin: "{{ homebridge_repository_source }}"
+        stdin_add_newline: false
+      when: homebridge_repository_source_needs_update | bool
+      register: homebridge_repository_source_update
+      changed_when: true
+
+    - name: Render Homebridge package pin
+      ansible.builtin.set_fact:
+        homebridge_package_pin: "{{ lookup('template', 'homebridge.pref.j2') }}"
+
+    - name: Read installed Homebridge package pin
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/apt/preferences.d/homebridge
+      register: homebridge_package_pin_current
+      changed_when: false
+      failed_when: homebridge_package_pin_current.rc not in [0, 1]
+
+    - name: Install Homebridge package pin
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/apt/preferences.d/homebridge
+        stdin: "{{ homebridge_package_pin }}"
+        stdin_add_newline: false
+      when: >-
+        homebridge_package_pin_current.rc != 0 or
+        homebridge_package_pin_current.stdout != homebridge_package_pin | trim
+      register: homebridge_package_pin_update
+      changed_when: true
+
+    - name: Read installed Homebridge package version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - dpkg-query
+          - -W
+          - "-f=${Version}"
+          - homebridge
+      register: homebridge_package_version
+      changed_when: false
+      failed_when: homebridge_package_version.rc not in [0, 1]
+
+    - name: Refresh Homebridge package metadata
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - apt-get
+          - update
+          - -qq
+      when: >-
+        homebridge_repository_key_needs_update | bool or
+        homebridge_repository_source_needs_update | bool or
+        homebridge_package_version.rc != 0 or
+        homebridge_package_version.stdout | trim != homebridge_version
+      changed_when: false
+
+    - name: Install pinned Homebridge package
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - env
+          - DEBIAN_FRONTEND=noninteractive
+          - apt-get
+          - install
+          - -y
+          - -q
+          - --allow-downgrades
+          - "homebridge={{ homebridge_version }}"
+      when: >-
+        homebridge_package_version.rc != 0 or
+        homebridge_package_version.stdout | trim != homebridge_version
+      changed_when: true
+      notify: Restart Homebridge
+
+    - name: Check for legacy Homebridge repository key
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /etc/apt/keyrings/homebridge.gpg
+      register: homebridge_legacy_repository_key
+      changed_when: false
+      failed_when: homebridge_legacy_repository_key.rc not in [0, 1]
+
+    - name: Remove legacy Homebridge repository key
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /etc/apt/keyrings/homebridge.gpg
+      when: homebridge_legacy_repository_key.rc == 0
+      changed_when: true
+
+    - name: Check for legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /usr/bin/update
+      register: homebridge_legacy_updater
+      changed_when: false
+      failed_when: homebridge_legacy_updater.rc not in [0, 1]
+
+    - name: Remove legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /usr/bin/update
+      when: homebridge_legacy_updater.rc == 0
+      changed_when: true
+
+    - name: Enable and start Homebridge services
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - homebridge
+          - avahi-daemon
+      register: homebridge_services_enable
+      changed_when: "'Created symlink' in homebridge_services_enable.stderr"
+
+    - name: Apply Homebridge changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Homebridge services are active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - homebridge
+          - avahi-daemon
+      changed_when: false
+
+    - name: Verify Homebridge web interface
+      ansible.builtin.uri:
+        url: "{{ homebridge_health_url }}"
+        status_code: 200
+        return_content: false
+      register: homebridge_health
+      retries: 6
+      delay: 5
+      until: homebridge_health.status == 200

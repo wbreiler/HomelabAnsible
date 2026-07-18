@@ -1,0 +1,376 @@
+---
+- name: Validate Pocket ID configuration
+  ansible.builtin.assert:
+    that:
+      - pocket_id_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - pocket_id_release_url | length > 0
+      - pocket_id_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - pocket_id_app_url | length > 0
+      - pocket_id_port | int >= 1
+      - pocket_id_port | int <= 65535
+    fail_msg: >-
+      Pocket ID requires a pinned version with a SHA-256 checksum, an
+      application URL, and a valid TCP port.
+
+- name: Resolve node currently hosting Pocket ID
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ pocket_id_hostname }}"
+    lxc_fallback_node: "{{ pocket_id_node }}"
+
+- name: Set up Pocket ID LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Pocket ID container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ pocket_id_hostname }}"
+        lxc_vmid: "{{ pocket_id_vmid }}"
+        lxc_storage: "{{ pocket_id_storage }}"
+        lxc_template: "{{ pocket_id_template }}"
+        lxc_cores: "{{ pocket_id_cores }}"
+        lxc_memory: "{{ pocket_id_memory }}"
+        lxc_disk: "{{ pocket_id_disk }}"
+        lxc_bridge: "{{ pocket_id_bridge }}"
+        lxc_vlan: "{{ pocket_id_vlan }}"
+        lxc_tags: "{{ pocket_id_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+          - curl
+          - openssl
+          - sqlite3
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Read installed Pocket ID version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - "{{ pocket_id_install_dir }}/pocket-id version"
+      register: pocket_id_installed_version
+      changed_when: false
+      failed_when: pocket_id_installed_version.rc not in [0, 1, 126, 127]
+
+    - name: Check Pocket ID SQLite database
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -f
+          - "{{ pocket_id_install_dir }}/data/pocket-id.db"
+      register: pocket_id_sqlite_database
+      changed_when: false
+      failed_when: pocket_id_sqlite_database.rc not in [0, 1]
+
+    - name: Verify Pocket ID SQLite database integrity
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - sqlite3
+          - "{{ pocket_id_install_dir }}/data/pocket-id.db"
+          - "PRAGMA integrity_check;"
+      register: pocket_id_sqlite_integrity
+      when: pocket_id_sqlite_database.rc == 0
+      changed_when: false
+      failed_when: pocket_id_sqlite_integrity.stdout | trim != 'ok'
+
+    - name: Check Pocket ID environment file
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -f
+          - "{{ pocket_id_install_dir }}/.env"
+      register: pocket_id_env_file_check
+      changed_when: false
+      failed_when: pocket_id_env_file_check.rc not in [0, 1]
+
+    - name: Create initial Pocket ID environment
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            umask 077
+            env_file="$1"
+            app_url="$2"
+            port="$3"
+            mkdir -p "$(dirname "${env_file}")"
+            {
+              printf '%s\n' 'APP_ENV=production'
+              printf 'APP_URL=%s\n' "${app_url}"
+              printf '%s\n' 'TRUST_PROXY=false'
+              printf 'PORT=%s\n' "${port}"
+              printf '%s\n' 'HOST=0.0.0.0'
+              printf 'ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)"
+            } > "${env_file}"
+          - pocket-id-env
+          - "{{ pocket_id_install_dir }}/.env"
+          - "{{ pocket_id_app_url }}"
+          - "{{ pocket_id_port | string }}"
+      when: pocket_id_env_file_check.rc == 1
+      changed_when: true
+      no_log: true
+
+    - name: Ensure encryption key exists (mandatory since 2.x)
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            env_file="$1"
+            if grep -q '^ENCRYPTION_KEY=' "${env_file}"; then
+              echo present
+            else
+              printf 'ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)" >> "${env_file}"
+              echo added
+            fi
+          - pocket-id-key
+          - "{{ pocket_id_install_dir }}/.env"
+      register: pocket_id_encryption_key
+      changed_when: "'added' in pocket_id_encryption_key.stdout"
+      no_log: true
+
+    - name: Install pinned Pocket ID release
+      when: >-
+        pocket_id_installed_version.rc != 0 or
+        pocket_id_installed_version.stdout | trim | split | last != pocket_id_version
+      block:
+        - name: Download pinned Pocket ID release
+          ansible.builtin.get_url:
+            url: "{{ pocket_id_release_url }}"
+            dest: "/tmp/pocket-id-{{ pocket_id_version }}-{{ lxc_resolved_vmid }}"
+            checksum: "{{ pocket_id_release_checksum }}"
+            mode: "0600"
+
+        - name: Push Pocket ID release into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/pocket-id-{{ pocket_id_version }}-{{ lxc_resolved_vmid }}"
+              - "/tmp/pocket-id-{{ pocket_id_version }}"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Deploy pinned Pocket ID release
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                install_dir="$1"
+                binary_file="$2"
+                version="$3"
+                previous_version="$4"
+                backup_root="$5"
+                port="$6"
+                backup_dir="${backup_root}/pre-${previous_version}-to-${version}"
+                had_service=0
+                if systemctl list-unit-files pocketid.service --no-legend |
+                  grep -q '^pocketid.service'; then
+                  had_service=1
+                  systemctl stop pocketid
+                fi
+                rm -rf "${backup_dir}"
+                mkdir -p "${backup_dir}"
+                if test -f "${install_dir}/pocket-id"; then
+                  cp -a "${install_dir}/pocket-id" "${backup_dir}/pocket-id"
+                fi
+                if test -d "${install_dir}/data"; then
+                  cp -a "${install_dir}/data" "${backup_dir}/data"
+                fi
+                if test -f "${install_dir}/.env"; then
+                  cp -a "${install_dir}/.env" "${backup_dir}/env"
+                fi
+                install -d -m 0755 "${install_dir}"
+                install -m 0755 "${binary_file}" "${install_dir}/pocket-id"
+                if test "${had_service}" -eq 1; then
+                  if ! systemctl start pocketid; then
+                    health_failed=1
+                  else
+                    health_failed=1
+                    for attempt in $(seq 1 12); do
+                      if curl -fsS "http://127.0.0.1:${port}/" >/dev/null; then
+                        health_failed=0
+                        break
+                      fi
+                      sleep 5
+                    done
+                  fi
+                  if test "${health_failed}" -ne 0; then
+                    systemctl stop pocketid || true
+                    cp -a "${backup_dir}/pocket-id" "${install_dir}/pocket-id"
+                    if test -d "${backup_dir}/data"; then
+                      rm -rf "${install_dir}/data"
+                      cp -a "${backup_dir}/data" "${install_dir}/data"
+                    fi
+                    if test -f "${backup_dir}/env"; then
+                      cp -a "${backup_dir}/env" "${install_dir}/.env"
+                    fi
+                    systemctl start pocketid
+                    exit 1
+                  fi
+                fi
+                rm -f "${binary_file}"
+              - pocket-id-deploy
+              - "{{ pocket_id_install_dir }}"
+              - "/tmp/pocket-id-{{ pocket_id_version }}"
+              - "{{ pocket_id_version }}"
+              - "{{ pocket_id_installed_version.stdout | trim | split | last | default('none', true) }}"
+              - "{{ pocket_id_backup_dir }}"
+              - "{{ pocket_id_port | string }}"
+          changed_when: true
+          notify: Restart Pocket ID
+
+        - name: Remove Pocket ID release from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/pocket-id-{{ pocket_id_version }}-{{ lxc_resolved_vmid }}"
+            state: absent
+
+    - name: Check for legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /usr/bin/update
+      register: pocket_id_legacy_updater
+      changed_when: false
+      failed_when: pocket_id_legacy_updater.rc not in [0, 1]
+
+    - name: Remove legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /usr/bin/update
+      when: pocket_id_legacy_updater.rc == 0
+      changed_when: true
+
+    - name: Render Pocket ID service
+      ansible.builtin.set_fact:
+        pocket_id_service: "{{ lookup('template', 'pocketid.service.j2') }}"
+
+    - name: Read installed Pocket ID service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/pocketid.service
+      register: pocket_id_service_current
+      changed_when: false
+      failed_when: pocket_id_service_current.rc not in [0, 1]
+
+    - name: Install Pocket ID service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/pocketid.service
+        stdin: "{{ pocket_id_service }}"
+        stdin_add_newline: false
+      when: >-
+        pocket_id_service_current.rc != 0 or
+        pocket_id_service_current.stdout != pocket_id_service | trim
+      changed_when: true
+      notify: Restart Pocket ID
+
+    - name: Enable and start Pocket ID
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - pocketid
+      register: pocket_id_service_enable
+      changed_when: "'Created symlink' in pocket_id_service_enable.stderr"
+
+    - name: Apply Pocket ID changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Pocket ID service is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - pocketid
+      changed_when: false
+
+    - name: Verify Pocket ID web interface
+      ansible.builtin.uri:
+        url: "{{ pocket_id_health_url }}"
+        status_code: 200
+        return_content: false
+      register: pocket_id_health
+      retries: 12
+      delay: 5
+      until: pocket_id_health.status == 200
+
+    - name: Verify Pocket ID application version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - "{{ pocket_id_install_dir }}/pocket-id version"
+      register: pocket_id_version_check
+      changed_when: false
+      failed_when: pocket_id_version_check.stdout | trim | split | last != pocket_id_version

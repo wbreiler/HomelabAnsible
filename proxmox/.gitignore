@@ -1,0 +1,41 @@
+# Ansible
+*.retry
+.vault_pass
+/tmp
+.ansible
+
+# gallery-dl
+files/gallery-dl-cookies.txt
+
+# Sensitive files
+inventory.yml
+group_vars/proxmox_cluster.yml
+host_vars/*.yml
+!host_vars/example.yml
+host_vars/*/secrets.yml
+
+# Backup files
+*.bak
+*.orig
+*~.yml
+*~.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude files
+.claude/
+/HANDOFF.md

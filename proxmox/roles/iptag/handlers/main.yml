@@ -1,0 +1,7 @@
+---
+- name: Restart IP-Tag
+  ansible.builtin.systemd_service:
+    name: iptag
+    state: restarted
+    enabled: true
+    daemon_reload: true

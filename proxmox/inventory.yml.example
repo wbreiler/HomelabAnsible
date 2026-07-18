@@ -1,0 +1,37 @@
+---
+# Proxmox Cluster Inventory
+all:
+  children:
+    proxmox_cluster:
+      hosts:
+        nyx:
+          ansible_host: 10.10.30.2
+          proxmox_node_name: nyx
+          network_tuning_configure_vlan: true
+          network_tuning_storage_vlan_ip: "10.10.20.X"
+          vmid_range_start: 100  # vm_deploy allocates VMIDs from this range per node
+          vmid_range_end: 133
+        prometheus:
+          ansible_host: 10.10.30.3
+          proxmox_node_name: prometheus
+          network_tuning_configure_vlan: true
+          network_tuning_storage_vlan_ip: "10.10.20.X"
+          vmid_range_start: 134
+          vmid_range_end: 166
+        atlas:
+          ansible_host: 10.10.30.9
+          proxmox_node_name: atlas
+          network_tuning_configure_vlan: true
+          network_tuning_storage_vlan_ip: "10.10.20.X"
+          vmid_range_start: 167
+          vmid_range_end: 199
+      vars:
+        ansible_user: root
+        ansible_python_interpreter: /usr/bin/python3
+    pbs_nodes:
+      hosts:
+        mnemosyne:
+          ansible_host: 10.10.20.2  # PBS server management IP
+      vars:
+        ansible_user: root
+        ansible_python_interpreter: /usr/bin/python3

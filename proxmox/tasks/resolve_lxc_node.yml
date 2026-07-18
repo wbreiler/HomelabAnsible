@@ -1,0 +1,22 @@
+---
+# Resolves which cluster node currently hosts an LXC. All CTs here are
+# HA-managed and dynamic-load CRS can relocate them at any time, so roles
+# must not trust their configured node.
+#
+# Required vars:
+#   lxc_lookup_hostname - container hostname to find
+#   lxc_fallback_node   - node to use when the container does not exist yet
+# Sets: lxc_current_node
+
+- name: "Locate cluster-wide container {{ lxc_lookup_hostname }}"
+  ansible.builtin.command: pvesh get /cluster/resources --type vm --output-format json
+  register: _lxc_cluster_resources
+  changed_when: false
+
+- name: "Resolve node hosting {{ lxc_lookup_hostname }}"
+  ansible.builtin.set_fact:
+    lxc_current_node: >-
+      {{ _lxc_cluster_resources.stdout | from_json
+         | selectattr('name', 'defined')
+         | selectattr('name', 'equalto', lxc_lookup_hostname)
+         | map(attribute='node') | first | default(lxc_fallback_node) }}

@@ -1,0 +1,42 @@
+---
+- name: "Check Gitea Mirror environment setting - {{ gitea_mirror_env_setting.key }}"
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - grep
+      - -Fqx
+      - "{{ gitea_mirror_env_setting.key }}={{ gitea_mirror_env_setting.value }}"
+      - "{{ gitea_mirror_env_file }}"
+  register: gitea_mirror_env_setting_check
+  changed_when: false
+  failed_when: gitea_mirror_env_setting_check.rc not in [0, 1]
+
+- name: "Configure Gitea Mirror environment setting - {{ gitea_mirror_env_setting.key }}"
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - bash
+      - -c
+      - |
+        set -eu
+        file="$1"
+        key="$2"
+        value="$3"
+        if grep -q "^${key}=" "${file}"; then
+          sed -i "s|^${key}=.*|${key}=${value}|" "${file}"
+        else
+          printf '%s=%s\n' "${key}" "${value}" >> "${file}"
+        fi
+      - gitea-mirror-env
+      - "{{ gitea_mirror_env_file }}"
+      - "{{ gitea_mirror_env_setting.key }}"
+      - "{{ gitea_mirror_env_setting.value }}"
+  when: gitea_mirror_env_setting_check.rc == 1
+  changed_when: true
+  notify: Restart Gitea Mirror

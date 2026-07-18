@@ -1,0 +1,159 @@
+---
+- name: Cancel any in-progress ISO downloads
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      for pid in $(pgrep -x wget || true); do
+        if grep -ql "{{ manage_isos_storage_path }}" /proc/"$pid"/cmdline 2>/dev/null; then
+          target=$(tr '\0' '\n' < /proc/"$pid"/cmdline | grep -A1 '^-O$' | tail -1 || true)
+          [ -n "$target" ] && rm -f "$target"
+          kill "$pid" || true
+        fi
+      done
+      rm -f "{{ manage_isos_storage_path }}"/*.part || true
+    executable: /bin/bash
+  changed_when: false
+  when:
+    - manage_isos_cancel_in_progress | default(false) | bool
+    - manage_isos_http_files | default([]) | length > 0
+
+- name: Ensure ISO storage directory exists
+  ansible.builtin.file:
+    path: "{{ manage_isos_storage_path }}"
+    state: directory
+    mode: '0755'
+
+# --- HTTP server downloads ---
+- name: Download ISOs from local HTTP server  # noqa: command-instead-of-module
+  ansible.builtin.shell:
+    cmd: |
+      wget --no-verbose --show-progress --progress=dot:mega \
+        -O "{{ manage_isos_storage_path }}/{{ item }}.part" \
+        "{{ manage_isos_http_base_url }}/{{ item }}" \
+      && mv "{{ manage_isos_storage_path }}/{{ item }}.part" \
+            "{{ manage_isos_storage_path }}/{{ item }}" \
+      || { rm -f "{{ manage_isos_storage_path }}/{{ item }}.part"; exit 1; }
+    executable: /bin/bash
+  loop: "{{ manage_isos_http_files | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - manage_isos_http_files | default([]) | length > 0
+    - not (manage_isos_storage_path + '/' + item) is exists
+  changed_when: true
+
+# --- Direct URL downloads ---
+- name: Fire off parallel ISO downloads from URLs
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ manage_isos_storage_path }}/{{ item.filename }}"
+    mode: '0644'
+    timeout: 7200
+    checksum: "{{ item.checksum | default(omit) }}"
+  loop: "{{ manage_isos_downloads | default([]) }}"
+  loop_control:
+    label: "{{ item.filename }}"
+  when:
+    - manage_isos_downloads | default([]) | length > 0
+    - not (manage_isos_storage_path + '/' + item.filename) is exists
+  async: 7200
+  poll: 0
+  register: manage_isos_url_jobs
+  changed_when: false
+
+- name: Wait for URL ISO downloads to complete
+  ansible.builtin.async_status:
+    jid: "{{ item.ansible_job_id }}"
+  loop: "{{ manage_isos_url_jobs.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.filename }}"
+  when: item.ansible_job_id is defined
+  register: manage_isos_url_status
+  until: manage_isos_url_status.finished
+  retries: 480
+  delay: 15
+
+# --- NFS share ---
+- name: Mount NFS share for ISOs
+  ansible.posix.mount:
+    path: "{{ manage_isos_nfs_mount_point }}"
+    src: "{{ manage_isos_nfs_server }}:{{ manage_isos_nfs_export }}"
+    fstype: nfs
+    opts: "{{ manage_isos_nfs_mount_opts | default('ro,noauto') }}"
+    state: mounted
+  when:
+    - manage_isos_use_nfs | default(false)
+    - manage_isos_nfs_server is defined
+  register: manage_isos_nfs_mount
+
+- name: Copy ISOs from NFS share to local storage
+  ansible.builtin.copy:
+    src: "{{ manage_isos_nfs_mount_point }}/{{ item }}"
+    dest: "{{ manage_isos_storage_path }}/{{ item }}"
+    remote_src: true
+    mode: '0644'
+  loop: "{{ manage_isos_files_to_copy | default([]) }}"
+  when:
+    - manage_isos_use_nfs | default(false)
+    - manage_isos_files_to_copy is defined
+    - manage_isos_nfs_mount is succeeded
+
+# --- SMB/CIFS share ---
+- name: Mount SMB/CIFS share for ISOs
+  ansible.posix.mount:
+    path: "{{ manage_isos_smb_mount_point }}"
+    src: "//{{ manage_isos_smb_server }}/{{ manage_isos_smb_share }}"
+    fstype: cifs
+    opts: "{{ manage_isos_smb_mount_opts | default('ro,guest,noauto') }}"
+    state: mounted
+  when:
+    - manage_isos_use_smb | default(false)
+    - manage_isos_smb_server is defined
+  register: manage_isos_smb_mount
+
+- name: Copy ISOs from SMB share to local storage
+  ansible.builtin.copy:
+    src: "{{ manage_isos_smb_mount_point }}/{{ item }}"
+    dest: "{{ manage_isos_storage_path }}/{{ item }}"
+    remote_src: true
+    mode: '0644'
+  loop: "{{ manage_isos_files_to_copy | default([]) }}"
+  when:
+    - manage_isos_use_smb | default(false)
+    - manage_isos_files_to_copy is defined
+    - manage_isos_smb_mount is succeeded
+
+# --- Cleanup ---
+- name: List ISOs present on host
+  ansible.builtin.find:
+    paths: "{{ manage_isos_storage_path }}"
+    patterns: "*.iso"
+  register: manage_isos_existing_files
+  when: manage_isos_prune_unmanaged | default(false) | bool
+
+- name: Remove ISOs not in configured list
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ manage_isos_existing_files.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when:
+    - manage_isos_prune_unmanaged | default(false) | bool
+    - item.path | basename not in (
+        (manage_isos_http_files | default([])) +
+        (manage_isos_downloads | default([]) | map(attribute='filename') | list) +
+        (manage_isos_files_to_copy | default([]))
+      )
+
+# --- Summary ---
+- name: List available ISOs
+  ansible.builtin.find:
+    paths: "{{ manage_isos_storage_path }}"
+    patterns: "*.iso"
+  register: manage_isos_available_isos
+
+- name: Display available ISOs
+  ansible.builtin.debug:
+    msg: "Available ISOs: {{ manage_isos_available_isos.files | map(attribute='path') | map('basename') | list }}"
+  when: manage_isos_available_isos.matched > 0

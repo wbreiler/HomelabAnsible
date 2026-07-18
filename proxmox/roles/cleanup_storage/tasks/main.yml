@@ -1,0 +1,123 @@
+---
+# Detect and optionally clean up two failure modes that cause HA migration errors:
+#
+# 1. Stale ZFS datasets — exist in rpool/data but no local CT/VM owns them.
+#    Left behind by failed HA migrations. Blocks future migrations of the same VMID.
+#
+# 2. Missing ZFS datasets — CT/VM config references local-zfs:<vol> but the
+#    dataset doesn't exist on this node. Root cause of the HA migration failure.
+
+- name: Get ZFS datasets that look like CT/VM disks
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      zfs list -H -o name -t filesystem,volume \
+        "{{ cleanup_storage_zfs_pool }}/{{ cleanup_storage_zfs_dataset }}" 2>/dev/null | \
+      grep -E '/(subvol|vm)-[0-9]+-disk-[0-9]+$' | sed 's|.*/||' || true
+    executable: /bin/bash
+  changed_when: false
+  register: cleanup_storage_zfs_volumes
+
+- name: Get VMIDs of CTs and VMs on this node
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      { pct list 2>/dev/null | awk 'NR>1 {print $1}';
+        qm list 2>/dev/null | awk 'NR>1 {print $1}'; } | sort -u || true
+    executable: /bin/bash
+  changed_when: false
+  register: cleanup_storage_local_vmids
+
+- name: Compute stale ZFS datasets (present on node but not owned by any local CT/VM)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      LOCAL_VMIDS="{{ cleanup_storage_local_vmids.stdout_lines | join(' ') }}"
+      for vol in {{ cleanup_storage_zfs_volumes.stdout_lines | join(' ') }}; do
+        VMID=$(echo "$vol" | grep -oE '[0-9]+' | head -1)
+        FOUND=false
+        for id in $LOCAL_VMIDS; do
+          [ "$VMID" = "$id" ] && FOUND=true && break
+        done
+        $FOUND || echo "$vol"
+      done
+    executable: /bin/bash
+  changed_when: false
+  register: cleanup_storage_stale_raw
+  when: cleanup_storage_zfs_volumes.stdout_lines | length > 0
+
+- name: Set stale volume list
+  ansible.builtin.set_fact:
+    cleanup_storage_stale_volumes: "{{ cleanup_storage_stale_raw.stdout_lines | default([]) }}"
+
+- name: Report stale ZFS datasets
+  ansible.builtin.debug:
+    msg: >
+      [{{ inventory_hostname }}] STALE (orphaned from failed HA migration):
+      {{ cleanup_storage_stale_volumes | join(', ') }}
+  when: cleanup_storage_stale_volumes | length > 0
+
+- name: No stale ZFS datasets found
+  ansible.builtin.debug:
+    msg: "[{{ inventory_hostname }}] No stale ZFS datasets found."
+  when: cleanup_storage_stale_volumes | length == 0
+
+- name: Destroy stale ZFS datasets
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - destroy
+      - "-r"
+      - "{{ cleanup_storage_zfs_pool }}/{{ cleanup_storage_zfs_dataset }}/{{ item }}"
+  loop: "{{ cleanup_storage_stale_volumes }}"
+  when: cleanup_storage_destroy_stale | bool
+  changed_when: true
+
+- name: Report destroyed datasets
+  ansible.builtin.debug:
+    msg: "[{{ inventory_hostname }}] Destroyed: {{ cleanup_storage_stale_volumes | join(', ') }}"
+  when:
+    - cleanup_storage_destroy_stale | bool
+    - cleanup_storage_stale_volumes | length > 0
+
+- name: Check for CT configs referencing missing ZFS datasets
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      NODE=$(hostname)
+      CONF_DIR="/etc/pve/nodes/$NODE/lxc"
+      MISSING=""
+      [ -d "$CONF_DIR" ] || exit 0
+      for conf in "$CONF_DIR"/*.conf; do
+        [ -f "$conf" ] || continue
+        VMID=$(basename "$conf" .conf)
+        while IFS= read -r line; do
+          VOL=$(echo "$line" | grep -oE 'local-zfs:[^,: ]+' | cut -d: -f2 || true)
+          [ -z "$VOL" ] && continue
+          ZFS_PATH="{{ cleanup_storage_zfs_pool }}/{{ cleanup_storage_zfs_dataset }}/$VOL"
+          if ! zfs list "$ZFS_PATH" >/dev/null 2>&1; then
+            MISSING="${MISSING}CT ${VMID}: local-zfs:${VOL} -> ${ZFS_PATH} MISSING\n"
+          fi
+        done < <(grep -E '^(rootfs|mp[0-9]+):' "$conf")
+      done
+      printf "%b" "$MISSING"
+    executable: /bin/bash
+  changed_when: false
+  register: cleanup_storage_missing_datasets
+  when: cleanup_storage_report_missing_datasets | bool
+
+- name: Report CT configs with missing ZFS datasets
+  ansible.builtin.debug:
+    msg: |
+      [{{ inventory_hostname }}] CTs with missing ZFS datasets (likely need PBS restore):
+      {{ cleanup_storage_missing_datasets.stdout }}
+  when:
+    - cleanup_storage_report_missing_datasets | bool
+    - cleanup_storage_missing_datasets.stdout | length > 0
+
+- name: No missing ZFS datasets found
+  ansible.builtin.debug:
+    msg: "[{{ inventory_hostname }}] All CT ZFS dataset references are intact."
+  when:
+    - cleanup_storage_report_missing_datasets | bool
+    - cleanup_storage_missing_datasets.stdout | length == 0

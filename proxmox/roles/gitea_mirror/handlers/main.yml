@@ -1,0 +1,25 @@
+---
+- name: Reload Gitea Mirror systemd
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - daemon-reload
+  changed_when: true
+  listen: Restart Gitea Mirror
+
+- name: Restart Gitea Mirror service
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - gitea-mirror
+  changed_when: true
+  listen: Restart Gitea Mirror

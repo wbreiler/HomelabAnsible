@@ -1,0 +1,25 @@
+---
+- name: Reload Pocket ID systemd
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - daemon-reload
+  changed_when: true
+  listen: Restart Pocket ID
+
+- name: Restart Pocket ID service
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - pocketid
+  changed_when: true
+  listen: Restart Pocket ID

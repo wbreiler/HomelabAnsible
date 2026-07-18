@@ -1,0 +1,309 @@
+---
+- name: Validate Sonarr configuration
+  ansible.builtin.assert:
+    that:
+      - sonarr_version is match('^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+      - sonarr_release_url | length > 0
+      - sonarr_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - sonarr_port | int >= 1
+      - sonarr_port | int <= 65535
+    fail_msg: >-
+      Sonarr requires a pinned version with a SHA-256 checksum and a valid
+      TCP port.
+
+- name: Resolve node currently hosting Sonarr
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ sonarr_hostname }}"
+    lxc_fallback_node: "{{ sonarr_node }}"
+
+- name: Set up Sonarr LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Sonarr container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ sonarr_hostname }}"
+        lxc_vmid: "{{ sonarr_vmid }}"
+        lxc_storage: "{{ sonarr_storage }}"
+        lxc_template: "{{ sonarr_template }}"
+        lxc_cores: "{{ sonarr_cores }}"
+        lxc_memory: "{{ sonarr_memory }}"
+        lxc_disk: "{{ sonarr_disk }}"
+        lxc_bridge: "{{ sonarr_bridge }}"
+        lxc_vlan: "{{ sonarr_vlan }}"
+        lxc_tags: "{{ sonarr_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+          - curl
+          - libicu-dev
+          - sqlite3
+          - tar
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Read installed Sonarr version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            config_file="$1"
+            port="$2"
+            key="$(sed -n 's:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p' "${config_file}")"
+            curl -fsS -H "X-Api-Key: ${key}" \
+              "http://127.0.0.1:${port}/api/v3/system/status" |
+              grep -o '"version": *"[^"]*"' | head -1 | grep -o '[0-9][0-9.]*'
+          - sonarr-version
+          - "{{ sonarr_data_dir }}/config.xml"
+          - "{{ sonarr_port | string }}"
+      register: sonarr_installed_version
+      changed_when: false
+      failed_when: false
+
+    - name: Install pinned Sonarr release
+      when: >-
+        sonarr_installed_version.rc != 0 or
+        sonarr_installed_version.stdout | trim != sonarr_version
+      block:
+        - name: Download pinned Sonarr release
+          ansible.builtin.get_url:
+            url: "{{ sonarr_release_url }}"
+            dest: "/tmp/sonarr-{{ sonarr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            checksum: "{{ sonarr_release_checksum }}"
+            mode: "0600"
+
+        - name: Push Sonarr release into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/sonarr-{{ sonarr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+              - "/tmp/sonarr-{{ sonarr_version }}.tar.gz"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Deploy pinned Sonarr release
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                install_dir="$1"
+                data_dir="$2"
+                archive="$3"
+                version="$4"
+                previous_version="$5"
+                backup_root="$6"
+                port="$7"
+                new_dir="${install_dir}.ansible-new"
+                old_dir="${install_dir}.ansible-old"
+                backup_dir="${backup_root}/pre-${previous_version}-to-${version}"
+                rm -rf "${new_dir}" "${old_dir}"
+                mkdir -p "${new_dir}"
+                tar -xzf "${archive}" -C "${new_dir}" --strip-components=1
+                test -f "${new_dir}/Sonarr" && test -x "${new_dir}/Sonarr"
+                had_service=0
+                if systemctl list-unit-files sonarr.service --no-legend |
+                  grep -q '^sonarr.service'; then
+                  had_service=1
+                  systemctl stop sonarr
+                fi
+                rm -rf "${backup_dir}"
+                mkdir -p "${backup_dir}"
+                for data_file in config.xml sonarr.db sonarr.db-wal sonarr.db-shm; do
+                  if test -f "${data_dir}/${data_file}"; then
+                    cp -a "${data_dir}/${data_file}" "${backup_dir}/"
+                  fi
+                done
+                if test -d "${install_dir}"; then
+                  mv "${install_dir}" "${old_dir}"
+                fi
+                if ! mv "${new_dir}" "${install_dir}"; then
+                  test ! -d "${old_dir}" || mv "${old_dir}" "${install_dir}"
+                  test "${had_service}" -eq 0 || systemctl start sonarr
+                  exit 1
+                fi
+                if test "${had_service}" -eq 1; then
+                  if ! systemctl start sonarr; then
+                    health_failed=1
+                  else
+                    health_failed=1
+                    for attempt in $(seq 1 12); do
+                      if curl -fsS "http://127.0.0.1:${port}/ping" >/dev/null; then
+                        health_failed=0
+                        break
+                      fi
+                      sleep 5
+                    done
+                  fi
+                  if test "${health_failed}" -ne 0; then
+                    systemctl stop sonarr || true
+                    rm -rf "${install_dir}"
+                    test ! -d "${old_dir}" || mv "${old_dir}" "${install_dir}"
+                    for data_file in config.xml sonarr.db sonarr.db-wal sonarr.db-shm; do
+                      if test -f "${backup_dir}/${data_file}"; then
+                        cp -a "${backup_dir}/${data_file}" "${data_dir}/${data_file}"
+                      fi
+                    done
+                    systemctl start sonarr
+                    exit 1
+                  fi
+                fi
+                rm -rf "${old_dir}" "${archive}"
+              - sonarr-deploy
+              - "{{ sonarr_install_dir }}"
+              - "{{ sonarr_data_dir }}"
+              - "/tmp/sonarr-{{ sonarr_version }}.tar.gz"
+              - "{{ sonarr_version }}"
+              - "{{ sonarr_installed_version.stdout | trim | default('none', true) }}"
+              - "{{ sonarr_backup_dir }}"
+              - "{{ sonarr_port | string }}"
+          changed_when: true
+          notify: Restart Sonarr
+
+        - name: Remove Sonarr release from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/sonarr-{{ sonarr_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            state: absent
+
+    - name: Check for legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /usr/bin/update
+      register: sonarr_legacy_updater
+      changed_when: false
+      failed_when: sonarr_legacy_updater.rc not in [0, 1]
+
+    - name: Remove legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /usr/bin/update
+      when: sonarr_legacy_updater.rc == 0
+      changed_when: true
+
+    - name: Render Sonarr service
+      ansible.builtin.set_fact:
+        sonarr_service: "{{ lookup('template', 'sonarr.service.j2') }}"
+
+    - name: Read installed Sonarr service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/sonarr.service
+      register: sonarr_service_current
+      changed_when: false
+      failed_when: sonarr_service_current.rc not in [0, 1]
+
+    - name: Install Sonarr service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/sonarr.service
+        stdin: "{{ sonarr_service }}"
+        stdin_add_newline: false
+      when: >-
+        sonarr_service_current.rc != 0 or
+        sonarr_service_current.stdout != sonarr_service | trim
+      changed_when: true
+      notify: Restart Sonarr
+
+    - name: Enable and start Sonarr
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - sonarr
+      register: sonarr_service_enable
+      changed_when: "'Created symlink' in sonarr_service_enable.stderr"
+
+    - name: Apply Sonarr changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Sonarr service is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - sonarr
+      changed_when: false
+
+    - name: Verify Sonarr web interface
+      ansible.builtin.uri:
+        url: "{{ sonarr_health_url }}"
+        status_code: 200
+        return_content: false
+      register: sonarr_health
+      retries: 12
+      delay: 5
+      until: sonarr_health.status == 200
+
+    - name: Verify Sonarr application version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            config_file="$1"
+            port="$2"
+            key="$(sed -n 's:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p' "${config_file}")"
+            curl -fsS -H "X-Api-Key: ${key}" \
+              "http://127.0.0.1:${port}/api/v3/system/status" |
+              grep -o '"version": *"[^"]*"' | head -1 | grep -o '[0-9][0-9.]*'
+          - sonarr-version
+          - "{{ sonarr_data_dir }}/config.xml"
+          - "{{ sonarr_port | string }}"
+      register: sonarr_version_check
+      changed_when: false
+      retries: 6
+      delay: 5
+      until: sonarr_version_check.rc == 0
+      failed_when: sonarr_version_check.stdout | trim != sonarr_version

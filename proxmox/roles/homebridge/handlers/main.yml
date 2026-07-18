@@ -1,0 +1,12 @@
+---
+- name: Restart Homebridge
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - homebridge
+  changed_when: true

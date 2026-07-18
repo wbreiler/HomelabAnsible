@@ -1,0 +1,42 @@
+---
+- name: "Check Spoolman environment setting - {{ spoolman_env_setting.key }}"
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - grep
+      - -Fqx
+      - "{{ spoolman_env_setting.key }}={{ spoolman_env_setting.value }}"
+      - "{{ spoolman_install_dir }}/.env"
+  register: spoolman_env_setting_check
+  changed_when: false
+  failed_when: spoolman_env_setting_check.rc not in [0, 1]
+
+- name: "Configure Spoolman environment setting - {{ spoolman_env_setting.key }}"
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - bash
+      - -c
+      - |
+        set -eu
+        file="$1"
+        key="$2"
+        value="$3"
+        if grep -q "^${key}=" "${file}"; then
+          sed -i "s|^${key}=.*|${key}=${value}|" "${file}"
+        else
+          printf '%s=%s\n' "${key}" "${value}" >> "${file}"
+        fi
+      - spoolman-env
+      - "{{ spoolman_install_dir }}/.env"
+      - "{{ spoolman_env_setting.key }}"
+      - "{{ spoolman_env_setting.value }}"
+  when: spoolman_env_setting_check.rc == 1
+  changed_when: true
+  notify: Restart Spoolman

@@ -1,0 +1,20 @@
+---
+stash_node: "nyx"
+stash_vmid: ""  # auto-assign next available ID if empty
+stash_hostname: "stash"
+stash_storage: "local-zfs"
+stash_template: ""  # auto-detect latest debian-1[23]-standard if empty
+stash_cores: 2
+stash_memory: 2048
+stash_disk: 8
+stash_bridge: "vmbr0"
+stash_vlan: 40
+
+stash_nfs_server: "10.10.20.3"
+stash_nfs_export: "/mnt/pool/vault"
+stash_nfs_mountpoint: "/mnt/vault"
+
+stash_port: 9999
+# pinned release — bump deliberately after reviewing upstream changes
+stash_version: "v0.31.1"
+stash_binary_url: "https://github.com/stashapp/stash/releases/download/{{ stash_version }}/stash-linux"

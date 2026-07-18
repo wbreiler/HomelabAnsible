@@ -1,0 +1,28 @@
+---
+pocket_id_node: "nyx"
+pocket_id_vmid: "100"
+pocket_id_hostname: "pocketid-nash"
+pocket_id_storage: "local-zfs"
+pocket_id_template: ""  # auto-detect latest debian-1[23]-standard if empty
+pocket_id_cores: 2
+pocket_id_memory: 2048
+pocket_id_disk: 4
+pocket_id_bridge: "vmbr0"
+pocket_id_vlan: 40
+pocket_id_tags:
+  - "identity-provider"
+
+pocket_id_version: "2.11.0"
+pocket_id_release_url: >-
+  https://github.com/pocket-id/pocket-id/releases/download/v{{ pocket_id_version
+  }}/pocket-id_linux_amd64
+pocket_id_release_checksum: "sha256:ae15e3c71770bf59cae4935d328692bbb6a336008e149f648a965644d0300b7f"
+pocket_id_install_dir: "/opt/pocket-id"
+pocket_id_backup_dir: "/opt/pocket-id-backups"
+
+# Only used when creating the environment file from scratch on a fresh
+# install; an existing .env (including its ENCRYPTION_KEY) is preserved.
+pocket_id_app_url: "https://pocketid.local"
+
+pocket_id_port: 1411
+pocket_id_health_url: "http://10.10.40.236:{{ pocket_id_port }}"

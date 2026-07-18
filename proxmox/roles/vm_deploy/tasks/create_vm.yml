@@ -1,0 +1,62 @@
+---
+- name: "Resolve node and storage for {{ item.name }}"
+  ansible.builtin.set_fact:
+    vm_deploy_resolved_vmid: "{{ vm_deploy_free_vmids[vm_deploy_vm_idx] }}"
+    vm_deploy_resolved_node: >-
+      {{ item.node | default(
+           (vm_deploy_node == 'random') | ternary(
+             groups['proxmox_cluster'] | random,
+             vm_deploy_node
+           )
+         ) }}
+    vm_deploy_resolved_storage: >-
+      {{ item.storage | default(
+           (vm_deploy_storage == 'random') | ternary(
+             vm_deploy_available_storages | random,
+             vm_deploy_storage
+           )
+         ) }}
+
+- name: "Create VM {{ item.name }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+
+      ARGS=(
+        {{ vm_deploy_resolved_vmid }}
+        --name "{{ item.name }}"
+        --memory {{ item.memory | default(2048) }}
+        --cores {{ item.cores | default(2) }}
+        --machine {{ item.machine | default('q35') }}
+        --bios {{ item.bios | default('seabios') }}
+        --ostype {{ item.ostype }}
+        --net0 "{{ item.net_model | default('virtio') }},bridge={{ item.bridge | default(vm_deploy_network_bridge) }}"
+      {% if item.disk_bus | default('virtio') == 'ide' %}
+        --ide0 "{{ vm_deploy_resolved_storage }}:{{ item.disk_size | default(20) }}"
+        --ide2 "{{ vm_deploy_iso_storage }}:iso/{{ item.iso }},media=cdrom"
+        --boot "order=ide2;ide0"
+      {% elif item.disk_bus | default('virtio') == 'scsi' %}
+        --scsihw virtio-scsi-pci
+        --scsi0 "{{ vm_deploy_resolved_storage }}:{{ item.disk_size | default(20) }}"
+        --ide2 "{{ vm_deploy_iso_storage }}:iso/{{ item.iso }},media=cdrom"
+        --boot "order=ide2;scsi0"
+      {% else %}
+        --virtio0 "{{ vm_deploy_resolved_storage }}:{{ item.disk_size | default(20) }}"
+        --ide2 "{{ vm_deploy_iso_storage }}:iso/{{ item.iso }},media=cdrom"
+        --boot "order=ide2;virtio0"
+      {% endif %}
+      {% if item.bios | default('seabios') == 'ovmf' %}
+        --efidisk0 "{{ vm_deploy_resolved_storage }}:0,efitype=4m,pre-enrolled-keys=0"
+      {% endif %}
+      {% if item.tpm | default(false) %}
+        --tpmstate0 "{{ vm_deploy_resolved_storage }}:0,version=v2.0"
+      {% endif %}
+      )
+
+      qm create "${ARGS[@]}"
+      {% if vm_deploy_start_after_create | bool %}
+      qm start {{ vm_deploy_resolved_vmid }}
+      {% endif %}
+    executable: /bin/bash
+  delegate_to: "{{ vm_deploy_resolved_node }}"
+  changed_when: true

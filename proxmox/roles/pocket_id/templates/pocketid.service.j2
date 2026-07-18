@@ -1,0 +1,16 @@
+[Unit]
+Description=Pocket ID Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory={{ pocket_id_install_dir }}
+EnvironmentFile={{ pocket_id_install_dir }}/.env
+ExecStart={{ pocket_id_install_dir }}/pocket-id
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

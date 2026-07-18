@@ -1,0 +1,121 @@
+---
+- name: Resolve node currently hosting Discoverr Bot
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ discoverr_bot_hostname }}"
+    lxc_fallback_node: "{{ discoverr_bot_node }}"
+
+- name: Set up Discoverr Bot LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap LXC container  # ponytail: shared bootstrap at tasks/create_lxc.yml
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ discoverr_bot_hostname }}"
+        lxc_vmid: "{{ discoverr_bot_vmid }}"
+        lxc_storage: "{{ discoverr_bot_storage }}"
+        lxc_template: "{{ discoverr_bot_template }}"
+        lxc_cores: "{{ discoverr_bot_cores }}"
+        lxc_memory: "{{ discoverr_bot_memory }}"
+        lxc_disk: "{{ discoverr_bot_disk }}"
+        lxc_bridge: "{{ discoverr_bot_bridge }}"
+        lxc_vlan: "{{ discoverr_bot_vlan }}"
+        lxc_packages:
+          - git
+          - nodejs
+          - npm
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Clone and pin Discoverr Bot repo to pinned commit
+      when: discoverr_bot_repo_version
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ lxc_resolved_vmid }} --
+          bash -c "if [ ! -d {{ discoverr_bot_dir }}/.git ]; then
+          git clone -q {{ discoverr_bot_repo_url }} {{ discoverr_bot_dir }}; fi &&
+          git -C {{ discoverr_bot_dir }} fetch -q &&
+          if git -C {{ discoverr_bot_dir }} diff --quiet HEAD {{ discoverr_bot_repo_version }} 2>/dev/null; then
+          echo unchanged; else
+          git -C {{ discoverr_bot_dir }} checkout -q {{ discoverr_bot_repo_version }} &&
+          echo changed; fi"
+      register: discoverr_bot_clone_pinned
+      changed_when: "'changed' in discoverr_bot_clone_pinned.stdout"
+
+    - name: Clone or update Discoverr Bot repo (latest main)
+      when: not discoverr_bot_repo_version
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ lxc_resolved_vmid }} --
+          bash -c "[ -d {{ discoverr_bot_dir }}/.git ] &&
+          git -C {{ discoverr_bot_dir }} pull --ff-only ||
+          git clone {{ discoverr_bot_repo_url }} {{ discoverr_bot_dir }}"
+      register: discoverr_bot_clone_latest
+      changed_when: "'Already up to date' not in discoverr_bot_clone_latest.stdout"
+
+    - name: Install npm dependencies
+      ansible.builtin.command:
+        cmd: pct exec {{ lxc_resolved_vmid }} -- npm ci --omit=dev --prefix {{ discoverr_bot_dir }}
+      changed_when: true
+
+    - name: Patch cron timezone in bot.js  # ponytail: sed pin on upstream's hardcoded timezone string, re-check if upstream reworks scheduling
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ lxc_resolved_vmid }} --
+          bash -c "grep -q 'timezone: \"{{ discoverr_bot_timezone }}\"' {{ discoverr_bot_dir }}/bot.js &&
+          echo unchanged ||
+          (sed -i 's#timezone: \"[^\"]*\"#timezone: \"{{ discoverr_bot_timezone }}\"#' {{ discoverr_bot_dir }}/bot.js && echo changed)"
+      register: discoverr_bot_tz_patch
+      changed_when: "'changed' in discoverr_bot_tz_patch.stdout"
+
+    - name: Template .env file to host tmp
+      ansible.builtin.template:
+        src: env.j2
+        dest: /tmp/discoverr-bot-{{ lxc_resolved_vmid }}.env
+        mode: '0600'
+      no_log: true
+
+    - name: Push .env into container
+      ansible.builtin.command:
+        cmd: >
+          pct push {{ lxc_resolved_vmid }}
+          /tmp/discoverr-bot-{{ lxc_resolved_vmid }}.env
+          {{ discoverr_bot_dir }}/.env
+          --perms 600
+      changed_when: true
+      no_log: true
+
+    - name: Remove temp .env from host
+      ansible.builtin.file:
+        path: /tmp/discoverr-bot-{{ lxc_resolved_vmid }}.env
+        state: absent
+
+    - name: Template Discoverr Bot service file to host tmp
+      ansible.builtin.template:
+        src: discoverr-bot.service.j2
+        dest: /tmp/discoverr-bot-{{ lxc_resolved_vmid }}.service
+        mode: '0644'
+
+    - name: Push service file into container
+      ansible.builtin.command:
+        cmd: >
+          pct push {{ lxc_resolved_vmid }}
+          /tmp/discoverr-bot-{{ lxc_resolved_vmid }}.service
+          /etc/systemd/system/discoverr-bot.service
+          --perms 644
+      changed_when: true
+
+    - name: Remove temp service file from host
+      ansible.builtin.file:
+        path: /tmp/discoverr-bot-{{ lxc_resolved_vmid }}.service
+        state: absent
+
+    - name: Enable and restart Discoverr Bot service
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ lxc_resolved_vmid }} --
+          bash -c "systemctl daemon-reload &&
+          systemctl enable discoverr-bot &&
+          systemctl restart discoverr-bot"
+      changed_when: true

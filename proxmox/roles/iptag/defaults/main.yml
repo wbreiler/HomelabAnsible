@@ -1,0 +1,18 @@
+---
+# Tag format:
+#   1 = last_two_octets (e.g. 30.2)
+#   2 = last_octet      (e.g. 2)
+#   3 = full            (e.g. 10.10.30.2)
+iptag_tag_format_choice: 2
+
+# How often (in seconds) to check and update tags (300-7200).
+iptag_loop_interval: 300
+
+# Only addresses in these networks are eligible for IP tags.
+iptag_allowed_cidrs:
+  - 192.168.0.0/16
+  - 10.0.0.0/8
+  - 100.64.0.0/10
+
+iptag_debug: false
+iptag_command_timeout: 8

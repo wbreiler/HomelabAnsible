@@ -1,0 +1,12 @@
+---
+# ZFS pool and dataset path where CT/VM disks live
+cleanup_storage_zfs_pool: "rpool"
+cleanup_storage_zfs_dataset: "data"
+
+# Report CT configs that reference ZFS datasets which don't exist on this node
+cleanup_storage_report_missing_datasets: true
+
+# Destroy ZFS datasets that exist on this node but aren't owned by any local CT/VM.
+# These are left over from failed HA migrations (the scenario described in the error).
+# Default false = dry-run: report stale volumes but do not remove them.
+cleanup_storage_destroy_stale: false

@@ -1,0 +1,90 @@
+---
+- name: Validate IP-Tag configuration
+  ansible.builtin.assert:
+    that:
+      - iptag_tag_format_choice | int in [1, 2, 3]
+      - iptag_loop_interval | int >= 300
+      - iptag_loop_interval | int <= 7200
+      - iptag_allowed_cidrs | length > 0
+      - iptag_command_timeout | int > 0
+    fail_msg: >-
+      IP-Tag requires a format choice from 1 to 3, an interval from 300 to
+      7200 seconds, at least one allowed CIDR, and a positive command timeout.
+
+- name: Install IP-Tag runtime dependencies
+  ansible.builtin.apt:
+    name:
+      - iproute2
+      - python3
+    state: present
+
+- name: Create IP-Tag installation directory
+  ansible.builtin.file:
+    path: /opt/iptag
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install repository-owned IP-Tag runtime
+  ansible.builtin.copy:
+    src: iptag.py
+    dest: /opt/iptag/iptag.py
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart IP-Tag
+
+- name: Configure IP-Tag
+  ansible.builtin.template:
+    src: iptag.conf.j2
+    dest: /opt/iptag/iptag.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart IP-Tag
+
+- name: Install IP-Tag manual run command
+  ansible.builtin.copy:
+    src: iptag-run
+    dest: /usr/local/bin/iptag-run
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install IP-Tag systemd service
+  ansible.builtin.template:
+    src: iptag.service.j2
+    dest: /etc/systemd/system/iptag.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart IP-Tag
+
+- name: Remove legacy remote-installer runtime
+  ansible.builtin.file:
+    path: /opt/iptag/iptag
+    state: absent
+  notify: Restart IP-Tag
+
+- name: Remove legacy systemd unit
+  ansible.builtin.file:
+    path: /lib/systemd/system/iptag.service
+    state: absent
+  notify: Restart IP-Tag
+
+- name: Validate installed IP-Tag configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - /opt/iptag/iptag.py
+      - --check-config
+  changed_when: false
+
+- name: Ensure IP-Tag service is enabled and started
+  ansible.builtin.systemd_service:
+    name: iptag
+    state: started
+    enabled: true
+    daemon_reload: true

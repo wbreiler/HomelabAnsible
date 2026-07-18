@@ -1,0 +1,10 @@
+---
+# Storage location for templates
+template_storage: "local"  # noqa: var-naming[no-role-prefix]
+
+# Template name prefixes to match — always downloads the latest available version
+lxc_templates:  # noqa: var-naming[no-role-prefix]
+  - debian-12-standard
+  - debian-13-standard
+  - ubuntu-24.04-standard
+  - alpine-3.23-default

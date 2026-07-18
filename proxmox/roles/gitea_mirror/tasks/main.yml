@@ -1,0 +1,470 @@
+---
+- name: Validate Gitea Mirror configuration
+  ansible.builtin.assert:
+    that:
+      - gitea_mirror_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - gitea_mirror_release_url | length > 0
+      - gitea_mirror_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - gitea_mirror_bun_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - gitea_mirror_bun_url | length > 0
+      - gitea_mirror_bun_checksum is match('^sha256:[0-9a-f]{64}$')
+      - gitea_mirror_port | int >= 1
+      - gitea_mirror_port | int <= 65535
+      - gitea_mirror_bind_host | length > 0
+      - gitea_mirror_auth_url | length > 0
+    fail_msg: >-
+      Gitea Mirror requires pinned application and Bun versions with SHA-256
+      checksums, a bind address, an authentication URL, and a valid TCP port.
+
+- name: Resolve node currently hosting Gitea Mirror
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ gitea_mirror_hostname }}"
+    lxc_fallback_node: "{{ gitea_mirror_node }}"
+
+- name: Set up Gitea Mirror LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Gitea Mirror container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ gitea_mirror_hostname }}"
+        lxc_vmid: "{{ gitea_mirror_vmid }}"
+        lxc_storage: "{{ gitea_mirror_storage }}"
+        lxc_template: "{{ gitea_mirror_template }}"
+        lxc_cores: "{{ gitea_mirror_cores }}"
+        lxc_memory: "{{ gitea_mirror_memory }}"
+        lxc_disk: "{{ gitea_mirror_disk }}"
+        lxc_bridge: "{{ gitea_mirror_bridge }}"
+        lxc_vlan: "{{ gitea_mirror_vlan }}"
+        lxc_tags: "{{ gitea_mirror_tags | join(';') }}"
+        lxc_packages:
+          - build-essential
+          - ca-certificates
+          - curl
+          - git
+          - openssl
+          - sqlite3
+          - unzip
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Read installed Bun version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - /usr/local/bin/bun
+          - --version
+      register: gitea_mirror_bun_installed
+      changed_when: false
+      failed_when: gitea_mirror_bun_installed.rc not in [0, 1]
+
+    - name: Install pinned Bun runtime
+      when: >-
+        gitea_mirror_bun_installed.rc != 0 or
+        gitea_mirror_bun_installed.stdout | trim != gitea_mirror_bun_version
+      block:
+        - name: Download pinned Bun runtime
+          ansible.builtin.get_url:
+            url: "{{ gitea_mirror_bun_url }}"
+            dest: "/tmp/gitea-mirror-bun-{{ gitea_mirror_bun_version }}-{{ lxc_resolved_vmid }}.zip"
+            checksum: "{{ gitea_mirror_bun_checksum }}"
+            mode: "0600"
+
+        - name: Push Bun runtime into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/gitea-mirror-bun-{{ gitea_mirror_bun_version }}-{{ lxc_resolved_vmid }}.zip"
+              - "/tmp/gitea-mirror-bun-{{ gitea_mirror_bun_version }}.zip"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Deploy pinned Bun runtime
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                archive="$1"
+                work_dir="$(mktemp -d)"
+                trap 'rm -rf "${work_dir}" "${archive}"' EXIT
+                unzip -q "${archive}" -d "${work_dir}"
+                install -d -m 0755 /opt/bun/bin
+                install -m 0755 "${work_dir}/bun-linux-x64/bun" /opt/bun/bin/bun
+                ln -sfn /opt/bun/bin/bun /usr/local/bin/bun
+                ln -sfn /opt/bun/bin/bun /usr/local/bin/bunx
+              - gitea-mirror-bun
+              - "/tmp/gitea-mirror-bun-{{ gitea_mirror_bun_version }}.zip"
+          changed_when: true
+
+        - name: Remove Bun runtime from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/gitea-mirror-bun-{{ gitea_mirror_bun_version }}-{{ lxc_resolved_vmid }}.zip"
+            state: absent
+
+    - name: Check Gitea Mirror environment file
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -f
+          - "{{ gitea_mirror_env_file }}"
+      register: gitea_mirror_env_file_check
+      changed_when: false
+      failed_when: gitea_mirror_env_file_check.rc not in [0, 1]
+
+    - name: Create initial Gitea Mirror environment
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            umask 077
+            env_file="$1"
+            bind_host="$2"
+            port="$3"
+            auth_url="$4"
+            version="$5"
+            secret="$(openssl rand -base64 32)"
+            {
+              printf '%s\n' 'NODE_ENV=production'
+              printf 'HOST=%s\n' "${bind_host}"
+              printf 'PORT=%s\n' "${port}"
+              printf '%s\n' 'DATABASE_URL=sqlite://data/gitea-mirror.db'
+              printf 'BETTER_AUTH_URL=%s\n' "${auth_url}"
+              printf 'BETTER_AUTH_SECRET=%s\n' "${secret}"
+              printf 'npm_package_version=%s\n' "${version}"
+            } > "${env_file}"
+          - gitea-mirror-env
+          - "{{ gitea_mirror_env_file }}"
+          - "{{ gitea_mirror_bind_host }}"
+          - "{{ gitea_mirror_port | string }}"
+          - "{{ gitea_mirror_auth_url }}"
+          - "{{ gitea_mirror_version }}"
+      when: gitea_mirror_env_file_check.rc == 1
+      changed_when: true
+      no_log: true
+
+    - name: Read installed Gitea Mirror version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - /usr/local/bin/bun
+          - -e
+          - "console.log(require('{{ gitea_mirror_install_dir }}/package.json').version)"
+      register: gitea_mirror_installed_version
+      changed_when: false
+      failed_when: gitea_mirror_installed_version.rc not in [0, 1]
+
+    - name: Refuse destructive Gitea Mirror 2.x migration
+      ansible.builtin.assert:
+        that:
+          - not (gitea_mirror_installed_version.stdout | trim).startswith('2.')
+        fail_msg: >-
+          Gitea Mirror 2.x upgrades clear application configuration. Back up
+          and migrate the installation manually before enabling this role.
+      when: gitea_mirror_installed_version.rc == 0
+
+    - name: Check Gitea Mirror SQLite database
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -f
+          - "{{ gitea_mirror_install_dir }}/data/gitea-mirror.db"
+      register: gitea_mirror_sqlite_database
+      changed_when: false
+      failed_when: gitea_mirror_sqlite_database.rc not in [0, 1]
+
+    - name: Verify Gitea Mirror SQLite database integrity
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - sqlite3
+          - "{{ gitea_mirror_install_dir }}/data/gitea-mirror.db"
+          - "PRAGMA integrity_check;"
+      register: gitea_mirror_sqlite_integrity
+      when: gitea_mirror_sqlite_database.rc == 0
+      changed_when: false
+      failed_when: gitea_mirror_sqlite_integrity.stdout | trim != 'ok'
+
+    - name: Install pinned Gitea Mirror release
+      when: >-
+        gitea_mirror_installed_version.rc != 0 or
+        gitea_mirror_installed_version.stdout | trim != gitea_mirror_version
+      block:
+        - name: Download pinned Gitea Mirror release
+          ansible.builtin.get_url:
+            url: "{{ gitea_mirror_release_url }}"
+            dest: "/tmp/gitea-mirror-{{ gitea_mirror_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            checksum: "{{ gitea_mirror_release_checksum }}"
+            mode: "0600"
+
+        - name: Push Gitea Mirror release into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/gitea-mirror-{{ gitea_mirror_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+              - "/tmp/gitea-mirror-{{ gitea_mirror_version }}.tar.gz"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Build and deploy pinned Gitea Mirror release
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                install_dir="$1"
+                env_file="$2"
+                archive="$3"
+                version="$4"
+                previous_version="$5"
+                backup_root="$6"
+                port="$7"
+                new_dir="${install_dir}.ansible-new"
+                old_dir="${install_dir}.ansible-old"
+                backup_dir="${backup_root}/pre-${previous_version}-to-${version}"
+                rm -rf "${new_dir}" "${old_dir}"
+                mkdir -p "${new_dir}"
+                tar -xzf "${archive}" -C "${new_dir}" --strip-components=1
+                (
+                  cd "${new_dir}"
+                  /usr/local/bin/bun install --frozen-lockfile
+                  /usr/local/bin/bun run manage-db init
+                  /usr/local/bin/bun run build
+                )
+                test -f "${new_dir}/dist/server/entry.mjs"
+                had_service=0
+                if systemctl list-unit-files gitea-mirror.service --no-legend |
+                  grep -q '^gitea-mirror.service'; then
+                  had_service=1
+                  systemctl stop gitea-mirror
+                fi
+                rm -rf "${backup_dir}"
+                mkdir -p "${backup_dir}"
+                if test -d "${install_dir}/data"; then
+                  cp -a "${install_dir}/data" "${backup_dir}/data"
+                  rm -rf "${new_dir}/data"
+                  cp -a "${install_dir}/data" "${new_dir}/data"
+                fi
+                cp -a "${env_file}" "${backup_dir}/gitea-mirror.env"
+                if test -d "${install_dir}"; then
+                  mv "${install_dir}" "${old_dir}"
+                fi
+                if ! mv "${new_dir}" "${install_dir}"; then
+                  test ! -d "${old_dir}" || mv "${old_dir}" "${install_dir}"
+                  test "${had_service}" -eq 0 || systemctl start gitea-mirror
+                  exit 1
+                fi
+                if grep -q '^npm_package_version=' "${env_file}"; then
+                  sed -i "s|^npm_package_version=.*|npm_package_version=${version}|" "${env_file}"
+                else
+                  printf 'npm_package_version=%s\n' "${version}" >> "${env_file}"
+                fi
+                if test "${had_service}" -eq 1; then
+                  if ! systemctl start gitea-mirror; then
+                    health_failed=1
+                  else
+                    health_failed=1
+                    for attempt in $(seq 1 12); do
+                      if curl -fsS "http://127.0.0.1:${port}/" >/dev/null; then
+                        health_failed=0
+                        break
+                      fi
+                      sleep 5
+                    done
+                  fi
+                  if test "${health_failed}" -ne 0; then
+                    systemctl stop gitea-mirror || true
+                    rm -rf "${install_dir}"
+                    test ! -d "${old_dir}" || mv "${old_dir}" "${install_dir}"
+                    cp -a "${backup_dir}/gitea-mirror.env" "${env_file}"
+                    systemctl start gitea-mirror
+                    exit 1
+                  fi
+                fi
+                rm -rf "${old_dir}" "${archive}"
+              - gitea-mirror-deploy
+              - "{{ gitea_mirror_install_dir }}"
+              - "{{ gitea_mirror_env_file }}"
+              - "/tmp/gitea-mirror-{{ gitea_mirror_version }}.tar.gz"
+              - "{{ gitea_mirror_version }}"
+              - "{{ gitea_mirror_installed_version.stdout | trim | default('none', true) }}"
+              - "{{ gitea_mirror_backup_dir }}"
+              - "{{ gitea_mirror_port | string }}"
+          changed_when: true
+          notify: Restart Gitea Mirror
+
+        - name: Remove Gitea Mirror release from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/gitea-mirror-{{ gitea_mirror_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            state: absent
+
+    - name: Configure Gitea Mirror environment
+      ansible.builtin.include_tasks: configure_env.yml
+      loop:
+        - key: NODE_ENV
+          value: production
+        - key: HOST
+          value: "{{ gitea_mirror_bind_host }}"
+        - key: PORT
+          value: "{{ gitea_mirror_port | string }}"
+        - key: npm_package_version
+          value: "{{ gitea_mirror_version }}"
+      loop_control:
+        loop_var: gitea_mirror_env_setting
+        label: "{{ gitea_mirror_env_setting.key }}"
+
+    - name: Check for legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -e
+          - /usr/bin/update
+      register: gitea_mirror_legacy_updater
+      changed_when: false
+      failed_when: gitea_mirror_legacy_updater.rc not in [0, 1]
+
+    - name: Remove legacy remote updater
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - rm
+          - -f
+          - /usr/bin/update
+      when: gitea_mirror_legacy_updater.rc == 0
+      changed_when: true
+
+    - name: Render Gitea Mirror service
+      ansible.builtin.set_fact:
+        gitea_mirror_service: "{{ lookup('template', 'gitea-mirror.service.j2') }}"
+
+    - name: Read installed Gitea Mirror service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/gitea-mirror.service
+      register: gitea_mirror_service_current
+      changed_when: false
+      failed_when: gitea_mirror_service_current.rc not in [0, 1]
+
+    - name: Install Gitea Mirror service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/gitea-mirror.service
+        stdin: "{{ gitea_mirror_service }}"
+        stdin_add_newline: false
+      when: >-
+        gitea_mirror_service_current.rc != 0 or
+        gitea_mirror_service_current.stdout != gitea_mirror_service | trim
+      changed_when: true
+      notify: Restart Gitea Mirror
+
+    - name: Enable and start Gitea Mirror
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - gitea-mirror
+      register: gitea_mirror_service_enable
+      changed_when: "'Created symlink' in gitea_mirror_service_enable.stderr"
+
+    - name: Apply Gitea Mirror changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Gitea Mirror service is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - gitea-mirror
+      changed_when: false
+
+    - name: Verify Gitea Mirror web interface
+      ansible.builtin.uri:
+        url: "{{ gitea_mirror_health_url }}"
+        status_code: 200
+        return_content: false
+      register: gitea_mirror_health
+      retries: 12
+      delay: 5
+      until: gitea_mirror_health.status == 200
+
+    - name: Verify Gitea Mirror application version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - /usr/local/bin/bun
+          - -e
+          - "console.log(require('{{ gitea_mirror_install_dir }}/package.json').version)"
+      register: gitea_mirror_version_check
+      changed_when: false
+      failed_when: gitea_mirror_version_check.stdout | trim != gitea_mirror_version

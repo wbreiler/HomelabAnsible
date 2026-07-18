@@ -1,0 +1,29 @@
+---
+# Default variables for PBS restore operations
+
+# Target node for restore operations
+pbs_restore_node: "pve-nash-1"
+
+# Default storage for restored containers
+pbs_restore_storage: "local-zfs"
+
+# PBS storage ID (should match pbs_storage role config)
+# pbs_storage_id is typically defined in group_vars
+
+# Containers to restore from PBS
+# Each entry requires:
+#   - vmid: Source VMID to restore
+# Optional:
+#   - target_vmid: Restore to different VMID (defaults to source vmid)
+#   - target_storage: Storage location (defaults to pbs_restore_storage)
+#   - backup_id: Specific backup snapshot (defaults to latest)
+#   - start_after_restore: Start container after restore (default: false)
+#   - force: Overwrite existing container (default: false)
+#
+# Example:
+# pbs_restore_containers:
+#   - vmid: 100
+#   - vmid: 101
+#     target_vmid: 201
+#     target_storage: "local-zfs"
+#     start_after_restore: true

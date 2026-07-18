@@ -1,0 +1,14 @@
+[Unit]
+Description=Discoverr Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{ discoverr_bot_dir }}
+ExecStart=/usr/bin/node bot.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
