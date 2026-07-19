@@ -16,10 +16,7 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
 ## Initial Setup
 
 ```bash
-# Install Ansible if not already present
-pip install ansible
-
-# Install remaining Python dependencies
+# Install the tested ansible-core and Python dependency ranges
 pip install -r requirements.txt
 
 # Install required Ansible collections

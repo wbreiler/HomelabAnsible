@@ -1,7 +1,7 @@
 ---
 # Handlers for cluster setup
 - name: Restart corosync
-  ansible.builtin.systemd:
+  ansible.builtin.systemd_service:
     name: corosync
     state: restarted
   listen: restart corosync

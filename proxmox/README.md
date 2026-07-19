@@ -25,10 +25,11 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
 
 ## Prerequisites
 
-1. **Ansible** installed on your control machine:
+1. **Controller dependencies** installed on your control machine:
 
    ```bash
-   pip3 install ansible
+   python3 -m pip install -r requirements.txt
+   ansible-galaxy collection install -r requirements.yml
    ```
 
 2. **SSH access** to all Proxmox nodes using `~/.ssh/cluster-nash` (configured in `ansible.cfg`)
