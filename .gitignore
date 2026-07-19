@@ -22,7 +22,12 @@
 /pbs/.vault_pass
 
 /minecraft/ansible/vault.yml
+/minecraft/ansible/servers.yml
+/minecraft/ansible/group_vars/all.yml
 
+/truenas/group_vars/truenas.yml
+/truenas/inventory/hosts.yml
+/truenas/inventory/host_vars/*/desired_state.yml
 /truenas/inventory/host_vars/*/vault.yml
 /truenas/inventory/**/secrets.*
 /truenas/vault-password*

@@ -47,6 +47,10 @@ and only `.example` templates are tracked:
 - `proxmox/inventory.yml`, `proxmox/group_vars/proxmox_cluster.yml`,
   `proxmox/host_vars/*.yml` (except `example.yml`), `proxmox/files/gallery-dl-cookies.txt` — gitignored
 - `pbs/inventory.yml`, `pbs/group_vars/pbs_servers.yml`, `.vault_pass` — gitignored
+- `minecraft/ansible/servers.yml`, `group_vars/all.yml`, and `vault.yml` —
+  gitignored; copy their tracked examples first
+- `truenas/inventory/hosts.yml`, `group_vars/truenas.yml`, and host-specific
+  desired-state/Vault files — gitignored; copy their tracked examples first
 - `truenas/artifacts/*` (raw discovery output, config backups) and
   `truenas/inventory/host_vars/**/vault.yml` — gitignored; its tracked
   inventory/desired-state files are deliberately sanitized (no hashes/secrets)
