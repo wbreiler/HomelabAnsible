@@ -193,166 +193,16 @@
     mode: "0640"
 
 ###############################################################################
-# 6. Modrinth modpack download
+# 6. Modpack download
+# Use the same transactional updater for initial provisioning and later timer
+# runs so there is only one staging, validation, swap, and rollback path.
 ###############################################################################
 
-- name: Query Modrinth API for latest release version
-  ansible.builtin.uri:
-    url: "https://api.modrinth.com/v2/project/{{ modpack_slug }}/version?game_versions=%5B%22{{ mc_version }}%22%5D&loaders=%5B%22{{ loader }}%22%5D"
-    method: GET
-    return_content: true
-    headers:
-      User-Agent: "MinecraftLXCAnsible/1.0 (will.breiler@gmail.com)"
-    status_code: 200
-  register: modrinth_versions_raw
-  when: (pack_source | default('modrinth')) == 'modrinth' and modpack_slug != 'vanilla'
-
-- name: Parse latest release version from Modrinth response
-  ansible.builtin.set_fact:
-    modrinth_latest: >-
-      {{
-        modrinth_versions_raw.json
-        | selectattr('version_type', 'equalto', 'release')
-        | sort(attribute='date_published')
-        | last
-      }}
-  when: (pack_source | default('modrinth')) == 'modrinth' and modpack_slug != 'vanilla'
-
-- name: Extract version ID and primary download URL
-  ansible.builtin.set_fact:
-    modpack_version_id: "{{ modrinth_latest.id }}"
-    modpack_direct_url: >-
-      {{
-        modrinth_latest.files
-        | selectattr('primary', 'equalto', true)
-        | map(attribute='url')
-        | first
-      }}
-  when: (pack_source | default('modrinth')) == 'modrinth' and modpack_slug != 'vanilla'
-
-- name: Read currently installed version (if any)
-  ansible.builtin.slurp:
-    src: /opt/minecraft/.current_version
-  register: current_version_file
-  failed_when: false
-  when: (pack_source | default('modrinth')) == 'modrinth' and modpack_slug != 'vanilla'
-
-- name: Set current installed version fact
-  ansible.builtin.set_fact:
-    current_version_id: >-
-      {{
-        (current_version_file.content | default('') | b64decode | trim)
-        if (current_version_file is defined and current_version_file.content is defined)
-        else ''
-      }}
-  when: (pack_source | default('modrinth')) == 'modrinth' and modpack_slug != 'vanilla'
-
-- name: Download mrpack from Modrinth
-  ansible.builtin.get_url:
-    url: "{{ modpack_direct_url }}"
-    dest: "/tmp/{{ modpack_slug }}-{{ modpack_version_id }}.mrpack"
-    mode: "0644"
-    headers:
-      User-Agent: "MinecraftLXCAnsible/1.0 (will.breiler@gmail.com)"
-    timeout: 300
-  when:
-    - (pack_source | default('modrinth')) == 'modrinth'
-    - modpack_slug != 'vanilla'
-    - current_version_id != modpack_version_id
-
-- name: Clear existing mods before extracting new version
-  ansible.builtin.file:
-    path: /opt/minecraft/mods
-    state: absent
-  when:
-    - (pack_source | default('modrinth')) == 'modrinth'
-    - modpack_slug != 'vanilla'
-    - current_version_id != modpack_version_id
-
-- name: Re-create mods directory after clearing
-  ansible.builtin.file:
-    path: /opt/minecraft/mods
-    state: directory
-    owner: minecraft
-    group: minecraft
-    mode: "0755"
-  when:
-    - (pack_source | default('modrinth')) == 'modrinth'
-    - modpack_slug != 'vanilla'
-    - current_version_id != modpack_version_id
-
-- name: Extract overrides/mods/ from mrpack into /opt/minecraft/mods/
+- name: Install latest modpack transactionally
   ansible.builtin.command:
-    cmd: >-
-      unzip -o -j
-      /tmp/{{ modpack_slug }}-{{ modpack_version_id }}.mrpack
-      "overrides/mods/*"
-      -d /opt/minecraft/mods
-  when:
-    - (pack_source | default('modrinth')) == 'modrinth'
-    - modpack_slug != 'vanilla'
-    - current_version_id != modpack_version_id
+    cmd: /usr/local/bin/update-modpack.sh --no-wait
+  when: modpack_slug != 'vanilla'
   changed_when: true
-  failed_when: result_extract_overrides.rc not in [0, 11]
-  register: result_extract_overrides
-
-- name: Download server-side mods from Modrinth index
-  ansible.builtin.shell:
-    cmd: |
-      set -euo pipefail
-      mrpack="/tmp/{{ modpack_slug }}-{{ modpack_version_id }}.mrpack"
-      index=$(mktemp)
-      unzip -o -j "$mrpack" "modrinth.index.json" -d "$(dirname "$index")"
-      mv "$(dirname "$index")/modrinth.index.json" "$index"
-      jq -c '[.files[] | select((.env.server // "required") != "unsupported")] | .[]' "$index" \
-      | while IFS= read -r mod; do
-          url=$(echo "$mod" | jq -r '.downloads[0]')
-          filename=$(echo "$mod" | jq -r '.path | split("/") | last')
-          curl -fsSL \
-            -H "User-Agent: MinecraftLXCAnsible/1.0 (will.breiler@gmail.com)" \
-            -o "/opt/minecraft/mods/${filename}" \
-            "$url"
-        done
-      rm -f "$index"
-  args:
-    executable: /bin/bash
-  when:
-    - (pack_source | default('modrinth')) == 'modrinth'
-    - modpack_slug != 'vanilla'
-    - current_version_id != modpack_version_id
-  changed_when: true
-
-- name: Fix ownership and permissions of extracted mods
-  ansible.builtin.shell:
-    cmd: |
-      chown -R minecraft:minecraft /opt/minecraft/mods
-      find /opt/minecraft/mods -type d -exec chmod 755 {} +
-      find /opt/minecraft/mods -type f -exec chmod 644 {} +
-  when:
-    - (pack_source | default('modrinth')) == 'modrinth'
-    - modpack_slug != 'vanilla'
-  changed_when: true
-
-- name: Write current version ID to tracking file
-  ansible.builtin.copy:
-    content: "{{ modpack_version_id }}\n"
-    dest: /opt/minecraft/.current_version
-    owner: minecraft
-    group: minecraft
-    mode: "0644"
-  when:
-    - (pack_source | default('modrinth')) == 'modrinth'
-    - modpack_slug != 'vanilla'
-    - current_version_id != modpack_version_id
-
-- name: Remove downloaded mrpack temp file
-  ansible.builtin.file:
-    path: "/tmp/{{ modpack_slug }}-{{ modpack_version_id }}.mrpack"
-    state: absent
-  when:
-    - (pack_source | default('modrinth')) == 'modrinth'
-    - modpack_slug != 'vanilla'
-    - current_version_id != modpack_version_id
 
 ###############################################################################
 # 7. Vanilla server setup
@@ -406,18 +256,6 @@
     timeout: 300
     checksum: "sha1:{{ mojang_version_meta.json.downloads.server.sha1 }}"
   when: modpack_slug == "vanilla"
-
-###############################################################################
-# 8. CurseForge initial download
-# The update script handles all CurseForge API logic (server pack vs manifest).
-# --no-wait skips the 5-minute countdown during provisioning.
-###############################################################################
-
-- name: Run initial CurseForge modpack download via update-modpack.sh
-  ansible.builtin.command:
-    cmd: /usr/local/bin/update-modpack.sh --no-wait
-  when: (pack_source | default('modrinth')) == 'curseforge'
-  changed_when: true
 
 ###############################################################################
 # 9. Migrate server data from an existing server (optional)

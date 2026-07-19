@@ -79,11 +79,36 @@ discord_notify() {
 ###############################################################################
 
 PACK_NAME_SAFE="unknown pack"
+SERVICE=""
+SERVICE_WAS_RUNNING=false
+SWAP_COMPLETE=false
+BACKUP_DIR=""
+MODS_STAGE=""
 
 on_error() {
     local exit_code=$?
     local line_no=${1:-unknown}
     local error_msg="Script error at line ${line_no} (exit ${exit_code})"
+    trap - ERR
+    set +e
+    if [[ "$SWAP_COMPLETE" == true ]]; then
+        if [[ "$SERVICE_WAS_RUNNING" == true && -n "$SERVICE" ]]; then
+            systemctl stop "$SERVICE" \
+                || log "ERROR: Failed to stop ${SERVICE} before rollback."
+        fi
+        log "Rolling back mod directory after failed update..."
+        rm -rf "$MODS_DIR"
+        if [[ -n "$BACKUP_DIR" && -d "$BACKUP_DIR" ]]; then
+            mv "$BACKUP_DIR" "$MODS_DIR"
+        else
+            mkdir -p "$MODS_DIR"
+            chown minecraft:minecraft "$MODS_DIR"
+        fi
+    fi
+    if [[ "$SERVICE_WAS_RUNNING" == true && -n "$SERVICE" ]]; then
+        systemctl start "$SERVICE" \
+            || log "ERROR: Failed to restart ${SERVICE} during rollback."
+    fi
     log "ERROR: $error_msg"
     discord_notify "❌ Update failed for ${PACK_NAME_SAFE}: ${error_msg}"
     exit "$exit_code"
@@ -292,45 +317,15 @@ else
     sleep 300
 fi
 
-###############################################################################
-# Stop service
-###############################################################################
-
 SERVICE="minecraft@${INSTANCE_NAME}.service"
-log "Stopping ${SERVICE}..."
 if systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
-    systemctl stop "$SERVICE"
-    log "${SERVICE} stopped."
-else
-    log "${SERVICE} is not running; skipping stop."
+    SERVICE_WAS_RUNNING=true
 fi
-
-###############################################################################
-# Backup mods (keep last 3)
-###############################################################################
 
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 BACKUP_DIR="${MINECRAFT_DIR}/mods.bak.${TIMESTAMP}"
-
-if [[ -d "$MODS_DIR" ]]; then
-    log "Backing up ${MODS_DIR} → ${BACKUP_DIR}..."
-    cp -a "$MODS_DIR" "$BACKUP_DIR"
-fi
-
-log "Pruning old backups (keeping latest 3)..."
-mapfile -t OLD_BACKUPS < <(ls -1dt "${MINECRAFT_DIR}"/mods.bak.* 2>/dev/null | tail -n +4)
-for old in "${OLD_BACKUPS[@]}"; do
-    log "Removing: ${old}"
-    rm -rf "$old"
-done
-
-###############################################################################
-# Wipe mods dir
-###############################################################################
-
-log "Wiping ${MODS_DIR}..."
-rm -rf "$MODS_DIR"
-mkdir -p "$MODS_DIR"
+MODS_STAGE=$(mktemp -d "${MINECRAFT_DIR}/.mods.stage.XXXXXX")
+log "Building new mod directory in ${MODS_STAGE}."
 
 ###############################################################################
 # Download pack
@@ -338,11 +333,22 @@ mkdir -p "$MODS_DIR"
 
 PACK_FILE="$(mktemp --suffix='.zip')"
 EXTRACT_TMP=""
+INFRA_TMP=""
+VERSION_TMP=""
+EXCLUDES_TMP=""
 
 cleanup() {
     rm -f "$PACK_FILE"
+    [[ -n "${VERSION_TMP:-}" ]] && rm -f "$VERSION_TMP"
+    [[ -n "${EXCLUDES_TMP:-}" ]] && rm -f "$EXCLUDES_TMP"
+    if [[ -n "${MODS_STAGE:-}" && -d "$MODS_STAGE" ]]; then
+        rm -rf "$MODS_STAGE"
+    fi
     if [[ -n "${EXTRACT_TMP:-}" ]]; then
         rm -rf "$EXTRACT_TMP"
+    fi
+    if [[ -n "${INFRA_TMP:-}" ]]; then
+        rm -rf "$INFRA_TMP"
     fi
 }
 trap 'cleanup' EXIT
@@ -373,7 +379,7 @@ if [[ "$PACK_SOURCE" == "modrinth" ]]; then
     # Extract bundled overrides (mods that ship directly in the mrpack)
     unzip -o "$PACK_FILE" "overrides/mods/*" -d "$EXTRACT_TMP" 2>/dev/null || true
     if [[ -d "${EXTRACT_TMP}/overrides/mods" ]]; then
-        cp -a "${EXTRACT_TMP}/overrides/mods/." "$MODS_DIR/"
+        cp -a "${EXTRACT_TMP}/overrides/mods/." "$MODS_STAGE/"
         log "Mods extracted from mrpack overrides/mods/."
     fi
 
@@ -391,16 +397,25 @@ if [[ "$PACK_SOURCE" == "modrinth" ]]; then
             MOD_NUM=$(( MOD_NUM + 1 ))
             mod_url=$(echo "$mod_entry"  | jq -r '.downloads[0]')
             filename=$(echo "$mod_entry" | jq -r '.path | split("/") | last')
+            required=$(echo "$mod_entry" | jq -r '(.env.server // "required") == "required"')
             log "[${MOD_NUM}/${MOD_COUNT}] ${filename}"
             curl -fsSL \
                 -H "User-Agent: ${UA}" \
-                -o "${MODS_DIR}/${filename}" \
+                -o "${MODS_STAGE}/${filename}" \
                 "$mod_url" \
-            || { log "WARN: Failed to download ${filename}."; FAILED_MODS=$(( FAILED_MODS + 1 )); }
+            || {
+                rm -f "${MODS_STAGE}/${filename}"
+                if [[ "$required" == "true" ]]; then
+                    log "ERROR: Required mod ${filename} failed to download."
+                    FAILED_MODS=$(( FAILED_MODS + 1 ))
+                else
+                    log "WARN: Optional mod ${filename} failed to download."
+                fi
+            }
         done <<< "$SERVER_MODS"
         if (( FAILED_MODS > 0 )); then
-            log "WARN: ${FAILED_MODS} mod(s) failed to download. Check log and add them manually."
-            discord_notify "⚠️ ${PACK_NAME} updated to ${LATEST_NAME} but ${FAILED_MODS} mod(s) failed to download. Check server log."
+            log "ERROR: ${FAILED_MODS} required mod(s) failed to download; live installation is unchanged."
+            exit 1
         fi
     else
         log "WARN: modrinth.index.json not found in mrpack; only overrides/ mods were installed."
@@ -410,37 +425,25 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "server_pack"
 
     unzip -o "$PACK_FILE" "mods/*" -d "$EXTRACT_TMP" 2>/dev/null || true
     if [[ -d "${EXTRACT_TMP}/mods" ]] && [[ -n "$(ls -A "${EXTRACT_TMP}/mods" 2>/dev/null)" ]]; then
-        cp -a "${EXTRACT_TMP}/mods/." "$MODS_DIR/"
+        cp -a "${EXTRACT_TMP}/mods/." "$MODS_STAGE/"
         log "Mods extracted from server pack mods/."
     else
         # Some server packs put JARs at the root alongside launcher files
         log "No mods/ dir in server pack; extracting .jar files from root..."
-        unzip -o "$PACK_FILE" "*.jar" -d "$MODS_DIR" 2>/dev/null || true
+        unzip -o "$PACK_FILE" "*.jar" -d "$MODS_STAGE" 2>/dev/null || true
         log "Extracted .jar files from server pack root."
     fi
 
     # Extract NeoForge/Forge launcher infrastructure so run.sh and libraries/
     # stay in sync with the pack version whenever NeoForge is updated.
-    infra_tmp=$(mktemp -d /var/tmp/mc-infra-XXXXXX)
+    INFRA_TMP=$(mktemp -d /var/tmp/mc-infra-XXXXXX)
     log "Extracting launcher infrastructure (libraries/, run.sh) from server pack..."
-    unzip -o "$PACK_FILE" "libraries/*" "run.sh" "run.bat" -d "$infra_tmp" 2>/dev/null || true
-    if [[ -d "${infra_tmp}/libraries" ]]; then
-        rm -rf "${MINECRAFT_DIR}/libraries"
-        mv "${infra_tmp}/libraries" "${MINECRAFT_DIR}/libraries"
-        chown -R minecraft:minecraft "${MINECRAFT_DIR}/libraries"
-        log "libraries/ installed from server pack."
+    unzip -o "$PACK_FILE" "libraries/*" "run.sh" "run.bat" -d "$INFRA_TMP" 2>/dev/null || true
+    if [[ -d "${INFRA_TMP}/libraries" ]]; then
+        log "Launcher libraries staged."
     else
         log "WARN: No libraries/ in server pack; NeoForge/Forge may not be installed."
     fi
-    for _f in run.sh run.bat; do
-        if [[ -f "${infra_tmp}/${_f}" ]]; then
-            cp "${infra_tmp}/${_f}" "${MINECRAFT_DIR}/${_f}"
-            chown minecraft:minecraft "${MINECRAFT_DIR}/${_f}"
-        fi
-    done
-    [[ -f "${MINECRAFT_DIR}/run.sh" ]] && chmod +x "${MINECRAFT_DIR}/run.sh"
-    rm -rf "$infra_tmp"
-    log "Launcher infrastructure updated."
 
 elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]]; then
 
@@ -466,7 +469,7 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]]
 
         if ! mod_url=$(cf_get "/mods/${proj_id}/files/${file_id}/download-url" | jq -r '.data // empty'); then
             if [[ "$required" == "true" ]]; then
-                log "WARN: Required mod ${proj_id}/${file_id}: download-url API lookup failed. Add manually to ${MODS_DIR}/."
+                log "ERROR: Required mod ${proj_id}/${file_id}: download-url API lookup failed."
                 FAILED_MODS=$(( FAILED_MODS + 1 ))
             else
                 log "WARN: Optional mod ${proj_id}/${file_id}: download-url API lookup failed. Skipping."
@@ -476,7 +479,7 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]]
 
         if [[ -z "$mod_url" ]]; then
             if [[ "$required" == "true" ]]; then
-                log "WARN: Required mod ${proj_id}/${file_id} has no download URL (CDN restricted). Add manually to ${MODS_DIR}/."
+                log "ERROR: Required mod ${proj_id}/${file_id} has no download URL (CDN restricted)."
                 FAILED_MODS=$(( FAILED_MODS + 1 ))
             else
                 log "WARN: Optional mod ${proj_id}/${file_id} has no download URL. Skipping."
@@ -488,47 +491,119 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]]
         log "[${MOD_NUM}/${MOD_COUNT}] ${filename}"
         curl -fsSL \
             -H "User-Agent: ${UA}" \
-            -o "${MODS_DIR}/${filename}" \
+            -o "${MODS_STAGE}/${filename}" \
             "$mod_url" \
-        || { log "WARN: Failed to download mod ${proj_id}/${file_id}. Add manually."; FAILED_MODS=$(( FAILED_MODS + 1 )); }
+        || {
+            rm -f "${MODS_STAGE}/${filename}"
+            if [[ "$required" == "true" ]]; then
+                log "ERROR: Required mod ${proj_id}/${file_id} failed to download."
+                FAILED_MODS=$(( FAILED_MODS + 1 ))
+            else
+                log "WARN: Optional mod ${proj_id}/${file_id} failed to download."
+            fi
+        }
 
     done < <(jq -c '.files[]' "$MANIFEST")
 
-    # Apply overrides (configs, scripts, etc.)
-    if [[ -d "${EXTRACT_TMP}/overrides" ]]; then
-        cp -a "${EXTRACT_TMP}/overrides/." "${MINECRAFT_DIR}/"
-        log "Overrides applied."
+    if [[ -d "${EXTRACT_TMP}/overrides/mods" ]]; then
+        cp -a "${EXTRACT_TMP}/overrides/mods/." "$MODS_STAGE/"
     fi
 
     if (( FAILED_MODS > 0 )); then
-        log "WARN: ${FAILED_MODS} mod(s) could not be downloaded automatically. Check log and add them manually."
-        discord_notify "⚠️ ${PACK_NAME} updated to ${LATEST_NAME} but ${FAILED_MODS} mod(s) need manual download (CDN restricted). Check server log."
+        log "ERROR: ${FAILED_MODS} required mod(s) could not be downloaded; live installation is unchanged."
+        exit 1
     fi
 
 fi
 
-rm -rf "$EXTRACT_TMP"
-EXTRACT_TMP=""
+chown -R minecraft:minecraft "$MODS_STAGE"
+find "$MODS_STAGE" -type d -exec chmod 755 {} +
+find "$MODS_STAGE" -type f -exec chmod 644 {} +
 
 ###############################################################################
-# Write version ID
+# Stop service and atomically install staged content
 ###############################################################################
 
-log "Writing version ID ${LATEST_ID} → ${CURRENT_VERSION_FILE}..."
-echo "$LATEST_ID" > "$CURRENT_VERSION_FILE"
-printf '%s' "${EXCLUDE_CF_PROJECTS:-}" > "$CURRENT_EXCLUDES_FILE"
+if [[ "$SERVICE_WAS_RUNNING" == true ]]; then
+    log "Stopping ${SERVICE}..."
+    systemctl stop "$SERVICE"
+fi
+
+if [[ -d "$MODS_DIR" ]]; then
+    log "Moving current mods to ${BACKUP_DIR}..."
+    mv "$MODS_DIR" "$BACKUP_DIR"
+fi
+mv "$MODS_STAGE" "$MODS_DIR"
+MODS_STAGE=""
+SWAP_COMPLETE=true
+
+# Apply non-mod overrides only after all required downloads have succeeded.
+if [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" && -d "${EXTRACT_TMP}/overrides" ]]; then
+    while IFS= read -r override_path; do
+        cp -a "$override_path" "${MINECRAFT_DIR}/"
+    done < <(find "${EXTRACT_TMP}/overrides" -mindepth 1 -maxdepth 1 ! -name mods -print)
+    log "Non-mod overrides applied."
+fi
+
+if [[ -n "$INFRA_TMP" ]]; then
+    if [[ -d "${INFRA_TMP}/libraries" ]]; then
+        rm -rf "${MINECRAFT_DIR}/libraries"
+        mv "${INFRA_TMP}/libraries" "${MINECRAFT_DIR}/libraries"
+        chown -R minecraft:minecraft "${MINECRAFT_DIR}/libraries"
+    fi
+    for _f in run.sh run.bat; do
+        if [[ -f "${INFRA_TMP}/${_f}" ]]; then
+            cp "${INFRA_TMP}/${_f}" "${MINECRAFT_DIR}/${_f}"
+            chown minecraft:minecraft "${MINECRAFT_DIR}/${_f}"
+        fi
+    done
+    [[ -f "${MINECRAFT_DIR}/run.sh" ]] && chmod +x "${MINECRAFT_DIR}/run.sh"
+    log "Launcher infrastructure updated."
+fi
 
 ###############################################################################
 # Start service
 ###############################################################################
 
-log "Starting ${SERVICE}..."
-if systemctl cat "$SERVICE" &>/dev/null; then
+if [[ "$SERVICE_WAS_RUNNING" == true ]]; then
+    log "Starting ${SERVICE}..."
     systemctl start "$SERVICE"
     log "${SERVICE} started."
+elif systemctl cat "$SERVICE" &>/dev/null; then
+    log "${SERVICE} was stopped before the update; leaving it stopped."
 else
     log "${SERVICE} unit not installed yet; skipping start (Ansible will handle it)."
 fi
+
+###############################################################################
+# Write version ID only after installation and service startup succeed
+###############################################################################
+
+EXCLUDES_TMP=$(mktemp "${MINECRAFT_DIR}/.current_excludes.XXXXXX")
+printf '%s' "${EXCLUDE_CF_PROJECTS:-}" > "$EXCLUDES_TMP"
+chown minecraft:minecraft "$EXCLUDES_TMP"
+chmod 0644 "$EXCLUDES_TMP"
+
+VERSION_TMP=$(mktemp "${MINECRAFT_DIR}/.current_version.XXXXXX")
+printf '%s\n' "$LATEST_ID" > "$VERSION_TMP"
+chown minecraft:minecraft "$VERSION_TMP"
+chmod 0644 "$VERSION_TMP"
+
+# Move the version marker last: if committing the exclusion marker fails, the
+# old version remains authoritative and the next run retries the installation.
+mv "$EXCLUDES_TMP" "$CURRENT_EXCLUDES_FILE"
+mv "$VERSION_TMP" "$CURRENT_VERSION_FILE"
+SWAP_COMPLETE=false
+
+log "Pruning old backups (keeping latest 3)..."
+mapfile -t OLD_BACKUPS < <(
+    find "$MINECRAFT_DIR" -maxdepth 1 -type d -name 'mods.bak.*' -printf '%T@ %p\n' \
+        | sort -rn | cut -d' ' -f2- | tail -n +4
+)
+for old in "${OLD_BACKUPS[@]}"; do
+    log "Removing: ${old}"
+    rm -rf "$old"
+done
 
 ###############################################################################
 # Success
