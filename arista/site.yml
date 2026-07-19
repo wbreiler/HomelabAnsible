@@ -268,9 +268,10 @@
 
   tasks:
     - name: Set hostname
-      arista.eos.eos_config:
-        lines:
-          - "hostname {{ arista_hostname }}"
+      arista.eos.eos_hostname:
+        config:
+          hostname: "{{ arista_hostname }}"
+        state: merged
       when: arista_apply_config | bool
       notify: Save managed Arista changes
 

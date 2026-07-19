@@ -4,6 +4,7 @@
 offline: true
 mock_modules:
   - arista.eos.eos_config
+  - arista.eos.eos_hostname
   - arista.eos.eos_interfaces
   - arista.eos.eos_l2_interfaces
   - arista.eos.eos_l3_interfaces

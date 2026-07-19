@@ -67,6 +67,7 @@ The switch is the gateway (SVI) for each VLAN:
 ## Usage
 
 ```bash
+python3 -m pip install -r requirements.txt
 ansible-galaxy collection install -r requirements.yml
 cp inventory.yml.example inventory.yml
 cp group_vars/arista.yml.example group_vars/arista.yml
@@ -80,6 +81,13 @@ desired state, but only differing settings should change:
 ```bash
 ansible-playbook site.yml --ask-pass --check --diff
 ```
+
+The project uses `ansible-pylibssh` explicitly for `network_cli`; legacy
+OpenSSH multiplexing arguments and the deprecated Paramiko fallback are not
+used. Deprecation display is disabled only for this project because the
+supported `arista.eos` 12.1.x and `ansible.netcommon` 8.5.x releases still call
+APIs that ansible-core 2.21 has deprecated. Re-enable it when those collections
+publish replacements.
 
 SVI addresses are merged rather than destructively replaced until a current
 live discovery confirms that no secondary addresses exist. The save handler
