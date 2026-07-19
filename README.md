@@ -12,7 +12,7 @@ and Minecraft server LXCs.
 | [`pbs/`](pbs/) | Proxmox Backup Server: install, NFS datastore, users, sync/pull jobs, Tailscale | [README](pbs/README.md) |
 | [`minecraft/`](minecraft/) | Minecraft server LXC provisioning via the Proxmox API + nightly Modrinth/CurseForge modpack update script | [README](minecraft/README.md) |
 | [`truenas/`](truenas/) | TrueNAS host `erebus`: full desired-state config (users, datasets, shares, services, apps) via middleware APIs, with read-only discovery and audit playbooks | [README](truenas/README.md) |
-| [`arista/`](arista/) | Core switch (Arista DCS-7050SX-64): VLANs, SVI gateways, port config — discovery in progress | [README](arista/README.md) |
+| [`arista/`](arista/) | Core switch (Arista DCS-7050SX-64): incremental, explicitly scoped desired-state management | [README](arista/README.md) |
 
 Each project is self-contained: it has its own `ansible.cfg`, inventory, and
 vault, and is run from inside its own directory. There is no shared root
@@ -35,17 +35,20 @@ cd minecraft/ansible && \
 cd truenas && ansible-playbook playbooks/audit.yml
 ```
 
-See each project's README for setup (copying `.example` files, vault
+See each project's README for setup (copying `*.yml.example` files, vault
 encryption, collections to install).
 
 ## Secrets policy
 
-Real inventories, vaults, and credential files are **gitignored per project**
-and only `.example` templates are tracked:
+Real inventories, vaults, and machine-specific configuration files are
+**gitignored per project**. Sanitized configuration templates use the
+`*.yml.example` suffix. Reusable playbooks, roles, tasks, and handlers remain
+tracked as ordinary `.yml` because they are implementation code:
 
 - `minecraft/ansible/vault.yml` — vault-encrypted, gitignored
 - `proxmox/inventory.yml`, `proxmox/group_vars/proxmox_cluster.yml`,
-  `proxmox/host_vars/*.yml` (except `example.yml`), `proxmox/files/gallery-dl-cookies.txt` — gitignored
+  `proxmox/host_vars/*.yml`, `proxmox/files/gallery-dl-cookies.txt` —
+  gitignored
 - `pbs/inventory.yml`, `pbs/group_vars/pbs_servers.yml`, `.vault_pass` — gitignored
 - `minecraft/ansible/servers.yml`, `group_vars/all.yml`, and `vault.yml` —
   gitignored; copy their tracked examples first
@@ -54,6 +57,8 @@ and only `.example` templates are tracked:
 - `truenas/artifacts/*` (raw discovery output, config backups) and
   `truenas/inventory/host_vars/**/vault.yml` — gitignored; its tracked
   inventory/desired-state files are deliberately sanitized (no hashes/secrets)
+- `arista/inventory.yml`, `arista/group_vars/arista.yml`, `.vault_pass`, and
+  discovery artifacts — gitignored; copy the tracked examples before use
 
 Before committing, run `git status` and confirm none of the above appear.
 

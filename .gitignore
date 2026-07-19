@@ -13,13 +13,14 @@
 /proxmox/inventory.yml
 /proxmox/group_vars/proxmox_cluster.yml
 /proxmox/host_vars/*.yml
-!/proxmox/host_vars/example.yml
 /proxmox/host_vars/*/secrets.yml
+/proxmox/vault.yml
 /proxmox/files/gallery-dl-cookies.txt
 
 /pbs/inventory.yml
 /pbs/group_vars/pbs_servers.yml
 /pbs/.vault_pass
+/pbs/vault.yml
 
 /minecraft/ansible/vault.yml
 /minecraft/ansible/servers.yml
@@ -33,6 +34,7 @@
 /truenas/vault-password*
 
 /arista/inventory.yml
+/arista/group_vars/arista.yml
 /arista/.vault_pass
 
 # Python

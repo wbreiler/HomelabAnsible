@@ -36,10 +36,14 @@ exact action.
 
 ## Hard rules
 
-1. **Never commit secrets.** Real `inventory.yml`, `group_vars` (proxmox/pbs),
+1. **Never commit secrets or machine-specific configuration.** Real
+   `inventory.yml`, local data-bearing `group_vars/*.yml`,
    `host_vars/*.yml`, `vault.yml`, `.vault_pass`, and
-   `proxmox/files/gallery-dl-cookies.txt` are gitignored. Only `.example`
-   files are tracked. Check `git status` before every commit.
+   `proxmox/files/gallery-dl-cookies.txt` are gitignored. Their sanitized
+   templates use the `*.yml.example` suffix and remain tracked. Reusable
+   Ansible implementation files—playbooks, roles, tasks, handlers, defaults,
+   and requirements—remain tracked as ordinary `.yml`. Check `git status`
+   before every commit.
 2. **Always commit completed changes, but never push.** Create a separate,
    scoped commit for each top-level project directory changed (`proxmox/`,
    `pbs/`, `minecraft/`, `truenas/`, or `arista/`). Keep root-level policy or
