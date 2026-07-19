@@ -23,13 +23,27 @@ Always `cd` into the project directory before running ansible — each has its
 own `ansible.cfg` (inventory, SSH key, become settings) that only applies from
 there.
 
+## Subagents
+
+Bounded subagent use is allowed for repo-wide reviews and implementation when
+the work can be split into independent project or validation scopes. Give each
+subagent an explicit file/directory boundary, preserve the safety rules in this
+file and any deeper `AGENTS.md`, and have the coordinating agent review and
+validate all combined changes. Subagents do not broaden authorization: they
+must not run live infrastructure changes, destructive operations, network
+installs, commits, or pushes unless the user has separately authorized that
+exact action.
+
 ## Hard rules
 
 1. **Never commit secrets.** Real `inventory.yml`, `group_vars` (proxmox/pbs),
    `host_vars/*.yml`, `vault.yml`, `.vault_pass`, and
    `proxmox/files/gallery-dl-cookies.txt` are gitignored. Only `.example`
    files are tracked. Check `git status` before every commit.
-2. **Never push.** Commits are fine without asking; the user pushes.
+2. **Always commit completed changes, but never push.** Create a separate,
+   scoped commit for each top-level project directory changed (`proxmox/`,
+   `pbs/`, `minecraft/`, `truenas/`, or `arista/`). Keep root-level policy or
+   documentation changes in their own commit. The user pushes.
 3. **VMID 300 is reserved** (DiscoPanel on prometheus). New Minecraft servers
    start at 301+. Managed app LXCs live in 100–119.
 4. **LXCs are unprivileged** unless they NFS-mount (stash, gallery_dl).
