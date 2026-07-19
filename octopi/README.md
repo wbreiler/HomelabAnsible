@@ -64,6 +64,13 @@ octoprint_plugins:
 Use the package name and version published by the plugin maintainer. A tagged
 archive URL or immutable Git commit is also accepted. Review a plugin before
 installing it: plugins execute code with the OctoPrint service account.
+Plugins that compile native extensions may also declare required Debian
+packages:
+
+```yaml
+octoprint_plugin_system_packages:
+  - python3-dev
+```
 
 ## Plugin and core settings
 

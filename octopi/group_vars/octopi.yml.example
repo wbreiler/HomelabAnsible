@@ -61,6 +61,8 @@ octoprint_serial:
 
 # Each item is a pip requirement installed into OctoPrint's own venv. Pin a
 # release or immutable commit/tag for repeatable installs.
+octoprint_plugin_system_packages: []
+
 octoprint_plugins:
   # - name: Bed Level Visualizer
   #   requirement: OctoPrint-BedLevelVisualizer==1.1.2
