@@ -206,7 +206,8 @@
     label: "{{ item.item.path }}"
   when: >-
     item.rc != 0 or
-    (item.stdout | default('null') | from_json) != item.item.value
+    item.stdout_lines | default([]) | length == 0 or
+    (item.stdout_lines[0] | from_json) != item.item.value
   changed_when: true
   notify: Restart OctoPrint
   tags:
