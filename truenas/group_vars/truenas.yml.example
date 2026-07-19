@@ -1,0 +1,8 @@
+---
+# Copy to truenas.yml and customize for the target appliance.
+truenas_expected_hostname: truenas
+
+# Mutation remains disabled until discovery is reviewed and a backup exists.
+truenas_allow_changes: false
+truenas_allow_destructive_changes: false
+truenas_allow_management_access_changes: false

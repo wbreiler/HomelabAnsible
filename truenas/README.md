@@ -89,6 +89,27 @@ ssh -p 2747 root@10.10.10.7
 
 1Password may ask for biometric approval when the key is first used.
 
+## Local Configuration
+
+The tracked repository contains examples only. Create the ignored local
+configuration before running Ansible:
+
+```sh
+cp inventory/hosts.yml.example inventory/hosts.yml
+cp group_vars/truenas.yml.example group_vars/truenas.yml
+mkdir -p inventory/host_vars/nas1
+cp inventory/host_vars/nas1/desired_state.yml.example \
+  inventory/host_vars/nas1/desired_state.yml
+cp inventory/host_vars/nas1/vault.yml.example \
+  inventory/host_vars/nas1/vault.yml
+```
+
+Rename the example inventory host and matching `host_vars` directory as needed.
+Populate `desired_state.yml` from reviewed discovery output and encrypt
+`vault.yml` before adding credentials. These generated `.yml` files are ignored
+so appliance addresses, datasets, shares, accounts, and application settings
+remain local.
+
 ## Layout
 
 ```text
@@ -96,9 +117,9 @@ ssh -p 2747 root@10.10.10.7
 ├── AGENTS.md
 ├── README.md
 ├── ansible.cfg
-├── inventory/
-├── group_vars/
-├── inventory/host_vars/
+├── inventory/                      # Ignored local inventory + tracked examples
+├── group_vars/                     # Ignored local variables + tracked examples
+├── inventory/host_vars/            # Ignored desired state/Vault + examples
 ├── playbooks/
 ├── roles/
 ├── artifacts/

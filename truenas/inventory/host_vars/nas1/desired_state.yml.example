@@ -1,0 +1,22 @@
+---
+# Copy this file to the matching host_vars directory for your inventory host,
+# then populate it from reviewed, sanitized discovery output.
+#
+# Empty collections are intentionally safe: missing objects are never inferred
+# as deletions. Add state: absent only for explicitly reviewed removals.
+
+truenas_singleton_configs: []
+truenas_services: {}
+
+truenas_datasets: []
+truenas_smb_shares: []
+truenas_nfs_shares: []
+truenas_interfaces: []
+truenas_ntp_servers: []
+truenas_local_groups: []
+truenas_local_users: []
+truenas_apps: []
+truenas_cronjobs: []
+truenas_initshutdown_scripts: []
+truenas_snapshot_tasks: []
+truenas_scrub_tasks: []

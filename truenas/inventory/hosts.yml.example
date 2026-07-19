@@ -1,0 +1,10 @@
+---
+# Copy to hosts.yml and customize the connection details.
+all:
+  children:
+    truenas:
+      hosts:
+        nas1:
+          ansible_host: 192.0.2.20
+          ansible_port: 22
+          ansible_user: root

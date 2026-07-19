@@ -14,6 +14,11 @@ secrets.yml
 inventory/**/secrets.*
 inventory/host_vars/**/vault.yml
 
+# Local Ansible configuration — copy from the tracked examples
+group_vars/truenas.yml
+inventory/hosts.yml
+inventory/host_vars/**/desired_state.yml
+
 # Discovery may contain sensitive system metadata.
 artifacts/*
 !artifacts/.gitkeep
