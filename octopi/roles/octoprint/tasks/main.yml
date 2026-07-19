@@ -64,8 +64,8 @@
       {{ octoprint_web_user.name | quote }}
     responses:
       '(?i)password:': "{{ octoprint_web_user_password }}"
-      '(?i)repeat.*password:': "{{ octoprint_web_user_password }}"
-    timeout: 30
+      '(?i)repeat for confirmation:': "{{ octoprint_web_user_password }}"
+    timeout: 180
   when: >-
     not ansible_check_mode and
     (
@@ -91,8 +91,8 @@
       user password {{ octoprint_web_user.name | quote }}
     responses:
       '(?i)password:': "{{ octoprint_web_user_password }}"
-      '(?i)repeat.*password:': "{{ octoprint_web_user_password }}"
-    timeout: 30
+      '(?i)repeat for confirmation:': "{{ octoprint_web_user_password }}"
+    timeout: 180
   when:
     - not ansible_check_mode
     - octoprint_reset_existing_password | bool
