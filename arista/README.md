@@ -21,9 +21,15 @@ the captured snapshot predates the managed hostname and Ethernet7 corrections.
 
 Reusable automation remains tracked in `site.yml`. Machine-specific desired
 values live in ignored `group_vars/arista.yml`, copied from the tracked
-`group_vars/arista.yml.example`. Only the hostname and Ethernet7 correction
-are managed so far; the remainder of the observed switch configuration is
-deliberately untouched.
+`group_vars/arista.yml.example`. The local file declares the complete known
+working state for VLANs 10–40, Ethernet2–11 and Ethernet43–48, SVI addresses,
+global routing, and static routes. It is designed so the only intended
+differences from the captured state are the hostname and Ethernet7 correction;
+confirm the actual device diff before applying.
+
+Ethernet1, Vlan1, Management1, users, AAA, SSH authentication, boot settings,
+and secret-bearing unsupported-transceiver configuration are permanently
+excluded. They require a separately confirmed out-of-band management path.
 
 Known config quirks (observed, deliberately untouched):
 
@@ -68,8 +74,15 @@ cp group_vars/arista.yml.example group_vars/arista.yml
 ansible-playbook site.yml --ask-pass     # or set ansible_password in inventory.yml
 ```
 
-Always preview switch changes first:
+Always preview switch changes first. A normal run applies the complete local
+desired state, but only differing settings should change:
 
 ```bash
 ansible-playbook site.yml --ask-pass --check --diff
 ```
+
+SVI addresses are merged rather than destructively replaced until a current
+live discovery confirms that no secondary addresses exist. The save handler
+runs only after an Ansible-managed task changes, but EOS saves the entire
+running configuration; review any unrelated running/startup drift before the
+first apply.

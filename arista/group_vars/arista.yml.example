@@ -1,12 +1,38 @@
 ---
 # Copy to group_vars/arista.yml and customize locally. The generated file is
-# gitignored. Keep every management toggle false until the exact change has
-# been reviewed and approved.
+# gitignored. Keep application disabled until the complete intended state has
+# been reviewed.
 
-arista_manage_hostname: false
+arista_apply_config: false
 arista_hostname: "switch.example"
 
-# Only explicitly listed interfaces are managed. Ethernet1, Management1, and
-# Vlan1 are protected by the playbook and must never appear here.
-arista_l2_state: merged
+arista_qsfp_default_mode: 4x10G
+arista_routing_protocol_model: ribd
+arista_spanning_tree_mode: mstp
+arista_fan_speed_override: 30
+arista_enable_ip_routing: true
+
+# VLAN 1 is protected. Define only VLANs intentionally managed by Ansible.
+arista_vlans:
+  - vlan_id: 10
+    name: example
+
+# Interface descriptions and other eos_interfaces resource data.
+arista_interfaces:
+  - name: Ethernet2
+    description: example-server
+
+# Typed forced-speed values not represented correctly by the resource module.
+arista_forced_interface_speeds: []
+
+# Complete intended L2 state for the listed ports. The playbook uses narrowly
+# scoped "replaced" state, so include every access/trunk attribute that should
+# remain on each listed interface. Do not set mode: access; the EOS resource
+# module cannot report that default idempotently.
 arista_l2_interfaces: []
+
+# SVI addresses. Vlan1 is protected.
+arista_l3_interfaces: []
+
+# Static routes to ensure are present. Unlisted routes are not removed.
+arista_static_routes: []

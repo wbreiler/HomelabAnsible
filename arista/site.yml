@@ -6,28 +6,263 @@
   gather_facts: false
 
   vars:
-    arista_protected_interfaces:
-      - Ethernet1
-      - Management1
-      - Vlan1
+    arista_allowed_ethernet_interfaces:
+      - ethernet2
+      - ethernet3
+      - ethernet4
+      - ethernet5
+      - ethernet6
+      - ethernet7
+      - ethernet8
+      - ethernet9
+      - ethernet10
+      - ethernet11
+      - ethernet43
+      - ethernet44
+      - ethernet45
+      - ethernet46
+      - ethernet47
+      - ethernet48
+    arista_allowed_svis:
+      - vlan10
+      - vlan20
+      - vlan30
+      - vlan40
+    arista_allowed_vlan_ids:
+      - 10
+      - 20
+      - 30
+      - 40
 
   pre_tasks:
     - name: Validate local desired-state configuration
       ansible.builtin.assert:
         that:
-          - arista_manage_hostname is defined
-          - not (arista_manage_hostname | bool) or arista_hostname | length > 0
-          - arista_l2_interfaces is sequence
-          - arista_l2_state in ['merged', 'replaced']
+          - arista_apply_config is boolean
+          - arista_hostname is match('^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$')
+          - arista_qsfp_default_mode == '4x10G'
+          - arista_routing_protocol_model == 'ribd'
+          - arista_spanning_tree_mode == 'mstp'
+          - arista_fan_speed_override is integer
+          - arista_fan_speed_override >= 20
+          - arista_fan_speed_override <= 100
+          - arista_enable_ip_routing is boolean
+          - arista_enable_ip_routing
+          - >-
+            arista_vlans is sequence
+            and arista_vlans is not string
+            and arista_vlans is not mapping
+          - >-
+            arista_interfaces is sequence
+            and arista_interfaces is not string
+            and arista_interfaces is not mapping
+          - >-
+            arista_forced_interface_speeds is sequence
+            and arista_forced_interface_speeds is not string
+            and arista_forced_interface_speeds is not mapping
+          - >-
+            arista_l2_interfaces is sequence
+            and arista_l2_interfaces is not string
+            and arista_l2_interfaces is not mapping
+          - >-
+            arista_l3_interfaces is sequence
+            and arista_l3_interfaces is not string
+            and arista_l3_interfaces is not mapping
+          - >-
+            arista_static_routes is sequence
+            and arista_static_routes is not string
+            and arista_static_routes is not mapping
+          - >-
+            arista_vlans
+            | map(attribute='vlan_id')
+            | list
+            | difference(arista_allowed_vlan_ids)
+            | length == 0
+          - >-
+            arista_vlans | map(attribute='vlan_id') | list | unique | length
+            == arista_vlans | length
+          - >-
+            arista_vlans
+            | map(attribute='name')
+            | reject('match', '^[A-Za-z0-9_.-]+$')
+            | list
+            | length == 0
+          - >-
+            (
+              arista_interfaces
+              + arista_forced_interface_speeds
+              + arista_l2_interfaces
+            )
+            | map(attribute='name')
+            | map('lower')
+            | list
+            | difference(arista_allowed_ethernet_interfaces)
+            | length == 0
+          - >-
+            arista_interfaces
+            | map(attribute='name')
+            | map('lower')
+            | list
+            | unique
+            | length == arista_interfaces | length
+          - >-
+            arista_interfaces
+            | map(attribute='description')
+            | reject('match', '^[^\r\n]+$')
+            | list
+            | length == 0
+          - >-
+            arista_forced_interface_speeds
+            | map(attribute='name')
+            | map('lower')
+            | list
+            | unique
+            | length == arista_forced_interface_speeds | length
           - >-
             arista_l2_interfaces
-            | selectattr('name', 'in', arista_protected_interfaces)
+            | map(attribute='name')
+            | map('lower')
+            | list
+            | unique
+            | length == arista_l2_interfaces | length
+          - >-
+            arista_l3_interfaces
+            | map(attribute='name')
+            | map('lower')
+            | list
+            | difference(arista_allowed_svis)
+            | length == 0
+          - >-
+            arista_l3_interfaces
+            | map(attribute='name')
+            | map('lower')
+            | list
+            | unique
+            | length == arista_l3_interfaces | length
+          - >-
+            arista_l2_interfaces
+            | selectattr('mode', 'defined')
+            | selectattr('mode', 'equalto', 'access')
+            | list
+            | length == 0
+          - >-
+            arista_l2_interfaces
+            | selectattr('access', 'defined')
+            | map(attribute='access')
+            | map(attribute='vlan')
+            | list
+            | difference(arista_allowed_vlan_ids)
+            | length == 0
+          - >-
+            arista_l2_interfaces
+            | selectattr('trunk', 'defined')
+            | map(attribute='trunk')
+            | selectattr('native_vlan', 'defined')
+            | map(attribute='native_vlan')
+            | list
+            | difference(arista_allowed_vlan_ids)
+            | length == 0
+          - >-
+            arista_l2_interfaces
+            | selectattr('trunk', 'defined')
+            | map(attribute='trunk')
+            | selectattr('trunk_allowed_vlans', 'defined')
+            | map(attribute='trunk_allowed_vlans')
+            | flatten
+            | map('int')
+            | list
+            | difference(arista_allowed_vlan_ids)
+            | length == 0
+          - >-
+            arista_forced_interface_speeds
+            | map(attribute='speed')
+            | reject('match', '^[0-9]+(full|half)$')
+            | list
+            | length == 0
+          - >-
+            arista_l3_interfaces
+            | map(attribute='ipv4')
+            | flatten
+            | map(attribute='address')
+            | reject(
+                'match',
+                '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}/'
+                ~ '(?:[0-9]|[12][0-9]|3[0-2])$'
+              )
+            | list
+            | length == 0
+          - >-
+            arista_l3_interfaces
+            | map(attribute='ipv4')
+            | flatten
+            | map(attribute='address')
+            | select('match', '^(?:192\.168\.1\.|10\.30\.)')
+            | list
+            | length == 0
+          - >-
+            arista_static_routes
+            | map(attribute='address_families')
+            | flatten
+            | map(attribute='afi')
+            | list
+            | difference(['ipv4'])
+            | length == 0
+          - >-
+            arista_static_routes
+            | map(attribute='address_families')
+            | flatten
+            | map(attribute='routes')
+            | flatten
+            | map(attribute='dest')
+            | reject(
+                'match',
+                '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}/'
+                ~ '(?:[0-9]|[12][0-9]|3[0-2])$'
+              )
+            | list
+            | length == 0
+          - >-
+            arista_static_routes
+            | map(attribute='address_families')
+            | flatten
+            | map(attribute='routes')
+            | flatten
+            | map(attribute='next_hops')
+            | flatten
+            | rejectattr('forward_router_address', 'defined')
+            | list
+            | length == 0
+          - >-
+            arista_static_routes
+            | map(attribute='address_families')
+            | flatten
+            | map(attribute='routes')
+            | flatten
+            | map(attribute='next_hops')
+            | flatten
+            | map(attribute='forward_router_address')
+            | reject('match', '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$')
+            | list
+            | length == 0
+          - >-
+            arista_static_routes
+            | map(attribute='address_families')
+            | flatten
+            | map(attribute='routes')
+            | flatten
+            | map(attribute='next_hops')
+            | flatten
+            | selectattr('interface', 'defined')
             | list
             | length == 0
         fail_msg: >-
           Copy group_vars/arista.yml.example to group_vars/arista.yml and
-          define only approved desired state. Ethernet1, Management1, and
-          Vlan1 are protected and cannot be managed by this playbook.
+          define the complete approved desired state. Only Ethernet2-11,
+          Ethernet43-48, Vlan10-40, and VLAN IDs 10-40 are permitted.
+          Ethernet1, Management1, Vlan1, accounts, AAA, boot settings, and
+          management access are protected and cannot be managed. Addresses,
+          routes, and nested VLAN references must pass the safety schema.
+          Do not use mode=access because EOS cannot report it idempotently.
       tags:
         - always
 
@@ -36,14 +271,78 @@
       arista.eos.eos_config:
         lines:
           - "hostname {{ arista_hostname }}"
-      when: arista_manage_hostname | bool
+      when: arista_apply_config | bool
+      notify: Save managed Arista changes
 
-    - name: Configure explicitly managed layer-2 interfaces
+    - name: Configure global switch settings
+      arista.eos.eos_config:
+        lines:
+          - "transceiver qsfp default-mode {{ arista_qsfp_default_mode }}"
+          - "service routing protocols model {{ arista_routing_protocol_model }}"
+          - "spanning-tree mode {{ arista_spanning_tree_mode }}"
+          - "environment fan-speed override {{ arista_fan_speed_override }}"
+          - ip routing
+      when: arista_apply_config | bool
+      notify: Save managed Arista changes
+
+    - name: Configure VLANs
+      arista.eos.eos_vlans:
+        config: "{{ arista_vlans }}"
+        state: merged
+      when:
+        - arista_apply_config | bool
+        - arista_vlans | length > 0
+      notify: Save managed Arista changes
+
+    - name: Configure interface descriptions
+      arista.eos.eos_interfaces:
+        config: "{{ arista_interfaces }}"
+        state: merged
+      when:
+        - arista_apply_config | bool
+        - arista_interfaces | length > 0
+      notify: Save managed Arista changes
+
+    - name: Configure forced interface speeds
+      arista.eos.eos_config:
+        parents:
+          - "interface {{ item.name }}"
+        lines:
+          - "speed forced {{ item.speed }}"
+      loop: "{{ arista_forced_interface_speeds }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: arista_apply_config | bool
+      notify: Save managed Arista changes
+
+    - name: Configure complete layer-2 state for managed interfaces
       arista.eos.eos_l2_interfaces:
         config: "{{ arista_l2_interfaces }}"
-        state: "{{ arista_l2_state }}"
-      when: arista_l2_interfaces | length > 0
+        state: replaced
+      when:
+        - arista_apply_config | bool
+        - arista_l2_interfaces | length > 0
+      notify: Save managed Arista changes
 
-    - name: Save to startup when running config changed
+    - name: Configure SVI addresses
+      arista.eos.eos_l3_interfaces:
+        config: "{{ arista_l3_interfaces }}"
+        state: merged
+      when:
+        - arista_apply_config | bool
+        - arista_l3_interfaces | length > 0
+      notify: Save managed Arista changes
+
+    - name: Configure static routes
+      arista.eos.eos_static_routes:
+        config: "{{ arista_static_routes }}"
+        state: merged
+      when:
+        - arista_apply_config | bool
+        - arista_static_routes | length > 0
+      notify: Save managed Arista changes
+
+  handlers:
+    - name: Save managed Arista changes
       arista.eos.eos_config:
         save_when: modified
