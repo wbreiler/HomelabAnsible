@@ -319,10 +319,18 @@
       arista.eos.eos_l2_interfaces:
         config: "{{ arista_l2_interfaces }}"
         state: replaced
+      register: arista_l2_result
       when:
         - arista_apply_config | bool
         - arista_l2_interfaces | length > 0
       notify: Save managed Arista changes
+
+    - name: Show planned layer-2 commands in check mode
+      ansible.builtin.debug:
+        var: arista_l2_result.commands
+      when:
+        - ansible_check_mode
+        - arista_l2_result is changed
 
     - name: Configure SVI addresses
       arista.eos.eos_l3_interfaces:
