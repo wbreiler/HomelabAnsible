@@ -6,10 +6,18 @@
     mode: '0644'
 
 - name: Add Tailscale repository
-  ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/debian bookworm main"
+  ansible.builtin.deb822_repository:
+    name: tailscale
+    types:
+      - deb
+    uris:
+      - https://pkgs.tailscale.com/stable/debian
+    suites:
+      - bookworm
+    components:
+      - main
+    signed_by: /usr/share/keyrings/tailscale-archive-keyring.gpg
     state: present
-    filename: tailscale
 
 - name: Update apt cache for Tailscale
   ansible.builtin.apt:
@@ -27,7 +35,35 @@
     enabled: true
 
 - name: Authenticate Tailscale
-  ansible.builtin.command: tailscale up --authkey {{ tailscale_auth_key }}
   when: tailscale_auth_key is defined and tailscale_auth_key != ""
-  register: tailscale_up_result
-  changed_when: "'Success' in tailscale_up_result.stdout or tailscale_up_result.rc == 0"
+  no_log: true
+  block:
+    - name: Create temporary Tailscale auth key file
+      ansible.builtin.tempfile:
+        state: file
+        suffix: tailscale-auth-key
+      register: tailscale_auth_key_file
+
+    - name: Write Tailscale auth key
+      ansible.builtin.copy:
+        content: "{{ tailscale_auth_key }}"
+        dest: "{{ tailscale_auth_key_file.path }}"
+        mode: '0600'
+
+    - name: Authenticate Tailscale using auth key file
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - up
+          - "--authkey=file:{{ tailscale_auth_key_file.path }}"
+      register: tailscale_up_result
+      changed_when: "'Success' in tailscale_up_result.stdout or tailscale_up_result.rc == 0"
+
+  always:
+    - name: Remove temporary Tailscale auth key file
+      ansible.builtin.file:
+        path: "{{ tailscale_auth_key_file.path }}"
+        state: absent
+      when:
+        - tailscale_auth_key_file is defined
+        - tailscale_auth_key_file.path is defined

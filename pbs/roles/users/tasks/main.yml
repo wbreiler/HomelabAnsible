@@ -1,7 +1,35 @@
 ---
+- name: Validate optional root password
+  ansible.builtin.assert:
+    that:
+      - users_root_password not in ['changeme', 'CHANGE_ME', 'CHANGE_ME_root_password']
+    fail_msg: "users_root_password must not use a placeholder value."
+  when: users_root_password | default('') | length > 0
+  no_log: true
+
+- name: Validate PBS user definitions
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name | length > 0
+      - item.password is defined
+      - item.password | length > 0
+      - item.password not in ['changeme', 'CHANGE_ME', 'CHANGE_ME_password']
+    fail_msg: "Each PBS user must have a name and a non-placeholder password."
+  loop: "{{ users_pbs_users }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+  no_log: true
+
 - name: Create PBS users
-  ansible.builtin.shell: |
-    proxmox-backup-manager user create {{ item.name }}@pbs --password {{ item.password }} --comment "{{ item.comment }}"
+  ansible.builtin.expect:
+    command: >-
+      proxmox-backup-manager user create
+      {{ (item.name ~ '@pbs') | quote }}
+      --comment {{ item.comment | default('') | quote }}
+      --password
+    responses:
+      '(?i)password:': "{{ item.password }}"
   loop: "{{ users_pbs_users }}"
   register: users_pbs_user_result
   changed_when: users_pbs_user_result.rc == 0
@@ -11,8 +39,15 @@
   no_log: true
 
 - name: Grant DatastoreAdmin privileges to PBS users
-  ansible.builtin.shell: |
-    proxmox-backup-manager acl update /datastore DatastoreAdmin --auth-id {{ item.name }}@pbs
+  ansible.builtin.command:
+    argv:
+      - proxmox-backup-manager
+      - acl
+      - update
+      - /datastore
+      - DatastoreAdmin
+      - --auth-id
+      - "{{ item.name }}@pbs"
   loop: "{{ users_pbs_users }}"
   register: users_pbs_acl_result
   changed_when: users_pbs_acl_result.rc == 0

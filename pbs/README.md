@@ -54,16 +54,16 @@ ansible-vault encrypt group_vars/pbs_servers.yml
 
 ```bash
 # Run all roles
-ansible-playbook site.yml
+ansible-playbook site.yml --vault-password-file .vault_pass
 
 # Run with tags (specific roles only)
-ansible-playbook site.yml --tags pbs,users
+ansible-playbook site.yml --vault-password-file .vault_pass --tags pbs,users
 
 # Skip specific roles
-ansible-playbook site.yml --skip-tags tailscale
+ansible-playbook site.yml --vault-password-file .vault_pass --skip-tags tailscale
 
 # Dry run (check mode)
-ansible-playbook site.yml --check
+ansible-playbook site.yml --vault-password-file .vault_pass --check
 ```
 
 ## Directory Structure
@@ -160,7 +160,7 @@ Creates and manages PBS users with secure password hashing.
 
 **Variables:**
 
-- `users_pbs_users`: List of users to create
+- `users_pbs_users`: List of users to create (default: empty; placeholder passwords are rejected)
 - `users_root_password`: Root user password
 
 ### pbs

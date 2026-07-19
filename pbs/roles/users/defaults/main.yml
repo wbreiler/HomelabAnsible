@@ -1,10 +1,4 @@
 ---
-users_pbs_users:
-  - name: pbs-nash
-    comment: "PBS Nash User"
-    password: "changeme"
-  - name: pbs-bldr
-    comment: "PBS Builder User"
-    password: "changeme"
+users_pbs_users: []
 
 users_root_password: ""
