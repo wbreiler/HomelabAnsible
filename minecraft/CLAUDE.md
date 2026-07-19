@@ -49,7 +49,12 @@ The `ssh-agent bash -c '...'` wrapper is required whenever any server has `migra
 
 **Vault setup**: `cp vault.example.yml vault.yml`, fill in values, `ansible-vault encrypt vault.yml`. The file `vault.yml` is gitignored.
 
-**Adding a server**: Edit `servers.yml`. For CurseForge packs add `pack_source: curseforge` and `curseforge_project_id: "NNNNNN"`. The numeric project ID is in the URL on curseforge.com.
+**Local configuration setup**: Copy `group_vars/all.yml.example` to
+`group_vars/all.yml` and `servers.yml.example` to `servers.yml`. The generated
+files are gitignored so node addresses, storage names, VMIDs, operators, and
+migration paths remain local.
+
+**Adding a server**: Edit the ignored `servers.yml`. For CurseForge packs add `pack_source: curseforge` and `curseforge_project_id: "NNNNNN"`. The numeric project ID is in the URL on curseforge.com.
 
 **server.properties overrides**: Add a `server_properties:` block to any server entry. Keys use underscores (`spawn_protection`, `allow_flight`, `online_mode`, etc.) — the template converts them to hyphenated Minecraft format. Omitted keys use vanilla defaults. Re-running the playbook rewrites the file.
 

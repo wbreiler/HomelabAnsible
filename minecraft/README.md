@@ -14,11 +14,11 @@ MinecraftLXCAnsible/
 │
 └── ansible/                        # Ansible provisioning playbook
     ├── provision.yml               # Main playbook
-    ├── servers.yml                 # Server definitions (edit this to add servers)
+    ├── servers.yml.example         # Copy to ignored servers.yml and customize
     ├── ansible.cfg
     ├── hosts.ini                   # Static inventory (localhost only)
     ├── vault.example.yml           # Vault structure example (copy → vault.yml, encrypt)
-    ├── group_vars/all.yml          # Shared vars (apt cache, hermes URL, Proxmox settings)
+    ├── group_vars/all.yml.example  # Copy to ignored all.yml and customize
     └── roles/minecraft_server/     # Role applied to each new LXC
         ├── tasks/main.yml
         ├── tasks/set_java_version.yml
@@ -37,7 +37,17 @@ cp vault.example.yml vault.yml
 ansible-vault encrypt vault.yml
 ```
 
-### Step 2 — Define your servers
+### Step 2 — Prepare local environment configuration
+
+```bash
+cp group_vars/all.yml.example group_vars/all.yml
+cp servers.yml.example servers.yml
+```
+
+Edit `group_vars/all.yml` for the local Proxmox nodes, network, storage, and
+template. Both generated files are ignored by Git.
+
+### Step 3 — Define your servers
 
 Edit `ansible/servers.yml`. Each entry creates one LXC and configures it:
 
@@ -57,7 +67,7 @@ Edit `ansible/servers.yml`. Each entry creates one LXC and configures it:
 
 > **VMID 300 is reserved** — DiscoPanel on Prometheus. Start new VMIDs at 301+.
 
-### Step 3 — Run the playbook
+### Step 4 — Run the playbook
 
 ```bash
 cd ansible/

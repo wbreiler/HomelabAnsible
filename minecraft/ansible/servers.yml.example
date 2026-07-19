@@ -1,0 +1,41 @@
+---
+# Copy to servers.yml and define the Minecraft LXCs for your environment.
+
+servers:
+  - hostname: example-minecraft
+    vmid: 301
+    node: node1
+    cores: 4
+    memory: 8192
+    disk: 32
+    pack_source: modrinth
+    modpack_slug: vanilla
+    pack_name: Example Minecraft Server
+    mc_version: "1.21.1"
+    loader: ""
+    instance_name: example
+    xmx: 6G
+    xms: 2G
+    server_properties:
+      difficulty: normal
+      max_players: 20
+      online_mode: true
+    ops: []
+
+  # CurseForge example:
+  # - hostname: example-modpack
+  #   vmid: 302
+  #   node: node1
+  #   cores: 4
+  #   memory: 8192
+  #   disk: 32
+  #   pack_source: curseforge
+  #   curseforge_project_id: "123456"
+  #   modpack_slug: example-pack
+  #   pack_name: Example Modpack
+  #   mc_version: "1.20.1"
+  #   loader: forge
+  #   instance_name: example-pack
+  #   discord_webhook_url: "{{ vault_discord_webhook_example }}"
+  #   xmx: 6G
+  #   xms: 2G

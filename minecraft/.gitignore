@@ -1,5 +1,7 @@
-# Ansible vault — contains real credentials, never commit
+# Local Ansible configuration — copy from the tracked examples
 ansible/vault.yml
+ansible/servers.yml
+ansible/group_vars/all.yml
 
 # server.properties dumps — may contain RCON passwords
 *.properties

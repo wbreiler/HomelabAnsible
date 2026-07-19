@@ -1,0 +1,32 @@
+---
+# Copy to group_vars/all.yml and customize for your environment.
+
+apt_cache_url: "http://192.0.2.10:3142"
+
+proxmox_api_host: "{{ vault_proxmox_api_host }}"
+proxmox_api_user: "{{ vault_proxmox_api_user }}"
+proxmox_api_password: "{{ vault_proxmox_api_password }}"
+ansible_pubkey: "{{ vault_ansible_pubkey }}"
+proxmox_validate_certs: true
+
+debian_template: "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+proxmox_bridge: "vmbr0"
+proxmox_vlan: 40
+proxmox_storage: "local-lvm"
+proxmox_backup_storage: "pbs"
+
+proxmox_node_ips:
+  node1: "192.0.2.11"
+
+curseforge_api_key: "{{ vault_curseforge_api_key | default('') }}"
+
+graalvm_ce_version: "21.0.2"
+graalvm_ce_url: >-
+  https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-{{
+  graalvm_ce_version }}/graalvm-community-jdk-{{
+  graalvm_ce_version }}_linux-x64_bin.tar.gz
+graalvm_ce_25_version: "25.0.2"
+graalvm_ce_25_url: >-
+  https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-{{
+  graalvm_ce_25_version }}/graalvm-community-jdk-{{
+  graalvm_ce_25_version }}_linux-x64_bin.tar.gz
