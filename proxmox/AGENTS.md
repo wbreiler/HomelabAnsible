@@ -22,7 +22,7 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
 * **`site.yml`**: The main entry point playbook. Orchestrates the execution of roles.
 * **`inventory.yml`**: (Gitignored) Defines the Proxmox hosts (IPs, names). See `inventory.yml.example`.
 * **`group_vars/proxmox_cluster.yml`**: (Gitignored) Cluster-wide configuration and secrets (often Vault-encrypted). See `group_vars/proxmox_cluster.yml.example`.
-* **`host_vars/`**: (Gitignored) Per-host configuration (PBS namespaces, corosync, ZFS). See `host_vars/example.yml`.
+* **`host_vars/`**: (Gitignored) Per-host configuration (PBS namespaces, corosync, ZFS). See `host_vars/node.yml.example`.
 * **`roles/`**: Contains the logic for specific tasks:
   * `configure_repos`: Sets up Proxmox repositories (disables enterprise, enables no-subscription).
   * `cluster_setup`: Creates or joins a Proxmox cluster.
@@ -59,10 +59,11 @@ pip install -r requirements.txt
 # Install required Ansible collections
 ansible-galaxy collection install -r requirements.yml
 
-# Copy and configure required files (all gitignored — only .example files are tracked)
+# Copy and configure required files (local .yml files are gitignored;
+# sanitized *.yml.example templates are tracked)
 cp inventory.yml.example inventory.yml
 cp group_vars/proxmox_cluster.yml.example group_vars/proxmox_cluster.yml
-cp host_vars/example.yml host_vars/nyx.yml  # repeat for each node
+cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 ```
 
 ## Architecture
@@ -120,7 +121,7 @@ Each node's `host_vars/<nodename>.yml` configures:
 
 1. **Ansible Vault**: `group_vars/proxmox_cluster.yml` is encrypted and contains secrets like the PBS password and fingerprint.
 2. **Password Protection**: Tasks handling credentials (e.g., `pbs_storage`) must use `no_log: true` and must not place secrets in process arguments. Use a supported prompt, stdin, or secret-file mechanism.
-3. **Gitignore Strategy**: `inventory.yml`, `group_vars/proxmox_cluster.yml`, and `host_vars/*.yml` (except `example.yml`) are all gitignored to protect sensitive data.
+3. **Gitignore Strategy**: `inventory.yml`, `group_vars/proxmox_cluster.yml`, and `host_vars/*.yml` are all gitignored to protect sensitive data. Their sanitized `*.yml.example` templates remain tracked.
 4. **Installer Integrity**: Third-party releases and source revisions are pinned and checksum-verified before root executes or installs them. Bump versions and checksums together after reviewing upstream changes.
 
 ## Development Conventions
@@ -203,7 +204,7 @@ See the `CLAUDE.md` or `README.md` files for extensive examples of role-specific
 ## Adding New Nodes
 
 1. **Update `inventory.yml`**: Add the new node with `ansible_host`, `proxmox_node_name`, and `vmid_range_start`/`end`.
-2. **Create `host_vars/<nodename>.yml`**: Copy `host_vars/example.yml` and populate `corosync_ring1_addr` and `storage_pools`; set `pbs_username` and `pbs_namespace` on the cluster master only.
+2. **Create `host_vars/<nodename>.yml`**: Copy `host_vars/node.yml.example` and populate `corosync_ring1_addr` and `storage_pools`; set `pbs_username` and `pbs_namespace` on the cluster master only.
 3. **Run Playbook**: Run the playbook with `--limit <nodename>` to target the new node.
 
 ## Adding New Roles

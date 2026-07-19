@@ -48,7 +48,7 @@ proxmox-ansible/
 │   ├── proxmox_cluster.yml.example  # Example configuration
 │   └── proxmox_cluster.yml          # Cluster-wide variables (gitignored, vault-encrypted)
 ├── host_vars/               # Per-host variables (PBS config, corosync ring1, storage)
-│   ├── example.yml          # Example host configuration
+│   ├── node.yml.example     # Example host configuration
 │   ├── nyx.yml              # (gitignored)
 │   ├── prometheus.yml       # (gitignored)
 │   └── atlas.yml            # (gitignored)
@@ -88,7 +88,11 @@ proxmox-ansible/
 
 ### 1. Configure Inventory
 
-Edit `inventory.yml` and update with your Proxmox node details:
+Copy the example inventory, then update it with your Proxmox node details:
+
+```bash
+cp inventory.yml.example inventory.yml
+```
 
 ```yaml
 nyx:
@@ -207,7 +211,7 @@ ansible-playbook site.yml --limit "nyx,prometheus"
 
 ### PBS Namespaces
 
-Proxmox storage configuration is cluster-wide. The role configures the shared PBS storage entry only on `cluster_master_node`, using that host's username and namespace. Each node can still define its own corosync ring1 address and storage pool settings. See `host_vars/example.yml` for the full structure.
+Proxmox storage configuration is cluster-wide. The role configures the shared PBS storage entry only on `cluster_master_node`, using that host's username and namespace. Each node can still define its own corosync ring1 address and storage pool settings. See `host_vars/node.yml.example` for the full structure.
 
 ```yaml
 ---
@@ -216,7 +220,7 @@ pbs_namespace: "pve-nash"
 corosync_ring1_addr: "10.10.50.X" # node's IP on the dedicated cluster sync network
 ```
 
-Copy `host_vars/example.yml` for each node. Set `pbs_username` and `pbs_namespace` on the cluster master; the PBS server, datastore, and password are configured in `group_vars/proxmox_cluster.yml`.
+Copy `host_vars/node.yml.example` for each node. Set `pbs_username` and `pbs_namespace` on the cluster master; the PBS server, datastore, and password are configured in `group_vars/proxmox_cluster.yml`.
 
 ### PBS Backup Job
 
@@ -588,7 +592,7 @@ newnode:
 Create `host_vars/newnode.yml` from the example:
 
 ```bash
-cp host_vars/example.yml host_vars/newnode.yml
+cp host_vars/node.yml.example host_vars/newnode.yml
 ```
 
 Set the node-specific values. Only the cluster master needs `pbs_username` and `pbs_namespace`:

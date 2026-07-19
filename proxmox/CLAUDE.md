@@ -25,10 +25,11 @@ pip install -r requirements.txt
 # Install required Ansible collections
 ansible-galaxy collection install -r requirements.yml
 
-# Copy and configure required files (all gitignored — only .example files are tracked)
+# Copy and configure required files (local .yml files are gitignored;
+# sanitized *.yml.example templates are tracked)
 cp inventory.yml.example inventory.yml
 cp group_vars/proxmox_cluster.yml.example group_vars/proxmox_cluster.yml
-cp host_vars/example.yml host_vars/nyx.yml  # repeat for each node
+cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 ```
 
 ## Architecture
@@ -107,7 +108,8 @@ Each node's `host_vars/<nodename>.yml` can configure:
 3. **Gitignore Strategy**:
    - `inventory.yml` — Contains internal IPs
    - `group_vars/proxmox_cluster.yml` — Contains encrypted secrets
-   - `host_vars/*.yml` (except `example.yml`) — Contains node-specific config
+   - `host_vars/*.yml` — Contains node-specific config; sanitized
+     `host_vars/*.yml.example` templates remain tracked
 
 4. **LXC Privilege**: Containers bootstrapped via `tasks/create_lxc.yml` default to unprivileged; only NFS-mounting containers (stash, gallery_dl) are created privileged (kernel NFS requires it). Override with `lxc_unprivileged`.
 
@@ -242,7 +244,7 @@ rm -rf /tmp/test-isos
 
 1. Update `inventory.yml`:
    - Add new node with `ansible_host`, `proxmox_node_name`, `vmid_range_start`, `vmid_range_end` (used by vm_deploy for VMID allocation)
-2. Create `host_vars/<nodename>.yml` from `host_vars/example.yml`:
+2. Create `host_vars/<nodename>.yml` from `host_vars/node.yml.example`:
    - Set `pbs_username` and `pbs_namespace`
    - Set `corosync_ring1_addr` if using ring1
 3. Run playbook with `--limit` flag to target new node only

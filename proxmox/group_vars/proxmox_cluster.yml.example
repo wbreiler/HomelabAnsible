@@ -11,7 +11,7 @@ set_expected_votes: false  # Set to true to configure expected votes
 
 # PBS (Proxmox Backup Server) Configuration
 # The cluster master host's pbs_username and pbs_namespace are used for the
-# shared cluster storage entry; see host_vars/example.yml.
+# shared cluster storage entry; see host_vars/node.yml.example.
 configure_pbs: true
 pbs_storage_id: "backup-nash"
 pbs_server: "10.10.20.2"  # Replace with your PBS server IP/hostname

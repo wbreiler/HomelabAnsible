@@ -7,7 +7,7 @@ This project contains Ansible playbooks and roles for automating the deployment 
 *   **`site.yml`**: The main entry point playbook. Orchestrates the execution of roles.
 *   **`inventory.yml`**: (Gitignored) Defines the Proxmox hosts (IPs, names). See `inventory.yml.example`.
 *   **`group_vars/proxmox_cluster.yml`**: (Gitignored) Cluster-wide configuration and secrets (often Vault-encrypted). See `group_vars/proxmox_cluster.yml.example`.
-*   **`host_vars/`**: (Gitignored) Per-host configuration, specifically for PBS namespaces. See `host_vars/example.yml`.
+*   **`host_vars/`**: (Gitignored) Per-host configuration, specifically for PBS namespaces. See `host_vars/node.yml.example`.
 *   **`roles/`**: Contains the logic for specific tasks:
     *   `configure_repos`: Sets up Proxmox repositories (disables enterprise, enables no-subscription).
     *   `cluster_setup`: Creates or joins a Proxmox cluster.
