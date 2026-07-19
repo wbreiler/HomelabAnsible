@@ -87,12 +87,18 @@
     dest: /opt/graalvm-ce
     remote_src: true
     extra_opts: ["--strip-components=1"]
-  when: jvm_distro == 'graalvm' and not (graalvm_stat.stat.exists | default(false))
+  when:
+    - not ansible_check_mode
+    - jvm_distro == 'graalvm'
+    - not (graalvm_stat.stat.exists | default(false))
 
 - name: Register GraalVM CE as default java
   ansible.builtin.command:
     cmd: update-alternatives --install /usr/bin/java java /opt/graalvm-ce/bin/java 100
-  when: jvm_distro == 'graalvm' and not (graalvm_stat.stat.exists | default(false))
+  when:
+    - not ansible_check_mode
+    - jvm_distro == 'graalvm'
+    - not (graalvm_stat.stat.exists | default(false))
   changed_when: true
 
 - name: Remove GraalVM CE archive
