@@ -1,0 +1,11 @@
+---
+all:
+  children:
+    octopi_servers:
+      hosts:
+        octopi:
+          ansible_host: octopi.local
+      vars:
+        # Use the account created when the OctoPi image was written.
+        ansible_user: pi
+        ansible_python_interpreter: /usr/bin/python3

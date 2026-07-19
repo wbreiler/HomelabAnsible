@@ -37,6 +37,11 @@
 /arista/group_vars/arista.yml
 /arista/.vault_pass
 
+/octopi/inventory.yml
+/octopi/group_vars/octopi.yml
+/octopi/vault.yml
+/octopi/.vault_pass
+
 # Python
 __pycache__/
 *.pyc

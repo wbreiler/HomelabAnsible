@@ -13,6 +13,7 @@ and Minecraft server LXCs.
 | [`minecraft/`](minecraft/) | Minecraft server LXC provisioning via the Proxmox API + nightly Modrinth/CurseForge modpack update script | [README](minecraft/README.md) |
 | [`truenas/`](truenas/) | TrueNAS host `erebus`: full desired-state config (users, datasets, shares, services, apps) via middleware APIs, with read-only discovery and audit playbooks | [README](truenas/README.md) |
 | [`arista/`](arista/) | Core switch (Arista DCS-7050SX-64): incremental, explicitly scoped desired-state management | [README](arista/README.md) |
+| [`octopi/`](octopi/) | OctoPi appliance: printer profile, OctoPrint users, plugins, and plugin settings | [README](octopi/README.md) |
 
 Each project is self-contained: it has its own `ansible.cfg`, inventory, and
 vault, and is run from inside its own directory. There is no shared root
@@ -33,6 +34,9 @@ cd minecraft/ansible && \
 
 # TrueNAS (audit first; convergence is site.yml)
 cd truenas && ansible-playbook playbooks/audit.yml
+
+# OctoPi
+cd octopi && ansible-playbook site.yml --ask-vault-pass
 ```
 
 See each project's README for setup (copying `*.yml.example` files, vault
@@ -59,6 +63,8 @@ tracked as ordinary `.yml` because they are implementation code:
   inventory/desired-state files are deliberately sanitized (no hashes/secrets)
 - `arista/inventory.yml`, `arista/group_vars/arista.yml`, `.vault_pass`, and
   discovery artifacts — gitignored; copy the tracked examples before use
+- `octopi/inventory.yml`, `octopi/group_vars/octopi.yml`, `vault.yml`, and
+  `.vault_pass` — gitignored; copy the tracked examples before use
 
 Before committing, run `git status` and confirm none of the above appear.
 

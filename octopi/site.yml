@@ -1,0 +1,12 @@
+---
+- name: Configure OctoPi
+  hosts: octopi_servers
+  gather_facts: true
+  become: true
+  vars_files:
+    - vault.yml
+
+  roles:
+    - role: octoprint
+      tags:
+        - octoprint

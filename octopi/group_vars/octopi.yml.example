@@ -1,0 +1,81 @@
+---
+# OctoPi/OctoPrint installation paths. Current OctoPi images normally use
+# these values; change them if your image uses a different account or venv.
+octoprint_user: pi
+octoprint_group: pi
+octoprint_basedir: /home/pi/.octoprint
+octoprint_venv: /home/pi/oprint
+octoprint_service: octoprint
+
+# The initial OctoPrint web user. Keep the password in vault.yml, not here.
+octoprint_web_user:
+  name: octoadmin
+  admin: true
+  active: true
+
+# Set true only when Ansible should reset an existing user's password on every
+# run. OctoPrint does not expose password-hash comparison, so this reports a
+# change every time. New users always receive octoprint_web_user_password.
+octoprint_reset_existing_password: false
+
+# OctoPrint's default printer profile. Measurements are millimetres.
+octoprint_printer_profile:
+  id: _default
+  name: My 3D Printer
+  model: CHANGE_ME
+  color: default
+  volume:
+    formFactor: rectangular
+    origin: lowerleft
+    width: 220
+    depth: 220
+    height: 250
+    custom_box: false
+  heatedBed: true
+  heatedChamber: false
+  axes:
+    x:
+      speed: 6000
+      inverted: false
+    y:
+      speed: 6000
+      inverted: false
+    z:
+      speed: 200
+      inverted: false
+    e:
+      speed: 300
+      inverted: false
+  extruder:
+    count: 1
+    offsets:
+      - [0.0, 0.0]
+    nozzleDiameter: 0.4
+    sharedNozzle: false
+
+# Printer connection defaults. Leave port and baudrate null for AUTO.
+octoprint_serial:
+  port: null
+  baudrate: null
+  autoconnect: true
+
+# Each item is a pip requirement installed into OctoPrint's own venv. Pin a
+# release or immutable commit/tag for repeatable installs.
+octoprint_plugins:
+  # - name: Bed Level Visualizer
+  #   requirement: OctoPrint-BedLevelVisualizer==1.1.2
+  # - name: PrintTimeGenius
+  #   requirement: OctoPrint-PrintTimeGenius==2.3.1
+  []
+
+# Additional settings applied through `octoprint config set`. PATH uses
+# dot-separated OctoPrint config keys. Values may be strings, booleans,
+# numbers, lists, or dictionaries; plugin settings live under plugins.<id>.
+octoprint_settings:
+  - path: appearance.name
+    value: My OctoPrint
+  - path: feature.printCancelConfirmation
+    value: true
+  # Example plugin configuration:
+  # - path: plugins.bedlevelvisualizer.command
+  #   value: G29

@@ -1,0 +1,4 @@
+---
+# Encrypt the copied file with:
+#   ansible-vault encrypt vault.yml
+octoprint_web_user_password: CHANGE_ME_USE_A_LONG_UNIQUE_PASSWORD

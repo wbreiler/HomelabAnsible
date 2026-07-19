@@ -1,0 +1,13 @@
+---
+octoprint_user: pi
+octoprint_group: pi
+octoprint_basedir: "/home/{{ octoprint_user }}/.octoprint"
+octoprint_venv: "/home/{{ octoprint_user }}/oprint"
+octoprint_service: octoprint
+octoprint_reset_existing_password: false
+octoprint_plugins: []
+octoprint_settings: []
+octoprint_serial:
+  port: null
+  baudrate: null
+  autoconnect: true

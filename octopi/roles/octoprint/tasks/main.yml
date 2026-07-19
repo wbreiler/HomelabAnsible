@@ -1,0 +1,209 @@
+---
+- name: Validate required OctoPrint variables
+  ansible.builtin.assert:
+    that:
+      - octoprint_web_user.name | default('') | length > 0
+      - octoprint_web_user_password | default('') | length >= 12
+      - "'CHANGE_ME' not in octoprint_web_user_password"
+      - octoprint_printer_profile.model | default('') not in ['', 'CHANGE_ME']
+      - octoprint_printer_profile.volume.width | float > 0
+      - octoprint_printer_profile.volume.depth | float > 0
+      - octoprint_printer_profile.volume.height | float > 0
+    fail_msg: >-
+      Configure the printer model and a unique password of at least 12
+      characters in the ignored local variable files.
+  no_log: true
+
+- name: Check OctoPrint CLI
+  ansible.builtin.stat:
+    path: "{{ octoprint_venv }}/bin/octoprint"
+  register: octoprint_cli
+
+- name: Require an existing OctoPi installation
+  ansible.builtin.assert:
+    that:
+      - octoprint_cli.stat.exists
+      - octoprint_cli.stat.executable
+    fail_msg: >-
+      OctoPrint was not found at {{ octoprint_venv }}. This project configures
+      an existing OctoPi image; set octoprint_venv to its actual environment.
+
+- name: Install password-prompt dependency
+  ansible.builtin.apt:
+    name: python3-pexpect
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags:
+    - users
+
+- name: Read configured OctoPrint users
+  become: true
+  become_user: "{{ octoprint_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ octoprint_venv }}/bin/octoprint"
+      - --basedir
+      - "{{ octoprint_basedir }}"
+      - user
+      - list
+  register: octoprint_user_list
+  changed_when: false
+  tags:
+    - users
+
+- name: Create OctoPrint web user
+  become: true
+  become_user: "{{ octoprint_user }}"
+  ansible.builtin.expect:
+    command: >-
+      {{ octoprint_venv }}/bin/octoprint
+      --basedir {{ octoprint_basedir | quote }}
+      user add
+      {{ '--admin' if octoprint_web_user.admin | default(false) else '' }}
+      {{ octoprint_web_user.name | quote }}
+    responses:
+      '(?i)password:': "{{ octoprint_web_user_password }}"
+      '(?i)repeat.*password:': "{{ octoprint_web_user_password }}"
+    timeout: 30
+  when: >-
+    not ansible_check_mode and
+    (
+      octoprint_user_list.stdout is not
+      regex(
+        '(?m)(^|\\s)' ~
+        (octoprint_web_user.name | regex_escape) ~
+        '(\\s|$)'
+      )
+    )
+  no_log: true
+  notify: Restart OctoPrint
+  tags:
+    - users
+
+- name: Reset existing OctoPrint web user password
+  become: true
+  become_user: "{{ octoprint_user }}"
+  ansible.builtin.expect:
+    command: >-
+      {{ octoprint_venv }}/bin/octoprint
+      --basedir {{ octoprint_basedir | quote }}
+      user password {{ octoprint_web_user.name | quote }}
+    responses:
+      '(?i)password:': "{{ octoprint_web_user_password }}"
+      '(?i)repeat.*password:': "{{ octoprint_web_user_password }}"
+    timeout: 30
+  when:
+    - not ansible_check_mode
+    - octoprint_reset_existing_password | bool
+    - >-
+      octoprint_user_list.stdout is
+      regex(
+        '(?m)(^|\\s)' ~
+        (octoprint_web_user.name | regex_escape) ~
+        '(\\s|$)'
+      )
+  no_log: true
+  notify: Restart OctoPrint
+  tags:
+    - users
+
+- name: Install declared OctoPrint plugins
+  become: true
+  become_user: "{{ octoprint_user }}"
+  ansible.builtin.pip:
+    name: "{{ item.requirement }}"
+    executable: "{{ octoprint_venv }}/bin/pip"
+    state: present
+  loop: "{{ octoprint_plugins }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Restart OctoPrint
+  tags:
+    - plugins
+
+- name: Build managed OctoPrint settings
+  ansible.builtin.set_fact:
+    octoprint_managed_settings: >-
+      {{
+        octoprint_settings
+        + [
+          {
+            'path': 'printerProfiles.default',
+            'value': octoprint_printer_profile.id
+          },
+          {
+            'path': 'printerProfiles.defaultProfile',
+            'value': octoprint_printer_profile
+          },
+          {
+            'path': 'serial.port',
+            'value': octoprint_serial.port
+          },
+          {
+            'path': 'serial.baudrate',
+            'value': octoprint_serial.baudrate
+          },
+          {
+            'path': 'serial.autoconnect',
+            'value': octoprint_serial.autoconnect
+          },
+          {
+            'path': 'server.firstRun',
+            'value': false
+          }
+        ]
+      }}
+  tags:
+    - configuration
+
+- name: Read current managed OctoPrint settings
+  become: true
+  become_user: "{{ octoprint_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ octoprint_venv }}/bin/octoprint"
+      - --basedir
+      - "{{ octoprint_basedir }}"
+      - config
+      - get
+      - "{{ item.path }}"
+      - --json
+  loop: "{{ octoprint_managed_settings }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: octoprint_current_settings
+  changed_when: false
+  failed_when: false
+  tags:
+    - configuration
+
+- name: Apply changed OctoPrint settings
+  become: true
+  become_user: "{{ octoprint_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ octoprint_venv }}/bin/octoprint"
+      - --basedir
+      - "{{ octoprint_basedir }}"
+      - config
+      - set
+      - "{{ item.item.path }}"
+      - "{{ item.item.value | to_json }}"
+      - --json
+  loop: "{{ octoprint_current_settings.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when: >-
+    item.rc != 0 or
+    (item.stdout | default('null') | from_json) != item.item.value
+  changed_when: true
+  notify: Restart OctoPrint
+  tags:
+    - configuration
+
+- name: Ensure OctoPrint is enabled and running
+  ansible.builtin.service:
+    name: "{{ octoprint_service }}"
+    enabled: true
+    state: started
