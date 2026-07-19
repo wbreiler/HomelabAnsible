@@ -21,11 +21,9 @@ VLANs/interfaces as changes are needed.
 
 Known config quirks (observed, deliberately untouched):
 
-- Et5/Et6/Et7 are access ports but carry leftover `switchport trunk *` lines
+- Et5/Et6 are access ports but carry leftover `switchport trunk *` lines
   (ignored in access mode); Et3 has a stray `switchport access vlan 20` under
-  trunk mode.
-- Et7 (atlas-idrac) sits on VLAN 20 (storage) while every other IPMI port is
-  on VLAN 10.
+  trunk mode. (Et7's were cleaned when `site.yml` moved it to VLAN 10.)
 - `ip route 192.168.1.0/24 192.168.1.1` is redundant (directly connected via
   Vlan1).
 - Management1 has an IP (10.30.16.100/20) but the port is down/unused.
@@ -37,8 +35,8 @@ The switch is the gateway (SVI) for each VLAN:
 | VLAN | Name | SVI | Ports |
 |---|---|---|---|
 | 1 | default | 192.168.1.222/24 | Et1 (uplink) |
-| 10 | ipmi | 10.10.10.2/27 | Et8–11 (+Et43–48 reserved, dark) |
-| 20 | storage | 10.10.20.1/27 | Et2–7 |
+| 10 | ipmi | 10.10.10.2/27 | Et7–11 (+Et43–48 reserved, dark) |
+| 20 | storage | 10.10.20.1/27 | Et2–6 |
 | 30 | proxmox-hosts | 10.10.30.1/26 | Et2–4 |
 | 40 | proxmox-guests | 10.10.40.1/24 | Et2–4 |
 
@@ -52,8 +50,7 @@ The switch is the gateway (SVI) for each VLAN:
 | Et4 | nyx | trunk | 10G |
 | Et5 | erebus (TrueNAS) | vlan 20 | 10G |
 | Et6 | mnemosyne (PBS) | vlan 20 | 10G |
-| Et7 | atlas-idrac | vlan 20 | 1G |
-| Et8–11 | prometheus-ilo, nyx-idrac, mnemosyne-idrac, erebus-ipmi | vlan 10 | 1G |
+| Et7–11 | atlas-idrac, prometheus-ilo, nyx-idrac, mnemosyne-idrac, erebus-ipmi | vlan 10 | 1G |
 
 ## Usage
 

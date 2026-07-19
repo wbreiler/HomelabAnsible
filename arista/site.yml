@@ -6,8 +6,20 @@
   gather_facts: false
 
   tasks:
-    - name: Set hostname and save when changed
+    - name: Set hostname
       arista.eos.eos_config:
         lines:
           - hostname arista-nash
+
+    - name: Et7 (atlas-idrac) is an IPMI port — access VLAN 10
+      arista.eos.eos_l2_interfaces:
+        config:
+          - name: Ethernet7
+            mode: access
+            access:
+              vlan: 10
+        state: replaced   # also removes the stray trunk lines on this port
+
+    - name: Save to startup when running config changed
+      arista.eos.eos_config:
         save_when: modified
