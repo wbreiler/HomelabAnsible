@@ -213,8 +213,11 @@
 - name: Install latest modpack transactionally
   ansible.builtin.command:
     cmd: /usr/local/bin/update-modpack.sh --no-wait
+  register: minecraft_server_modpack_update
   when: modpack_slug != 'vanilla'
-  changed_when: true
+  changed_when: >-
+    'Already up to date. Exiting.'
+    not in minecraft_server_modpack_update.stdout
 
 ###############################################################################
 # 7. Vanilla server setup
