@@ -1,3 +1,6 @@
 ---
 collections:
   - name: arista.eos
+    version: ">=12.1.0,<13.0.0"
+  - name: ansible.netcommon
+    version: ">=8.5.0,<9.0.0"

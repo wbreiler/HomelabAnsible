@@ -1,0 +1,7 @@
+---
+# Runtime collection requirements remain in requirements.yml. Keep lint
+# offline and mock collection modules so static checks never contact Galaxy.
+offline: true
+mock_modules:
+  - arista.eos.eos_config
+  - arista.eos.eos_l2_interfaces
