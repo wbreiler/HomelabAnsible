@@ -137,8 +137,9 @@ Logs: `/var/log/minecraft-update.log` (auto-rotates at 10 MB)
 
 **Control machine:**
 ```bash
-pip install ansible
-ansible-galaxy collection install community.general community.proxmox
+cd ansible/
+python3 -m pip install -r requirements.txt
+ansible-galaxy collection install -r requirements.yml
 ```
 
 **Proxmox nodes:**

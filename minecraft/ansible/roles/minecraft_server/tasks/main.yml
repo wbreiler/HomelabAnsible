@@ -47,7 +47,11 @@
 
 - name: Check installed GraalVM CE major version
   ansible.builtin.shell:
-    cmd: /opt/graalvm-ce/bin/java -version 2>&1 | grep -oP '(?<=version ")[0-9]+'
+    cmd: >-
+      set -o pipefail &&
+      /opt/graalvm-ce/bin/java -version 2>&1 |
+      grep -oP '(?<=version ")[0-9]+'
+    executable: /bin/bash
   register: graalvm_installed_major
   failed_when: false
   changed_when: false
@@ -511,7 +515,7 @@
 ###############################################################################
 
 - name: Enable and start minecraft@{{ instance_name }}.service
-  ansible.builtin.systemd:
+  ansible.builtin.systemd_service:
     name: "minecraft@{{ instance_name }}.service"
     enabled: true
     state: started
@@ -522,7 +526,7 @@
 ###############################################################################
 
 - name: Enable and start minecraft-update.timer
-  ansible.builtin.systemd:
+  ansible.builtin.systemd_service:
     name: minecraft-update.timer
     enabled: true
     state: started
