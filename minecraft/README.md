@@ -14,6 +14,7 @@ MinecraftLXCAnsible/
 │
 └── ansible/                        # Ansible provisioning playbook
     ├── provision.yml               # Main playbook
+    ├── site.yml                    # Reconcile existing LXCs without provisioning
     ├── servers.yml.example         # Copy to ignored servers.yml and customize
     ├── ansible.cfg
     ├── hosts.ini                   # Static inventory (localhost only)
@@ -68,6 +69,20 @@ Edit `servers.yml`. Each entry creates one LXC and configures it:
 > **VMID 300 is reserved** — DiscoPanel on Prometheus. Start new VMIDs at 301+.
 
 ### Step 4 — Run the playbook
+
+Reconcile existing servers without creating, moving, or resizing their LXCs:
+
+```bash
+cd ansible/
+ansible-playbook site.yml --ask-vault-pass --check --diff
+ansible-playbook site.yml --ask-vault-pass
+```
+
+`site.yml` uses each server's `ansible_host` from the ignored `servers.yml`.
+It configures one guest at a time and does not touch Proxmox backup jobs. Use
+`-e server_filter=yabu-nash` to target a single existing server.
+
+Provision new LXCs and then configure them:
 
 ```bash
 cd ansible/

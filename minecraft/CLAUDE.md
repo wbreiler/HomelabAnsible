@@ -36,6 +36,9 @@ Both bash scripts use `set -euo pipefail`. Two patterns that matter:
 Run from `ansible/`:
 
 ```bash
+# Reconcile existing servers only (no Proxmox mutations)
+ansible-playbook site.yml --ask-vault-pass --check --diff
+
 # Provision all servers (spawns a fresh SSH agent so ForwardAgent works for migration rsync)
 ssh-agent bash -c 'ssh-add ~/.ssh/lxc_nash && ansible-playbook provision.yml --ask-vault-pass'
 
@@ -46,6 +49,11 @@ ssh-agent bash -c 'ssh-add ~/.ssh/lxc_nash && ansible-playbook provision.yml --a
 The `ssh-agent bash -c '...'` wrapper is required whenever any server has `migrate_from` defined. The migration rsync delegates to the source host and SSHes onward to the new LXC; without an agent carrying `lxc_nash`, that second hop fails with publickey denied.
 
 **Two-play architecture**: Play 1 runs on `localhost` against the Proxmox API to create LXCs and waits for SSH. Play 2 runs on the `newly_provisioned` dynamic group (populated by `add_host`) to apply the `minecraft_server` role. Re-running is idempotent.
+
+**Existing-server entrypoint**: `site.yml` builds an in-memory inventory from
+the `ansible_host` values in ignored `servers.yml`, then applies the role with
+`serial: 1`. It never creates, moves, resizes, starts, or stops LXCs through
+Proxmox and does not modify cluster backup jobs.
 
 **Vault setup**: `cp vault.yml.example vault.yml`, fill in values, `ansible-vault encrypt vault.yml`. The file `vault.yml` is gitignored.
 

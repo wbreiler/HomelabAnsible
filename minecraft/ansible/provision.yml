@@ -185,6 +185,7 @@
         instance_name: "{{ item.instance_name }}"
         discord_webhook_url: "{{ item.discord_webhook_url | default('') }}"
         curseforge_project_id: "{{ item.curseforge_project_id | default('') }}"
+        exclude_cf_projects: "{{ item.exclude_cf_projects | default([]) }}"
         xmx: "{{ item.xmx }}"
         xms: "{{ item.xms }}"
         server_properties: "{{ item.server_properties | default({}) }}"

@@ -175,6 +175,14 @@
     - { path: /opt/minecraft/world }
     - { path: /etc/minecraft, owner: root, group: minecraft, mode: "0750" }
 
+- name: Reconcile existing mod ownership and permissions
+  ansible.builtin.file:
+    path: /opt/minecraft/mods
+    owner: minecraft
+    group: minecraft
+    mode: u=rwX,g=rX,o=rX
+    recurse: true
+
 ###############################################################################
 # 5. Deploy update script and config
 # Done early so CurseForge provisioning can call the script for its download.

@@ -1,0 +1,95 @@
+---
+# Reconcile already-provisioned Minecraft LXCs without creating, moving, or
+# resizing containers and without modifying Proxmox backup jobs.
+#
+# Machine-specific host addresses and desired state live in ignored
+# servers.yml. Use provision.yml only when creating a new LXC.
+
+- name: Build inventory for existing Minecraft servers
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vault.yml
+
+  tasks:
+    - name: Load local server definitions
+      ansible.builtin.include_vars:
+        file: servers.yml
+        name: minecraft_server_defs
+      tags: always
+
+    - name: Select requested existing servers
+      ansible.builtin.set_fact:
+        minecraft_target_servers: >-
+          {{
+            minecraft_server_defs.servers
+            | selectattr('hostname', 'equalto', server_filter)
+            | list
+            if server_filter is defined
+            else minecraft_server_defs.servers
+          }}
+      tags: always
+
+    - name: Validate existing-server inventory
+      ansible.builtin.assert:
+        that:
+          - minecraft_target_servers | length > 0
+          - >-
+            minecraft_target_servers
+            | selectattr('ansible_host', 'undefined')
+            | list
+            | length == 0
+          - >-
+            minecraft_target_servers
+            | map(attribute='hostname')
+            | list
+            | unique
+            | length == minecraft_target_servers | length
+          - >-
+            minecraft_target_servers
+            | map(attribute='ansible_host')
+            | reject('match', '^10\.10\.40\.[0-9]{1,3}$')
+            | list
+            | length == 0
+        fail_msg: >-
+          Define at least one unique server with an ansible_host on VLAN 40 in
+          the ignored servers.yml file.
+      tags: always
+
+    - name: Add existing servers to the in-memory inventory
+      ansible.builtin.add_host:
+        name: "{{ item.hostname }}"
+        groups: minecraft_existing
+        ansible_host: "{{ item.ansible_host }}"
+        hostname: "{{ item.hostname }}"
+        vmid: "{{ item.vmid }}"
+        node: "{{ item.node }}"
+        pack_source: "{{ item.pack_source | default('modrinth') }}"
+        modpack_slug: "{{ item.modpack_slug }}"
+        pack_name: "{{ item.pack_name }}"
+        mc_version: "{{ item.mc_version }}"
+        loader: "{{ item.loader }}"
+        instance_name: "{{ item.instance_name }}"
+        discord_webhook_url: "{{ item.discord_webhook_url | default('') }}"
+        curseforge_project_id: "{{ item.curseforge_project_id | default('') }}"
+        exclude_cf_projects: "{{ item.exclude_cf_projects | default([]) }}"
+        xmx: "{{ item.xmx }}"
+        xms: "{{ item.xms }}"
+        server_properties: "{{ item.server_properties | default({}) }}"
+        ops: "{{ item.ops | default([]) }}"
+      loop: "{{ minecraft_target_servers }}"
+      loop_control:
+        label: "{{ item.hostname }} ({{ item.ansible_host }})"
+      changed_when: false
+      tags: always
+
+- name: Reconcile existing Minecraft servers
+  hosts: minecraft_existing
+  serial: 1
+  gather_facts: true
+  vars_files:
+    - vault.yml
+
+  roles:
+    - minecraft_server

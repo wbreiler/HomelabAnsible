@@ -3,6 +3,8 @@
 
 servers:
   - hostname: example-minecraft
+    # Current guest address used by site.yml for existing-server reconciliation.
+    ansible_host: 192.0.2.31
     vmid: 301
     node: node1
     cores: 4
@@ -24,6 +26,7 @@ servers:
 
   # CurseForge example:
   # - hostname: example-modpack
+  #   ansible_host: 192.0.2.32
   #   vmid: 302
   #   node: node1
   #   cores: 4
