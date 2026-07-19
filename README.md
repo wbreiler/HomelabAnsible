@@ -63,7 +63,7 @@ tracked as ordinary `.yml` because they are implementation code:
   inventory/desired-state files are deliberately sanitized (no hashes/secrets)
 - `arista/inventory.yml`, `arista/group_vars/arista.yml`, `.vault_pass`, and
   discovery artifacts — gitignored; copy the tracked examples before use
-- `octopi/inventory.yml`, `octopi/group_vars/octopi.yml`, `vault.yml`, and
+- `octopi/inventory.yml`, `octopi/group_vars/octopi_servers.yml`, `vault.yml`, and
   `.vault_pass` — gitignored; copy the tracked examples before use
 
 Before committing, run `git status` and confirm none of the above appear.

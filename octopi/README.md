@@ -22,7 +22,7 @@ cd octopi
 python3 -m pip install -r requirements.txt
 ansible-galaxy collection install -r requirements.yml
 cp inventory.yml.example inventory.yml
-cp group_vars/octopi.yml.example group_vars/octopi.yml
+cp group_vars/octopi_servers.yml.example group_vars/octopi_servers.yml
 cp vault.yml.example vault.yml
 ```
 

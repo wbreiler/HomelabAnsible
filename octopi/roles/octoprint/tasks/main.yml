@@ -3,14 +3,14 @@
   ansible.builtin.assert:
     that:
       - octoprint_web_user.name | default('') | length > 0
-      - octoprint_web_user_password | default('') | length >= 12
+      - octoprint_web_user_password | default('') | length >= 8
       - "'CHANGE_ME' not in octoprint_web_user_password"
       - octoprint_printer_profile.model | default('') not in ['', 'CHANGE_ME']
       - octoprint_printer_profile.volume.width | float > 0
       - octoprint_printer_profile.volume.depth | float > 0
       - octoprint_printer_profile.volume.height | float > 0
     fail_msg: >-
-      Configure the printer model and a unique password of at least 12
+      Configure the printer model and a unique password of at least 8
       characters in the ignored local variable files.
   no_log: true
 

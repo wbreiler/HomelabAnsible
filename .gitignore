@@ -38,7 +38,7 @@
 /arista/.vault_pass
 
 /octopi/inventory.yml
-/octopi/group_vars/octopi.yml
+/octopi/group_vars/octopi_servers.yml
 /octopi/vault.yml
 /octopi/.vault_pass
 
