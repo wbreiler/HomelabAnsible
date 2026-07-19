@@ -4,6 +4,7 @@ Configures an existing OctoPi image without replacing unrelated OctoPrint
 settings. It manages:
 
 - the default printer profile and serial connection defaults;
+- an optional tagged Ethernet VLAN with DHCP through NetworkManager;
 - an OctoPrint web user and password;
 - pinned third-party plugins in OctoPrint's own virtual environment;
 - arbitrary core and plugin settings through OctoPrint's supported config CLI;
@@ -19,6 +20,7 @@ Run all commands from this directory so its `ansible.cfg` is used:
 ```bash
 cd octopi
 python3 -m pip install -r requirements.txt
+ansible-galaxy collection install -r requirements.yml
 cp inventory.yml.example inventory.yml
 cp group_vars/octopi.yml.example group_vars/octopi.yml
 cp vault.yml.example vault.yml
@@ -48,6 +50,23 @@ ansible-playbook site.yml --ask-vault-pass
 
 The playbook restarts OctoPrint only when a user, plugin, or setting changes.
 Plugin installation requires internet access from the OctoPi host.
+
+## Tagged Ethernet
+
+Set `network_manage_vlan: true` to keep the physical Ethernet parent
+unnumbered and obtain an address using DHCP on a tagged VLAN subinterface:
+
+```yaml
+network_manage_vlan: true
+network_ethernet_interface: eth0
+network_ethernet_parent_connection: Wired connection 1
+network_vlan_id: 70
+network_vlan_route_metric: 100
+```
+
+This requires NetworkManager and `community.general`. Configure the connected
+switch port to carry the VLAN as tagged traffic before applying. Keep a
+separate management path, such as Wi-Fi, available for the initial cutover.
 
 ## Plugins
 

@@ -7,6 +7,14 @@ octoprint_basedir: /home/pi/.octoprint
 octoprint_venv: /home/pi/oprint
 octoprint_service: octoprint
 
+# Optional tagged Ethernet configuration. The physical parent remains
+# unnumbered and DHCP runs on the VLAN interface.
+network_manage_vlan: false
+network_ethernet_interface: eth0
+network_ethernet_parent_connection: Wired connection 1
+network_vlan_id: 70
+network_vlan_route_metric: 100
+
 # The initial OctoPrint web user. Keep the password in vault.yml, not here.
 octoprint_web_user:
   name: octoadmin

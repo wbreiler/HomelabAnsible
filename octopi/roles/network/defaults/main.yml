@@ -1,0 +1,8 @@
+---
+network_manage_vlan: false
+network_ethernet_interface: eth0
+network_ethernet_parent_connection: Wired connection 1
+network_vlan_id: 70
+network_vlan_connection: "VLAN {{ network_vlan_id }}"
+network_vlan_interface: "{{ network_ethernet_interface }}.{{ network_vlan_id }}"
+network_vlan_route_metric: 100

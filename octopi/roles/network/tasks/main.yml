@@ -1,0 +1,54 @@
+---
+- name: Validate Ethernet VLAN configuration
+  ansible.builtin.assert:
+    that:
+      - network_ethernet_interface | length > 0
+      - network_ethernet_parent_connection | length > 0
+      - network_vlan_id | int >= 1
+      - network_vlan_id | int <= 4094
+      - network_vlan_interface | length > 0
+      - network_vlan_route_metric | int >= 0
+    fail_msg: Invalid OctoPi Ethernet VLAN configuration.
+  when: network_manage_vlan | bool
+
+- name: Gather service state for VLAN management
+  ansible.builtin.service_facts:
+  when: network_manage_vlan | bool
+
+- name: Require NetworkManager for VLAN management
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services['NetworkManager.service'] is defined
+      - ansible_facts.services['NetworkManager.service'].state == 'running'
+    fail_msg: >-
+      VLAN management requires an active NetworkManager service. Refusing to
+      alter networking through an unknown backend.
+  when: network_manage_vlan | bool
+
+- name: Keep the physical Ethernet parent unnumbered
+  community.general.nmcli:
+    conn_name: "{{ network_ethernet_parent_connection }}"
+    ifname: "{{ network_ethernet_interface }}"
+    type: ethernet
+    method4: disabled
+    method6: disabled
+    autoconnect: true
+    conn_reload: true
+    state: present
+  when: network_manage_vlan | bool
+
+- name: Configure tagged Ethernet VLAN with DHCP
+  community.general.nmcli:
+    conn_name: "{{ network_vlan_connection }}"
+    ifname: "{{ network_vlan_interface }}"
+    type: vlan
+    vlandev: "{{ network_ethernet_interface }}"
+    vlanid: "{{ network_vlan_id }}"
+    method4: auto
+    method6: auto
+    may_fail4: false
+    route_metric4: "{{ network_vlan_route_metric }}"
+    autoconnect: true
+    conn_reload: true
+    state: present
+  when: network_manage_vlan | bool
