@@ -11,12 +11,24 @@ IPMI, and Proxmox VLANs and is the L3 gateway for all of them.
 | Model | Arista DCS-7050SX-64 (48x SFP+ + 4x QSFP+) |
 | EOS | `4.28.12M` |
 | Auth | `admin` with password (SSH) |
-| Hostname | `localhost` — not yet set |
+| Hostname | `arista-nash` (managed by `site.yml`) |
 
 ## Status
 
-Discovery in progress. `show running-config sanitized` still needed (requires
-enable mode). Raw discovery output lives in `artifacts/` (gitignored).
+Discovery complete — sanitized running-config and raw output live in
+`artifacts/` (gitignored). `site.yml` manages the hostname; extend it with
+VLANs/interfaces as changes are needed.
+
+Known config quirks (observed, deliberately untouched):
+
+- Et5/Et6/Et7 are access ports but carry leftover `switchport trunk *` lines
+  (ignored in access mode); Et3 has a stray `switchport access vlan 20` under
+  trunk mode.
+- Et7 (atlas-idrac) sits on VLAN 20 (storage) while every other IPMI port is
+  on VLAN 10.
+- `ip route 192.168.1.0/24 192.168.1.1` is redundant (directly connected via
+  Vlan1).
+- Management1 has an IP (10.30.16.100/20) but the port is down/unused.
 
 ## L3 / VLANs
 
@@ -47,6 +59,6 @@ The switch is the gateway (SVI) for each VLAN:
 
 ```bash
 ansible-galaxy collection install -r requirements.yml
-cp inventory.yml.example inventory.yml   # fill in credentials
-ansible-playbook site.yml                # (playbook TBD after full discovery)
+cp inventory.yml.example inventory.yml
+ansible-playbook site.yml --ask-pass     # or set ansible_password in inventory.yml
 ```

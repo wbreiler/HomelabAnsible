@@ -1,0 +1,13 @@
+---
+# ponytail: only the hostname is managed so far; grow this into full
+# desired state (vlans, interfaces, SVIs) as changes are actually needed.
+- name: Configure arista-nash core switch
+  hosts: arista
+  gather_facts: false
+
+  tasks:
+    - name: Set hostname and save when changed
+      arista.eos.eos_config:
+        lines:
+          - hostname arista-nash
+        save_when: modified
