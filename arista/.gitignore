@@ -1,6 +1,9 @@
 # Real inventory may carry credentials/eAPI details — only the example is tracked
 inventory.yml
 
+# Machine-specific desired state — copy from group_vars/arista.yml.example
+group_vars/arista.yml
+
 # Raw discovery output and config dumps
 artifacts/
 

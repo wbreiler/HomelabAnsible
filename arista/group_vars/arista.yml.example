@@ -1,0 +1,12 @@
+---
+# Copy to group_vars/arista.yml and customize locally. The generated file is
+# gitignored. Keep every management toggle false until the exact change has
+# been reviewed and approved.
+
+arista_manage_hostname: false
+arista_hostname: "switch.example"
+
+# Only explicitly listed interfaces are managed. Ethernet1, Management1, and
+# Vlan1 are protected by the playbook and must never appear here.
+arista_l2_state: merged
+arista_l2_interfaces: []

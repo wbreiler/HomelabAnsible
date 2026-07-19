@@ -16,8 +16,14 @@ IPMI, and Proxmox VLANs and is the L3 gateway for all of them.
 ## Status
 
 Discovery complete — sanitized running-config and raw output live in
-`artifacts/` (gitignored). `site.yml` manages the hostname; extend it with
-VLANs/interfaces as changes are needed.
+`artifacts/` (gitignored). Those files are observations, not desired state:
+the captured snapshot predates the managed hostname and Ethernet7 corrections.
+
+Reusable automation remains tracked in `site.yml`. Machine-specific desired
+values live in ignored `group_vars/arista.yml`, copied from the tracked
+`group_vars/arista.yml.example`. Only the hostname and Ethernet7 correction
+are managed so far; the remainder of the observed switch configuration is
+deliberately untouched.
 
 Known config quirks (observed, deliberately untouched):
 
@@ -57,5 +63,13 @@ The switch is the gateway (SVI) for each VLAN:
 ```bash
 ansible-galaxy collection install -r requirements.yml
 cp inventory.yml.example inventory.yml
+cp group_vars/arista.yml.example group_vars/arista.yml
+# Edit both ignored local files before running anything.
 ansible-playbook site.yml --ask-pass     # or set ansible_password in inventory.yml
+```
+
+Always preview switch changes first:
+
+```bash
+ansible-playbook site.yml --ask-pass --check --diff
 ```

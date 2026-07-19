@@ -1,24 +1,48 @@
 ---
-# ponytail: only the hostname is managed so far; grow this into full
-# desired state (vlans, interfaces, SVIs) as changes are actually needed.
-- name: Configure arista-nash core switch
+# Keep reusable automation here. Machine-specific desired values are loaded
+# automatically from ignored group_vars/arista.yml; see arista.yml.example.
+- name: Configure Arista core switch
   hosts: arista
   gather_facts: false
+
+  vars:
+    arista_protected_interfaces:
+      - Ethernet1
+      - Management1
+      - Vlan1
+
+  pre_tasks:
+    - name: Validate local desired-state configuration
+      ansible.builtin.assert:
+        that:
+          - arista_manage_hostname is defined
+          - not (arista_manage_hostname | bool) or arista_hostname | length > 0
+          - arista_l2_interfaces is sequence
+          - arista_l2_state in ['merged', 'replaced']
+          - >-
+            arista_l2_interfaces
+            | selectattr('name', 'in', arista_protected_interfaces)
+            | list
+            | length == 0
+        fail_msg: >-
+          Copy group_vars/arista.yml.example to group_vars/arista.yml and
+          define only approved desired state. Ethernet1, Management1, and
+          Vlan1 are protected and cannot be managed by this playbook.
+      tags:
+        - always
 
   tasks:
     - name: Set hostname
       arista.eos.eos_config:
         lines:
-          - hostname arista-nash
+          - "hostname {{ arista_hostname }}"
+      when: arista_manage_hostname | bool
 
-    - name: Et7 (atlas-idrac) is an IPMI port — access VLAN 10
+    - name: Configure explicitly managed layer-2 interfaces
       arista.eos.eos_l2_interfaces:
-        config:
-          - name: Ethernet7
-            mode: access
-            access:
-              vlan: 10
-        state: replaced   # also removes the stray trunk lines on this port
+        config: "{{ arista_l2_interfaces }}"
+        state: "{{ arista_l2_state }}"
+      when: arista_l2_interfaces | length > 0
 
     - name: Save to startup when running config changed
       arista.eos.eos_config:
