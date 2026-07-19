@@ -15,7 +15,7 @@ Automated deployment and configuration of Proxmox Backup Server with NFS storage
 ## Prerequisites
 
 - Debian-based system (tested on Debian 12 Bookworm)
-- Ansible 2.9 or higher installed on control node
+- ansible-core 2.16 through 2.21 installed on the control node
 - Root or sudo access on target PBS server
 - NFS server configured and accessible
 - Python 3 on target hosts
@@ -27,6 +27,10 @@ Automated deployment and configuration of Proxmox Backup Server with NFS storage
 ```bash
 # Clone or create the repository
 cd pbs-ansible
+
+# Install the tested controller and collection dependency ranges
+python3 -m pip install -r requirements.txt
+ansible-galaxy collection install -r requirements.yml
 
 # Copy example files
 cp inventory.yml.example inventory.yml

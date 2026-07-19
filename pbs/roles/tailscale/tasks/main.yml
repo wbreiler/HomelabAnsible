@@ -5,6 +5,13 @@
     dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
     mode: '0644'
 
+- name: Install deb822 repository dependency
+  ansible.builtin.apt:
+    name: python3-debian
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
 - name: Add Tailscale repository
   ansible.builtin.deb822_repository:
     name: tailscale
@@ -29,7 +36,7 @@
     state: present
 
 - name: Start and enable Tailscale service
-  ansible.builtin.systemd:
+  ansible.builtin.systemd_service:
     name: tailscaled
     state: started
     enabled: true
