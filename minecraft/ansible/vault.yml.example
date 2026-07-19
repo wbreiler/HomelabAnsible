@@ -1,5 +1,5 @@
 ---
-# vault.example.yml — example vault structure (UNENCRYPTED, commit-safe placeholder)
+# vault.yml.example — example vault structure (UNENCRYPTED, commit-safe placeholder)
 #
 # Copy this file to vault.yml, fill in real values, then encrypt:
 #   ansible-vault encrypt vault.yml
@@ -7,14 +7,12 @@
 # Reference in playbooks via: --ask-vault-pass  or  --vault-password-file ~/.vault_pass
 
 # Proxmox API credentials
-vault_proxmox_api_host: "10.10.30.2"         # Proxmox cluster VIP
-vault_proxmox_api_user: "root@pam"           # Proxmox API user
+vault_proxmox_api_host: "192.0.2.20"          # Example address; replace locally
+vault_proxmox_api_user: "automation@pam"      # Proxmox API user
 vault_proxmox_api_password: "changeme"       # Proxmox root (or API token) password
 
-# Discord webhook URLs — one per Minecraft server instance
-vault_discord_webhook_atm10: "https://discord.com/api/webhooks/REPLACE_ME/REPLACE_ME"
-vault_discord_webhook_homestead: "https://discord.com/api/webhooks/REPLACE_ME/REPLACE_ME"
-vault_discord_webhook_cobbleverse: "https://discord.com/api/webhooks/REPLACE_ME/REPLACE_ME"
+# Discord webhook URLs — add one per Minecraft server instance
+vault_discord_webhook_example: "https://discord.com/api/webhooks/REPLACE_ME/REPLACE_ME"
 
 # CurseForge API key (required for any server using PACK_SOURCE=curseforge)
 # Get one at: https://console.curseforge.com/

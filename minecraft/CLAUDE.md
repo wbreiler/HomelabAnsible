@@ -47,7 +47,7 @@ The `ssh-agent bash -c '...'` wrapper is required whenever any server has `migra
 
 **Two-play architecture**: Play 1 runs on `localhost` against the Proxmox API to create LXCs and waits for SSH. Play 2 runs on the `newly_provisioned` dynamic group (populated by `add_host`) to apply the `minecraft_server` role. Re-running is idempotent.
 
-**Vault setup**: `cp vault.example.yml vault.yml`, fill in values, `ansible-vault encrypt vault.yml`. The file `vault.yml` is gitignored.
+**Vault setup**: `cp vault.yml.example vault.yml`, fill in values, `ansible-vault encrypt vault.yml`. The file `vault.yml` is gitignored.
 
 **Local configuration setup**: Copy `group_vars/all.yml.example` to
 `group_vars/all.yml` and `servers.yml.example` to `servers.yml`. The generated
@@ -70,7 +70,11 @@ migration paths remain local.
 
 Deployed to each server LXC at `/usr/local/bin/update-modpack.sh`. Config at `/etc/minecraft/update.conf`.
 
-Flow: Discord announce → 5-min countdown (skipped with `--no-wait`) → stop service → backup mods (keep 3) → wipe mods → download → extract → start service → Discord success.
+Flow: Discord announce → 5-min countdown (skipped with `--no-wait`) →
+download, stage, and validate required content while the server stays online →
+briefly stop the service → atomically swap the staged content → restart and
+verify, rolling back the mod directory and service on failure. The latest
+three backups are retained.
 
 `--no-wait` is used by the Ansible role for initial provisioning.
 

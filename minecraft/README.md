@@ -17,7 +17,7 @@ MinecraftLXCAnsible/
     ├── servers.yml.example         # Copy to ignored servers.yml and customize
     ├── ansible.cfg
     ├── hosts.ini                   # Static inventory (localhost only)
-    ├── vault.example.yml           # Vault structure example (copy → vault.yml, encrypt)
+    ├── vault.yml.example           # Vault structure example (copy → vault.yml, encrypt)
     ├── group_vars/all.yml.example  # Copy to ignored all.yml and customize
     └── roles/minecraft_server/     # Role applied to each new LXC
         ├── tasks/main.yml
@@ -32,7 +32,7 @@ MinecraftLXCAnsible/
 
 ```bash
 cd ansible/
-cp vault.example.yml vault.yml
+cp vault.yml.example vault.yml
 # Edit vault.yml: fill in Proxmox API credentials and Discord webhook URLs
 ansible-vault encrypt vault.yml
 ```
@@ -49,7 +49,7 @@ template. Both generated files are ignored by Git.
 
 ### Step 3 — Define your servers
 
-Edit `ansible/servers.yml`. Each entry creates one LXC and configures it:
+Edit `servers.yml`. Each entry creates one LXC and configures it:
 
 | Field | Description |
 |---|---|
@@ -125,7 +125,11 @@ DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 MINECRAFT_DIR="/opt/minecraft"
 ```
 
-**Update flow:** Discord announce → 5-min countdown → stop service → backup mods (keeps 3) → wipe mods → download new mrpack → extract → start service → Discord success
+**Update flow:** Discord announce → 5-min countdown → download, stage, and
+validate required content while the server stays online → briefly stop the
+service → atomically swap the staged content → restart and verify. Failures
+after the swap restore the previous mod directory and restart the service.
+The latest three backups are retained.
 
 Logs: `/var/log/minecraft-update.log` (auto-rotates at 10 MB)
 
