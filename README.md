@@ -12,6 +12,7 @@ and Minecraft server LXCs.
 | [`pbs/`](pbs/) | Proxmox Backup Server: install, NFS datastore, users, sync/pull jobs, Tailscale | [README](pbs/README.md) |
 | [`minecraft/`](minecraft/) | Minecraft server LXC provisioning via the Proxmox API + nightly Modrinth/CurseForge modpack update script | [README](minecraft/README.md) |
 | [`truenas/`](truenas/) | TrueNAS host `erebus`: full desired-state config (users, datasets, shares, services, apps) via middleware APIs, with read-only discovery and audit playbooks | [README](truenas/README.md) |
+| [`arista/`](arista/) | Core switch (Arista DCS-7050SX-64): VLANs, SVI gateways, port config — discovery in progress | [README](arista/README.md) |
 
 Each project is self-contained: it has its own `ansible.cfg`, inventory, and
 vault, and is run from inside its own directory. There is no shared root
@@ -59,6 +60,7 @@ Before committing, run `git status` and confirm none of the above appear.
 | Proxmox nodes | nyx 10.10.30.2 (cluster VIP), prometheus 10.10.30.3, atlas 10.10.30.9 |
 | PBS (mnemosyne) | 10.10.20.2 |
 | TrueNAS (erebus) | 10.10.10.7 (SSH port 2747) |
+| Core switch (Arista) | 192.168.1.222 — SVI gateways 10.10.10.2 (VLAN 10 ipmi), 10.10.20.1 (VLAN 20 storage), 10.10.30.1 (VLAN 30 proxmox-hosts), 10.10.40.1 (VLAN 40 proxmox-guests) |
 | apt-cacher-ng | 10.10.40.175:3142 (VLAN 40) |
 | Guest network | 10.10.40.0/24 (VLAN 40, bridge `vmbr0`) |
 | Corosync ring1 | 10.10.50.0/24 |

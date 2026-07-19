@@ -13,6 +13,11 @@ inside its own directory.
   `truenas/AGENTS.md` before touching it** — it has strict safety rules
   (read-only discovery, explicit approval for anything destructive, never
   touch pools/network/SSH/the Ansible account).
+- `arista/` — Core switch (192.168.1.222). It is the L3 gateway for every
+  homelab VLAN: a bad change here takes down storage, IPMI, and the Proxmox
+  cluster at once. Config changes require explicit user approval; management
+  access is in-band (Vlan1 SVI), so never touch Vlan1, Et1 (uplink), or the
+  admin account without a confirmed out-of-band path.
 
 Always `cd` into the project directory before running ansible — each has its
 own `ansible.cfg` (inventory, SSH key, become settings) that only applies from
