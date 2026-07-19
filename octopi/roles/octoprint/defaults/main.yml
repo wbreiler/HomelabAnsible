@@ -7,6 +7,7 @@ octoprint_service: octoprint
 octoprint_reset_existing_password: false
 octoprint_gcode_source: ""
 octoprint_gcode_destination: "{{ octoprint_basedir }}/uploads"
+octoprint_temperature_profiles: []
 octoprint_plugin_system_packages: []
 octoprint_plugins: []
 octoprint_settings: []

@@ -11,6 +11,18 @@ octoprint_service: octoprint
 # into OctoPrint's uploads directory with their directory structure preserved.
 # octoprint_gcode_source: /absolute/path/to/G-Code
 
+# Optional preheat presets displayed in OctoPrint's temperature tab.
+octoprint_temperature_profiles:
+  - name: PLA
+    extruder: 215
+    bed: 60
+  - name: TPU
+    extruder: 235
+    bed: 65
+  - name: PETG
+    extruder: 240
+    bed: 85
+
 # Optional tagged Ethernet configuration. The physical parent remains
 # unnumbered and DHCP runs on the VLAN interface.
 network_manage_vlan: false

@@ -8,6 +8,7 @@ settings. It manages:
 - an OctoPrint web user and password;
 - pinned third-party plugins in OctoPrint's own virtual environment;
 - arbitrary core and plugin settings through OctoPrint's supported config CLI;
+- configurable material preheat profiles;
 - a controller-side G-code library, including nested directories;
 - the OctoPrint systemd service.
 
@@ -66,6 +67,27 @@ octoprint_gcode_source: >-
 
 The source path is machine-specific and belongs in the ignored
 `group_vars/octopi_servers.yml` file.
+
+## Preheat profiles
+
+Define the nozzle (`extruder`) and bed temperatures shown in OctoPrint's
+temperature tab:
+
+```yaml
+octoprint_temperature_profiles:
+  - name: PLA
+    extruder: 215
+    bed: 60
+  - name: TPU
+    extruder: 235
+    bed: 65
+  - name: PETG
+    extruder: 240
+    bed: 85
+```
+
+These are general MK3S starting values. Adjust them for the specific filament
+manufacturer and formulation.
 
 ## Tagged Ethernet
 

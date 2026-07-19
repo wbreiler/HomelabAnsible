@@ -137,6 +137,16 @@
     octoprint_managed_settings: >-
       {{
         octoprint_settings
+        + (
+          [
+            {
+              'path': 'temperature.profiles',
+              'value': octoprint_temperature_profiles
+            }
+          ]
+          if octoprint_temperature_profiles | length > 0
+          else []
+        )
         + [
           {
             'path': 'printerProfiles.default',
