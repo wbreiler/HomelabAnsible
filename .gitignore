@@ -7,6 +7,29 @@
 .ansible/
 *.retry
 
+# Local Ansible inventories and secrets
+# Keep runnable examples and sanitized desired state tracked; ignore only the
+# machine-specific files created from those examples.
+/proxmox/inventory.yml
+/proxmox/group_vars/proxmox_cluster.yml
+/proxmox/host_vars/*.yml
+!/proxmox/host_vars/example.yml
+/proxmox/host_vars/*/secrets.yml
+/proxmox/files/gallery-dl-cookies.txt
+
+/pbs/inventory.yml
+/pbs/group_vars/pbs_servers.yml
+/pbs/.vault_pass
+
+/minecraft/ansible/vault.yml
+
+/truenas/inventory/host_vars/*/vault.yml
+/truenas/inventory/**/secrets.*
+/truenas/vault-password*
+
+/arista/inventory.yml
+/arista/.vault_pass
+
 # Python
 __pycache__/
 *.pyc
