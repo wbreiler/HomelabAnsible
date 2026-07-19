@@ -218,3 +218,63 @@
     name: "{{ octoprint_service }}"
     enabled: true
     state: started
+
+- name: Check controller G-code source
+  become: false
+  delegate_to: localhost
+  ansible.builtin.stat:
+    path: "{{ octoprint_gcode_source }}"
+  register: octoprint_gcode_source_stat
+  when: octoprint_gcode_source | length > 0
+  tags:
+    - gcode
+
+- name: Require configured G-code source directory
+  ansible.builtin.assert:
+    that:
+      - octoprint_gcode_source_stat.stat.exists
+      - octoprint_gcode_source_stat.stat.isdir
+    fail_msg: >-
+      The controller G-code source does not exist or is not a directory:
+      {{ octoprint_gcode_source }}
+  when: octoprint_gcode_source | length > 0
+  tags:
+    - gcode
+
+- name: Install G-code synchronization dependency
+  ansible.builtin.apt:
+    name: rsync
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: octoprint_gcode_source | length > 0
+  tags:
+    - gcode
+
+- name: Ensure OctoPrint uploads directory exists
+  ansible.builtin.file:
+    path: "{{ octoprint_gcode_destination }}"
+    state: directory
+    owner: "{{ octoprint_user }}"
+    group: "{{ octoprint_group }}"
+    mode: "0755"
+  when: octoprint_gcode_source | length > 0
+  tags:
+    - gcode
+
+- name: Copy G-code library while preserving directories
+  become: false
+  ansible.posix.synchronize:
+    src: "{{ octoprint_gcode_source }}/"
+    dest: "{{ octoprint_gcode_destination }}/"
+    archive: true
+    owner: false
+    group: false
+    delete: false
+    rsync_opts:
+      - "--include=*/"
+      - "--include=*.gcode"
+      - "--exclude=*"
+  when: octoprint_gcode_source | length > 0
+  tags:
+    - gcode

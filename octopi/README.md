@@ -8,6 +8,7 @@ settings. It manages:
 - an OctoPrint web user and password;
 - pinned third-party plugins in OctoPrint's own virtual environment;
 - arbitrary core and plugin settings through OctoPrint's supported config CLI;
+- a controller-side G-code library, including nested directories;
 - the OctoPrint systemd service.
 
 It deliberately does **not** image Raspberry Pi OS, configure Wi-Fi, change the
@@ -50,6 +51,21 @@ ansible-playbook site.yml --ask-vault-pass
 
 The playbook restarts OctoPrint only when a user, plugin, or setting changes.
 Plugin installation requires internet access from the OctoPi host.
+
+## G-code library
+
+Set an absolute controller-side path to copy all `.gcode` files into
+OctoPrint's uploads directory. Nested directories are preserved, unrelated
+remote files are not deleted, and non-G-code files such as `.DS_Store` are
+excluded:
+
+```yaml
+octoprint_gcode_source: >-
+  /Users/example/Library/Mobile Documents/com~apple~CloudDocs/3D Printing/G-Code/Printer
+```
+
+The source path is machine-specific and belongs in the ignored
+`group_vars/octopi_servers.yml` file.
 
 ## Tagged Ethernet
 

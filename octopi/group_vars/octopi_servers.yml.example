@@ -7,6 +7,10 @@ octoprint_basedir: /home/pi/.octoprint
 octoprint_venv: /home/pi/oprint
 octoprint_service: octoprint
 
+# Optional controller-side G-code library. Files ending in .gcode are copied
+# into OctoPrint's uploads directory with their directory structure preserved.
+# octoprint_gcode_source: /absolute/path/to/G-Code
+
 # Optional tagged Ethernet configuration. The physical parent remains
 # unnumbered and DHCP runs on the VLAN interface.
 network_manage_vlan: false
