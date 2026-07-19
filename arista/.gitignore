@@ -1,0 +1,9 @@
+# Real inventory may carry credentials/eAPI details — only the example is tracked
+inventory.yml
+
+# Raw discovery output and config dumps
+artifacts/
+
+# Vault
+*.vault
+.vault_pass

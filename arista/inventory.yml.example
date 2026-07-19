@@ -1,0 +1,16 @@
+---
+all:
+  children:
+    arista:
+      hosts:
+        switch:
+          ansible_host: 192.168.1.222
+          ansible_user: admin
+          # Password auth; either set ansible_password here (file is
+          # gitignored) or run plays with --ask-pass.
+          # ansible_password: "..."
+          ansible_network_os: arista.eos.eos
+          ansible_connection: ansible.netcommon.network_cli
+          # enable mode for config/show running-config
+          ansible_become: true
+          ansible_become_method: enable
