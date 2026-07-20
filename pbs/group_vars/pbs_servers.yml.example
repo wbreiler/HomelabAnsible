@@ -12,15 +12,15 @@ users_pbs_users:
     comment: "PBS Boulder User"
     password: "CHANGE_ME_bldr_password"
 
-# NFS Configuration
-nfs_mount_server: "192.168.4.211"              # IP or hostname of your NFS server
-nfs_mount_export_path: "/volume1/PBS"          # Path exported by NFS server
-nfs_mount_path: "/mnt/pbs-nfs"                 # Local mount point
-nfs_mount_opts: "rw,relatime,vers=3,rsize=131072,wsize=131072,hard,proto=tcp,noatime"
-
-# PBS Datastore Configuration
-pbs_datastore_name: "MainStore"                # Name of the datastore
-pbs_datastore_path: "/mnt/pbs-nfs/"            # Path where datastore will be created
+# Local ZFS and PBS Datastore Configuration
+# The pool may use any topology: one disk, mirror, RAIDZ, or multiple vdevs.
+# Create the pool before running this playbook; the playbook can create its
+# dataset without making destructive disk or pool-layout decisions.
+pbs_zfs_pool: "backup"                          # Existing local ZFS pool
+pbs_zfs_dataset: "backup/pbs"                   # Dataset dedicated to PBS
+pbs_zfs_create_dataset: true                    # Create the dataset if absent
+pbs_datastore_name: "MainStore"                 # PBS datastore name
+pbs_datastore_path: "/mnt/datastore"            # Dataset mountpoint
 
 # Sync Job Configuration (set pbs_configure_sync_job: true to enable)
 # This syncs FROM a remote PBS server TO this server (Saturday at 11:30 PM)

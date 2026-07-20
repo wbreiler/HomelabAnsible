@@ -1,6 +1,9 @@
 ---
 pbs_datastore_name: "MainStore"
-pbs_datastore_path: "/mnt/pbs-nfs/"
+pbs_zfs_pool: "backup"
+pbs_zfs_dataset: "{{ pbs_zfs_pool }}/pbs"
+pbs_zfs_create_dataset: true
+pbs_datastore_path: "/mnt/datastore"
 
 # Sync Job Configuration
 pbs_configure_sync_job: false

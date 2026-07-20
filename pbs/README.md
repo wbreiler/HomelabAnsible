@@ -1,14 +1,17 @@
 # Proxmox Backup Server Ansible Configuration
 
-Automated deployment and configuration of Proxmox Backup Server with NFS storage, user management, and Tailscale integration using a modular role-based structure.
+Automated deployment and configuration of Proxmox Backup Server with local
+ZFS storage, user management, and Tailscale integration using a modular
+role-based structure.
 
 ## Features
 
 - ✅ Installs Proxmox Backup Server from no-subscription repository
 - ✅ Disables enterprise repository
-- ✅ Mounts NFS share with optimized settings
+- ✅ Uses an existing local ZFS pool of any size or vdev topology
+- ✅ Creates a dedicated ZFS dataset with `atime=off`
 - ✅ Creates and manages PBS users with secure passwords
-- ✅ Configures MainStore datastore on NFS
+- ✅ Configures MainStore on the local ZFS dataset
 - ✅ Optional remote configuration for sync/pull jobs
 - ✅ Installs and configures Tailscale VPN
 
@@ -17,7 +20,7 @@ Automated deployment and configuration of Proxmox Backup Server with NFS storage
 - Debian-based system (tested on Debian 12 Bookworm)
 - ansible-core 2.16 through 2.21 installed on the control node
 - Root or sudo access on target PBS server
-- NFS server configured and accessible
+- A local ZFS pool created on the PBS server
 - Python 3 on target hosts
 
 ## Quick Start
@@ -84,9 +87,6 @@ pbs-ansible/
 │   ├── pbs_servers.yml                  # Variables for PBS servers (DO NOT COMMIT)
 │   └── pbs_servers.yml.example          # Example variables
 ├── roles/
-│   ├── nfs_mount/                       # NFS mounting role
-│   │   ├── tasks/main.yml
-│   │   └── defaults/main.yml
 │   ├── users/                           # User management role
 │   │   ├── tasks/main.yml
 │   │   └── defaults/main.yml
@@ -131,10 +131,11 @@ users_pbs_users:
     comment: "PBS Nash User"
     password: "secure_password"
 
-# NFS Configuration
-nfs_mount_server: "192.168.4.211"
-nfs_mount_export_path: "/volume1/PBS"
-nfs_mount_opts: "rw,relatime,vers=3,rsize=131072,wsize=131072,hard,proto=tcp,noatime"
+# Local ZFS datastore
+pbs_zfs_pool: "backup"
+pbs_zfs_dataset: "backup/pbs"
+pbs_zfs_create_dataset: true
+pbs_datastore_path: "/mnt/datastore"
 
 # Pull Job (runs weekly on Saturday at 11:30 PM)
 pbs_configure_pull_job: true
@@ -142,19 +143,6 @@ pbs_pull_schedule: "sat 23:30"
 ```
 
 ## Roles
-
-### nfs_mount
-
-Mounts NFS shares for PBS storage with performance-optimized settings.
-
-**Tags:** `nfs`, `storage`, `setup`
-
-**Variables:**
-
-- `nfs_mount_path`: Mount point (default: `/mnt/pbs-nfs`)
-- `nfs_mount_server`: NFS server address
-- `nfs_mount_export_path`: NFS export path
-- `nfs_mount_opts`: Mount options (optimized for performance)
 
 ### users
 
@@ -176,7 +164,10 @@ Installs Proxmox Backup Server, configures datastore, and manages remote sync/pu
 **Variables:**
 
 - `pbs_datastore_name`: Datastore name (default: `MainStore`)
-- `pbs_datastore_path`: Datastore path
+- `pbs_zfs_pool`: Existing local pool containing the datastore dataset
+- `pbs_zfs_dataset`: Dataset dedicated to PBS (default: `<pool>/pbs`)
+- `pbs_zfs_create_dataset`: Create that dataset when it is absent
+- `pbs_datastore_path`: Dataset mountpoint and PBS datastore path
 - `pbs_configure_remote_sync`: Enable remote sync (push)
 - `pbs_configure_pull_job`: Enable pull job
 - `pbs_pull_schedule`: Pull schedule (e.g., `"sat 23:30"`)
@@ -198,8 +189,8 @@ Installs and configures Tailscale VPN (optional).
 ### Run Specific Roles
 
 ```bash
-# Only configure NFS and PBS
-ansible-playbook site.yml --tags nfs,pbs
+# Only configure local storage and PBS
+ansible-playbook site.yml --tags storage,pbs
 
 # Only manage users
 ansible-playbook site.yml --tags users
@@ -265,8 +256,10 @@ Or set `tailscale_authenticate: true` and provide an auth key in `tailscale_args
 # Check datastore
 proxmox-backup-manager datastore list
 
-# Check NFS mount
-df -h /mnt/pbs-nfs
+# Check the local ZFS pool, dataset, and mountpoint
+zpool status backup
+zfs list backup/pbs
+df -h /mnt/datastore
 
 # Check pull jobs (if configured)
 proxmox-backup-manager pull-job list
@@ -277,17 +270,18 @@ proxmox-backup-manager remote list
 
 ## Troubleshooting
 
-### NFS Mount Issues
+### ZFS Storage Issues
 
 ```bash
-# Check NFS server exports
-showmount -e 192.168.4.211
+# Check pool health and topology
+zpool status
 
-# Test manual mount
-mount -t nfs 192.168.4.211:/volume1/PBS /mnt/test
+# Check the dataset and its effective mountpoint
+zfs list -o name,mountpoint
+zfs get mountpoint backup/pbs
 
-# Check NFS client packages
-dpkg -l | grep nfs-common
+# Check free space
+zpool list
 ```
 
 ### PBS Service Issues

@@ -13,11 +13,8 @@
       when: install_tailscale | default(true)
       tags: ['tailscale', 'setup']
 
-    - role: nfs_mount
-      tags: ['nfs', 'storage', 'setup']
-
     - role: pbs
-      tags: ['pbs', 'setup']
+      tags: ['pbs', 'storage', 'setup']
 
     - role: users
       tags: ['users', 'setup']

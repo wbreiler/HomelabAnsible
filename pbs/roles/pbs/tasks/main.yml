@@ -10,11 +10,91 @@
     delay: 10
     timeout: 300
 
-- name: Create datastore directory
-  ansible.builtin.file:
-    path: "{{ pbs_datastore_path }}"
-    state: directory
-    mode: '0755'
+- name: Validate local ZFS datastore configuration
+  ansible.builtin.assert:
+    that:
+      - pbs_zfs_pool | length > 0
+      - pbs_zfs_dataset | length > 0
+      - pbs_zfs_dataset == pbs_zfs_pool or pbs_zfs_dataset.startswith(pbs_zfs_pool + '/')
+      - pbs_datastore_path.startswith('/')
+      - pbs_datastore_path != '/'
+    fail_msg: >-
+      Configure an absolute, non-root pbs_datastore_path and a
+      pbs_zfs_dataset within pbs_zfs_pool.
+
+- name: Verify the local ZFS pool exists
+  ansible.builtin.command:
+    argv:
+      - zpool
+      - list
+      - -H
+      - -o
+      - name
+      - "{{ pbs_zfs_pool }}"
+  register: pbs_zfs_pool_check
+  changed_when: false
+
+- name: Check whether the datastore ZFS dataset exists
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -o
+      - mountpoint
+      - "{{ pbs_zfs_dataset }}"
+  register: pbs_zfs_dataset_check
+  changed_when: false
+  failed_when: false
+
+- name: Require a pre-existing dataset when creation is disabled
+  ansible.builtin.assert:
+    that:
+      - pbs_zfs_dataset_check.rc == 0
+    fail_msg: >-
+      ZFS dataset {{ pbs_zfs_dataset }} does not exist and
+      pbs_zfs_create_dataset is false.
+  when: not pbs_zfs_create_dataset | bool
+
+- name: Create the local ZFS datastore dataset
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - create
+      - -p
+      - -o
+      - "mountpoint={{ pbs_datastore_path }}"
+      - -o
+      - atime=off
+      - "{{ pbs_zfs_dataset }}"
+  when:
+    - pbs_zfs_create_dataset | bool
+    - pbs_zfs_dataset_check.rc != 0
+  register: pbs_zfs_dataset_create
+  changed_when: pbs_zfs_dataset_create.rc == 0
+
+- name: Read the datastore ZFS mount point
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -o
+      - value
+      - mountpoint
+      - "{{ pbs_zfs_dataset }}"
+  register: pbs_zfs_mountpoint
+  changed_when: false
+
+- name: Verify the datastore path is the ZFS dataset mount point
+  ansible.builtin.assert:
+    that:
+      - pbs_zfs_mountpoint.stdout | trim == pbs_datastore_path
+    fail_msg: >-
+      ZFS dataset {{ pbs_zfs_dataset }} is mounted at
+      {{ pbs_zfs_mountpoint.stdout | trim }}, but pbs_datastore_path is
+      {{ pbs_datastore_path }}. Set the variables to the existing mount point
+      or change the dataset mountpoint explicitly before rerunning.
 
 - name: Check if datastore already exists
   ansible.builtin.command:
@@ -27,7 +107,7 @@
   changed_when: false
   failed_when: false
 
-- name: Create MainStore datastore
+- name: Create PBS datastore
   ansible.builtin.command:
     argv:
       - proxmox-backup-manager
