@@ -340,7 +340,7 @@
     archive: true
     owner: false
     group: false
-    delete: false
+    delete: true
     rsync_opts:
       - "--include=*/"
       - "--include=*.gcode"

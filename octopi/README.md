@@ -61,8 +61,9 @@ value in `config.yaml`.
 
 Set an absolute controller-side path to copy all `.gcode` files into
 OctoPrint's uploads directory. Nested directories are preserved, unrelated
-remote files are not deleted, and non-G-code files such as `.DS_Store` are
-excluded:
+non-G-code files such as `.DS_Store` are excluded, and the local G-code tree is
+authoritative: remote `.gcode` files that no longer exist locally are deleted.
+Excluded OctoPrint metadata and unrelated non-G-code files remain untouched:
 
 ```yaml
 octoprint_gcode_source: >-
