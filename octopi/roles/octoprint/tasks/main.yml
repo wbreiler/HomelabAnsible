@@ -132,6 +132,70 @@
   tags:
     - plugins
 
+- name: Ensure OctoPrint printer profiles directory exists
+  ansible.builtin.file:
+    path: "{{ octoprint_basedir }}/printerProfiles"
+    state: directory
+    owner: "{{ octoprint_user }}"
+    group: "{{ octoprint_group }}"
+    mode: "0755"
+  tags:
+    - configuration
+    - printer
+
+- name: Install managed OctoPrint printer profile
+  ansible.builtin.copy:
+    content: "{{ octoprint_printer_profile | to_nice_yaml(indent=2, sort_keys=false) }}"
+    dest: >-
+      {{ octoprint_basedir }}/printerProfiles/{{ octoprint_printer_profile.id }}.profile
+    owner: "{{ octoprint_user }}"
+    group: "{{ octoprint_group }}"
+    mode: "0644"
+  notify: Restart OctoPrint
+  tags:
+    - configuration
+    - printer
+
+- name: Read obsolete inline printer profile setting
+  become: true
+  become_user: "{{ octoprint_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ octoprint_venv }}/bin/octoprint"
+      - --basedir
+      - "{{ octoprint_basedir }}"
+      - config
+      - get
+      - printerProfiles.defaultProfile
+      - --json
+  register: octoprint_inline_printer_profile
+  changed_when: false
+  failed_when: false
+  tags:
+    - configuration
+    - printer
+
+- name: Remove obsolete inline printer profile setting
+  become: true
+  become_user: "{{ octoprint_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ octoprint_venv }}/bin/octoprint"
+      - --basedir
+      - "{{ octoprint_basedir }}"
+      - config
+      - remove
+      - printerProfiles.defaultProfile
+  when:
+    - octoprint_inline_printer_profile.rc == 0
+    - octoprint_inline_printer_profile.stdout_lines | length > 0
+    - (octoprint_inline_printer_profile.stdout_lines[0] | from_json) is not none
+  changed_when: true
+  notify: Restart OctoPrint
+  tags:
+    - configuration
+    - printer
+
 - name: Build managed OctoPrint settings
   ansible.builtin.set_fact:
     octoprint_managed_settings: >-
@@ -151,10 +215,6 @@
           {
             'path': 'printerProfiles.default',
             'value': octoprint_printer_profile.id
-          },
-          {
-            'path': 'printerProfiles.defaultProfile',
-            'value': octoprint_printer_profile
           },
           {
             'path': 'serial.port',

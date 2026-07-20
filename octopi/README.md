@@ -53,6 +53,10 @@ ansible-playbook site.yml --ask-vault-pass
 The playbook restarts OctoPrint only when a user, plugin, or setting changes.
 Plugin installation requires internet access from the OctoPi host.
 
+The printer profile is installed through OctoPrint's persisted profile store at
+`~/.octoprint/printerProfiles/<id>.profile`, not merely added as a fallback
+value in `config.yaml`.
+
 ## G-code library
 
 Set an absolute controller-side path to copy all `.gcode` files into
