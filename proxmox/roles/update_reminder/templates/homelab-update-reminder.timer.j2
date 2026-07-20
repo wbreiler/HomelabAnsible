@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically check for pending package updates
+
+[Timer]
+OnCalendar={{ update_reminder_schedule }}
+RandomizedDelaySec={{ update_reminder_randomized_delay }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,73 @@
+---
+- name: Validate update reminder configuration
+  ansible.builtin.assert:
+    that:
+      - update_reminder_discord_webhook_url | length > 0
+      - >-
+        update_reminder_discord_webhook_url is
+        match('^https://([a-z]+\.)?discord(app)?\.com/api/webhooks/')
+      - update_reminder_package_threshold | int >= 1
+      - update_reminder_repeat_after_days | int >= 1
+      - update_reminder_schedule | length > 0
+      - update_reminder_randomized_delay | length > 0
+    fail_msg: >-
+      Configure a Discord HTTPS webhook and positive reminder thresholds in
+      the Vault-encrypted group variables.
+  no_log: true
+
+- name: Install update reminder dependencies
+  ansible.builtin.apt:
+    name:
+      - curl
+      - python3
+    state: present
+
+- name: Create update reminder state directory
+  ansible.builtin.file:
+    path: /var/lib/homelab-update-reminder
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install update reminder configuration
+  ansible.builtin.template:
+    src: homelab-update-reminder.env.j2
+    dest: /etc/homelab-update-reminder.env
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Install update reminder script
+  ansible.builtin.template:
+    src: homelab-update-reminder.sh.j2
+    dest: /usr/local/sbin/homelab-update-reminder
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install update reminder service
+  ansible.builtin.template:
+    src: homelab-update-reminder.service.j2
+    dest: /etc/systemd/system/homelab-update-reminder.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart update reminder timer
+
+- name: Install update reminder timer
+  ansible.builtin.template:
+    src: homelab-update-reminder.timer.j2
+    dest: /etc/systemd/system/homelab-update-reminder.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart update reminder timer
+
+- name: Enable update reminder timer
+  ansible.builtin.systemd_service:
+    name: homelab-update-reminder.timer
+    daemon_reload: true
+    enabled: true
+    state: started

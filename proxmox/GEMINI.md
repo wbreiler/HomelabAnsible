@@ -14,6 +14,7 @@ This project contains Ansible playbooks and roles for automating the deployment 
     *   `pbs_storage`: Configures Proxmox Backup Server storage with shared namespace.
     *   `manage_isos`: Downloads or mounts ISOs.
     *   `update_all`: Updates Proxmox host nodes and LXC operating-system packages via apt or apk.
+    *   `update_reminder`: Installs per-node Discord package-update reminders.
     *   `pbs_restore`: Restores LXC containers from PBS backups.
 *   **`ansible.cfg`**: Project-specific Ansible configuration.
 
@@ -55,6 +56,7 @@ Use tags to run specific parts of the automation:
 *   `pbs`: Configure PBS storage.
 *   `isos`: Manage ISO downloads/mounts.
 *   `update`: Update nodes and LXC containers (requires `-e 'run_updates=true'`).
+*   `update_reminder`: Install per-node Discord package-update reminders.
 *   `restore`: Restore containers from PBS backups (requires `-e 'restore_from_pbs=true'`).
 
 Example:

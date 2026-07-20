@@ -78,6 +78,7 @@ proxmox-ansible/
 │   ├── gallery_dl/          # gallery-dl LXC (custom install)
 │   ├── stash/               # Stash media server LXC (custom install)
 │   ├── update_all/          # System updates role (nodes + LXCs)
+│   ├── update_reminder/     # Per-node Discord update reminders
 │   ├── cleanup_storage/     # Stale ZFS dataset cleanup
 │   ├── pbs_restore/         # PBS backup restore role
 │   ├── vm_deploy/           # Full VM deployment from ISOs
@@ -458,6 +459,50 @@ ansible-playbook site.yml --tags update -e 'run_updates=true' -e 'update_reboot_
 update_skip_vmids:
   - 100
   - 101
+```
+
+### Update Reminders
+
+The `update_reminder` role installs a systemd timer on every Proxmox node. Each
+node refreshes its package indexes, simulates an OS upgrade for itself and its
+currently running LXCs, and sends its own Discord reminder when the configured
+package threshold is met. It never installs updates.
+
+The default timer checks daily with up to one hour of randomized delay. A node
+notifies at most once every seven days while updates remain pending. Its
+cooldown resets after a check finds fewer pending packages than the threshold.
+Unsupported LXC package managers are skipped, and failed checks are recorded in
+the system journal.
+
+Store the webhook only in the Vault-encrypted
+`group_vars/proxmox_cluster.yml`, not in the tracked example:
+
+```yaml
+update_reminder_enabled: true
+update_reminder_discord_webhook_url: >-
+  https://discord.com/api/webhooks/REPLACE_WITH_REAL_SECRET
+update_reminder_schedule: "*-*-* 09:00:00"
+update_reminder_randomized_delay: "1h"
+update_reminder_package_threshold: 1
+update_reminder_repeat_after_days: 7
+update_reminder_include_lxcs: true
+update_reminder_skip_vmids:
+  - 100
+```
+
+Deploy or reconfigure only the reminder:
+
+```bash
+ansible-playbook -i inventory.yml site.yml \
+  --tags update_reminder \
+  --ask-vault-pass
+```
+
+Inspect the schedule and most recent check on a node:
+
+```bash
+systemctl list-timers homelab-update-reminder.timer
+journalctl -u homelab-update-reminder.service
 ```
 
 ### PBS Restore

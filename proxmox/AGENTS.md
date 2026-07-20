@@ -40,8 +40,9 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
   * `forgejo`: Creates or adopts the Forgejo LXC with a pinned release binary and strict upgrade guards.
   * `sonarr`: Creates or adopts the Sonarr LXC with a pinned, checksum-verified release.
   * `radarr`: Creates or adopts the Radarr LXC with a pinned, checksum-verified release.
-  * `cleanup_storage`: Detects and optionally destroys stale ZFS datasets.
   * `update_all`: Updates Proxmox host nodes and LXC containers.
+  * `update_reminder`: Installs per-node Discord package-update reminders.
+  * `cleanup_storage`: Detects and optionally destroys stale ZFS datasets.
   * `pbs_restore`: Restores LXC containers from PBS backups.
   * `vm_deploy`: Deploys full VMs from ISOs.
   * `network_tuning`: Configures storage VLAN and 10G TCP sysctl tuning.
@@ -93,14 +94,15 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 14. **forgejo**: Creates or adopts the Forgejo LXC and manages a pinned release binary with strict upgrade guards.
 15. **sonarr**: Creates or adopts the Sonarr LXC and manages a pinned release.
 16. **radarr**: Creates or adopts the Radarr LXC and manages a pinned release.
-17. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
-18. **update_all**: Updates Proxmox nodes and LXC containers.
-19. **pbs_restore**: Restores LXC containers from PBS backups.
-20. **vm_deploy**: Deploys full VMs from ISOs.
+17. **update_all**: Updates Proxmox nodes and LXC containers.
+18. **update_reminder**: Installs independent Discord update reminders on each node.
+19. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
+20. **pbs_restore**: Restores LXC containers from PBS backups.
+21. **vm_deploy**: Deploys full VMs from ISOs.
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-21. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
+22. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
 
 ### PBS Storage Pattern
 
@@ -171,6 +173,7 @@ ansible-playbook -i inventory.yml site.yml --limit atlas --tags "pbs,update" --a
 * `pbs`: Configure PBS storage.
 * `isos`: Manage ISO downloads/mounts.
 * `update`: Update nodes and LXC containers (requires `-e 'run_updates=true'`).
+* `update_reminder`: Install per-node Discord package-update reminders.
 * `restore`: Restore containers from PBS backups (requires `-e 'restore_from_pbs=true'`).
 * `network`: Apply network tuning.
 
@@ -316,6 +319,17 @@ See the `CLAUDE.md` or `README.md` files for extensive examples of role-specific
 * Updates both Proxmox hosts and all running LXC containers.
 * For each container: detects package manager (apt/apk) and updates OS packages.
 * Never executes application-specific updater hooks; managed applications upgrade only through pinned role version bumps.
+
+### update_reminder
+
+* Installs a systemd timer on every Proxmox node and checks the node plus its
+  currently running LXCs for pending OS packages.
+* Sends an independent Discord reminder only after a configurable package
+  threshold, with a persistent cooldown to suppress repeated messages.
+* Refreshes package metadata and simulates upgrades but never installs them.
+* Stores the Vault-supplied webhook in a root-only environment file and keeps
+  it out of logs and process arguments.
+* Skipped by default unless `update_reminder_enabled: true`.
 
 ### pbs_restore
 

@@ -63,14 +63,15 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 18. **discoverr_bot**: Installs the Discoverr Discord bot LXC, pinned to a commit SHA (conditional: `install_discoverr_bot`)
 19. **gallery_dl**: Installs a gallery-dl LXC on a cron schedule (conditional: `install_gallery_dl`)
 20. **stash**: Installs the Stash media server LXC, pinned to a release tag (conditional: `install_stash`)
-21. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
-22. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
-23. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
-24. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
+21. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
+22. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
+23. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
+24. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
+25. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-25. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
+26. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
 
 Each role in the first play uses a boolean gate variable with `| default(false) | bool`. When adding a new role, follow this same pattern.
 
@@ -330,6 +331,16 @@ rm -rf /tmp/test-isos
 - Uses `pct exec` to run commands inside containers
 - Optional auto-reboot if kernel updates detected; can skip specific containers by VMID
 - Skipped by default unless `run_updates: true`
+
+### update_reminder Role
+
+- Installs a systemd timer on each Proxmox node
+- Checks the node and its currently running apt/apk LXCs independently
+- Refreshes package indexes and simulates upgrades without installing packages
+- Sends Discord reminders only after a configurable package threshold
+- Uses a persistent cooldown to avoid repeated notifications
+- Keeps the Vault-supplied webhook in a root-only file and out of process arguments
+- Skipped by default unless `update_reminder_enabled: true`
 
 ### pbs_restore Role
 

@@ -1,0 +1,16 @@
+[Unit]
+Description=Check this Proxmox node and its LXCs for package updates
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/homelab-update-reminder.env
+ExecStart=/usr/local/sbin/homelab-update-reminder
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

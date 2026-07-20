@@ -1,0 +1,9 @@
+---
+# Install a read-only package-update reminder on each Proxmox node.
+update_reminder_schedule: "*-*-* 09:00:00"  # noqa: var-naming[no-role-prefix]
+update_reminder_randomized_delay: "1h"  # noqa: var-naming[no-role-prefix]
+update_reminder_package_threshold: 1  # noqa: var-naming[no-role-prefix]
+update_reminder_repeat_after_days: 7  # noqa: var-naming[no-role-prefix]
+update_reminder_include_lxcs: true  # noqa: var-naming[no-role-prefix]
+update_reminder_skip_vmids: []  # noqa: var-naming[no-role-prefix]
+update_reminder_discord_webhook_url: ""  # noqa: var-naming[no-role-prefix]

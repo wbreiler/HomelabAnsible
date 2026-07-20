@@ -100,6 +100,10 @@
       when: run_updates | default(false) | bool
       tags: ['update', 'maintenance']
 
+    - role: update_reminder
+      when: update_reminder_enabled | default(false) | bool
+      tags: ['update_reminder', 'maintenance']
+
     - role: cleanup_storage
       when: run_cleanup_storage | default(false) | bool
       tags: ['cleanup', 'storage', 'maintenance']

@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+readonly STATE_DIR="${UPDATE_REMINDER_STATE_DIR:-/var/lib/homelab-update-reminder}"
+readonly LAST_NOTIFIED_FILE="${STATE_DIR}/last-notified"
+readonly HOST_NAME="$(hostname --short)"
+
+log_error() {
+  logger -t homelab-update-reminder -- "$*"
+}
+
+is_skipped_vmid() {
+  local candidate="$1"
+  [[ " ${SKIP_VMIDS:-} " == *" ${candidate} "* ]]
+}
+
+count_host_updates() {
+  local simulation
+
+  if ! apt-get update -qq >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! simulation="$(apt-get -s -o Debug::NoLocking=true dist-upgrade 2>/dev/null)"; then
+    return 1
+  fi
+
+  awk '/^Inst / { count++ } END { print count + 0 }' <<<"${simulation}"
+}
+
+container_package_manager() {
+  local vmid="$1"
+
+  pct exec "${vmid}" -- sh -c \
+    'if command -v apt-get >/dev/null 2>&1; then printf apt; elif command -v apk >/dev/null 2>&1; then printf apk; else printf unsupported; fi' \
+    2>/dev/null
+}
+
+count_container_updates() {
+  local vmid="$1"
+  local package_manager="$2"
+  local output
+
+  case "${package_manager}" in
+    apt)
+      if ! output="$(
+        pct exec "${vmid}" -- sh -c \
+          'apt-get update -qq >/dev/null 2>&1 && apt-get -s -o Debug::NoLocking=true dist-upgrade' \
+          2>/dev/null
+      )"; then
+        return 1
+      fi
+      awk '/^Inst / { count++ } END { print count + 0 }' <<<"${output}"
+      ;;
+    apk)
+      if ! output="$(
+        pct exec "${vmid}" -- sh -c \
+          "apk update >/dev/null 2>&1 && apk version -l '<'" \
+          2>/dev/null
+      )"; then
+        return 1
+      fi
+      awk 'NF { count++ } END { print count + 0 }' <<<"${output}"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+send_discord_message() {
+  local message="$1"
+  local webhook_url="${DISCORD_WEBHOOK_URL}"
+  local payload_file
+  local curl_status
+
+  unset DISCORD_WEBHOOK_URL
+  payload_file="$(mktemp)"
+  trap 'rm -f "${payload_file}"' RETURN
+
+  MESSAGE="${message}" python3 -c '
+import json
+import os
+
+message = os.environ["MESSAGE"]
+print(json.dumps({"content": message[:1900]}))
+' >"${payload_file}"
+
+  {
+    printf 'url = "%s"\n' "${webhook_url}"
+    printf '%s\n' 'fail' 'silent' 'show-error'
+    printf '%s\n' 'header = "Content-Type: application/json"'
+  } | curl --config - --data-binary "@${payload_file}"
+  curl_status=$?
+
+  rm -f "${payload_file}"
+  trap - RETURN
+  return "${curl_status}"
+}
+
+main() {
+  local host_updates
+  local total_updates=0
+  local now
+  local last_notified=0
+  local vmid
+  local container_name
+  local package_manager
+  local container_updates
+  local message
+  local -a update_lines=()
+  local -a failed_checks=()
+  local -a running_vmids=()
+
+  if [[ ! "${DISCORD_WEBHOOK_URL:-}" =~ ^https://([a-z]+\.)?discord(app)?\.com/api/webhooks/ ]]; then
+    log_error "Refusing to use an invalid Discord webhook URL"
+    return 1
+  fi
+
+  if host_updates="$(count_host_updates)"; then
+    if ((host_updates > 0)); then
+      update_lines+=("- Host OS: ${host_updates} package(s)")
+      ((total_updates += host_updates))
+    fi
+  else
+    failed_checks+=("host OS")
+  fi
+
+  if [[ "${INCLUDE_LXCS:-true}" == "true" ]]; then
+    mapfile -t running_vmids < <(pct list 2>/dev/null | awk '$2 == "running" { print $1 }')
+    for vmid in "${running_vmids[@]}"; do
+      if is_skipped_vmid "${vmid}"; then
+        continue
+      fi
+
+      container_name="$(
+        pct config "${vmid}" 2>/dev/null |
+          awk -F ': *' '$1 == "hostname" { print $2; exit }'
+      )"
+      container_name="${container_name:-unknown}"
+      package_manager="$(container_package_manager "${vmid}")"
+
+      if container_updates="$(count_container_updates "${vmid}" "${package_manager}")"; then
+        if ((container_updates > 0)); then
+          update_lines+=("- LXC ${vmid} (${container_name}): ${container_updates} package(s)")
+          ((total_updates += container_updates))
+        fi
+      elif [[ "${package_manager}" != "unsupported" ]]; then
+        failed_checks+=("LXC ${vmid} (${container_name})")
+      fi
+    done
+  fi
+
+  if ((${#failed_checks[@]} > 0)); then
+    log_error "Package check failed for: ${failed_checks[*]}"
+  fi
+
+  if ((total_updates < PACKAGE_THRESHOLD)); then
+    rm -f "${LAST_NOTIFIED_FILE}"
+    return 0
+  fi
+
+  now="$(date +%s)"
+  if [[ -r "${LAST_NOTIFIED_FILE}" ]]; then
+    read -r last_notified <"${LAST_NOTIFIED_FILE}" || last_notified=0
+  fi
+  if [[ "${last_notified}" =~ ^[0-9]+$ ]] &&
+    ((now - last_notified < REPEAT_AFTER_SECONDS)); then
+    return 0
+  fi
+
+  printf -v message \
+    '🔧 Updates available on **%s** (%d packages total)\n\n%s\n\nRun the Proxmox `update_all` playbook for `%s`.' \
+    "${HOST_NAME}" \
+    "${total_updates}" \
+    "$(printf '%s\n' "${update_lines[@]}")" \
+    "${HOST_NAME}"
+
+  if send_discord_message "${message}"; then
+    printf '%s\n' "${now}" >"${LAST_NOTIFIED_FILE}"
+  else
+    log_error "Discord notification failed"
+    return 1
+  fi
+}
+
+main "$@"
