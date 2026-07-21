@@ -48,10 +48,57 @@
   no_log: true
   when: minecraft_ha_servers | length > 0
 
+- name: Initialize resolved Minecraft HA server definitions
+  ansible.builtin.set_fact:
+    minecraft_resolved_ha_servers: []
+
+- name: Adopt existing dedicated Minecraft node affinity rules
+  ansible.builtin.set_fact:
+    minecraft_resolved_ha_servers: >-
+      {{
+        minecraft_resolved_ha_servers
+        + [
+          item | combine({
+            'ha_rule': item.ha_rule | default(
+              (
+                minecraft_adoptable_ha_rules
+                | map(attribute='rule')
+                | first
+              ) | default('minecraft-' ~ item.hostname, true)
+            )
+          })
+        ]
+      }}
+  vars:
+    minecraft_ha_resource_id: "ct:{{ item.vmid }}"
+    minecraft_adoptable_ha_rules: >-
+      {{
+        minecraft_ha_rules.json.data
+        | selectattr('type', 'equalto', 'node-affinity')
+        | selectattr('resources', 'defined')
+        | selectattr('resources', 'equalto', minecraft_ha_resource_id)
+        | list
+      }}
+  loop: "{{ minecraft_ha_servers }}"
+  loop_control:
+    label: "{{ item.hostname }} (ct:{{ item.vmid }})"
+
+- name: Use resolved Minecraft HA server definitions
+  ansible.builtin.set_fact:
+    minecraft_ha_servers: "{{ minecraft_resolved_ha_servers }}"
+
 - name: Refuse conflicting Minecraft node affinity rules
   ansible.builtin.assert:
     that:
-      - >-
+      - minecraft_conflicting_ha_rules | length == 0
+    fail_msg: >-
+      ct:{{ item.vmid }} belongs to shared or conflicting HA rule(s):
+      {{ minecraft_conflicting_ha_rules | map(attribute='rule') | join(', ') }}.
+      Resolve the conflict explicitly; dedicated one-resource rules are adopted
+      automatically.
+  vars:
+    minecraft_conflicting_ha_rules: >-
+      {{
         minecraft_ha_rules.json.data
         | selectattr('resources', 'defined')
         | selectattr(
@@ -59,16 +106,9 @@
             'search',
             '(^|,)ct:' ~ (item.vmid | string) ~ '(,|$)'
           )
-        | rejectattr(
-            'rule',
-            'equalto',
-            item.ha_rule | default('minecraft-' ~ item.hostname)
-          )
+        | rejectattr('rule', 'equalto', item.ha_rule)
         | list
-        | length == 0
-    fail_msg: >-
-      ct:{{ item.vmid }} already belongs to a different HA node affinity
-      rule. Set ha_rule to that rule ID or resolve the conflict explicitly.
+      }}
   loop: "{{ minecraft_ha_servers }}"
   loop_control:
     label: "{{ item.hostname }} (ct:{{ item.vmid }})"
