@@ -73,7 +73,9 @@ migration paths remain local.
 **HA placement**: Set `ha_enabled: true`, list preferred and fallback nodes in
 `ha_nodes` with priorities, and keep `ha_strict: true` to prevent placement on
 unlisted nodes. PVE 9 permits each HA resource in only one node-affinity rule;
-the playbook refuses to overwrite a conflicting rule.
+the playbook refuses to overwrite a conflicting rule. For an intentional split
+from an existing shared rule, set `ha_detach_from_rule`; the playbook preserves
+the other resources and supplies the rule digest to prevent concurrent writes.
 
 **server.properties overrides**: Add a `server_properties:` block to any server entry. Keys use underscores (`spawn_protection`, `allow_flight`, `online_mode`, etc.) — the template converts them to hyphenated Minecraft format. Omitted keys use vanilla defaults. Re-running the playbook rewrites the file.
 

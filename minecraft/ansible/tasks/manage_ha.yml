@@ -87,6 +87,39 @@
   ansible.builtin.set_fact:
     minecraft_ha_servers: "{{ minecraft_resolved_ha_servers }}"
 
+- name: Validate requested shared HA rule detachments
+  ansible.builtin.assert:
+    that:
+      - minecraft_detach_ha_rules | length == 1
+      - minecraft_detach_ha_rule.get('type') == 'node-affinity'
+      - >-
+        minecraft_ha_resource_id not in minecraft_detach_resources
+        or minecraft_detach_resources | length > 1
+    fail_msg: >-
+      Cannot safely detach {{ minecraft_ha_resource_id }} from
+      {{ item.ha_detach_from_rule }}. The rule must exist, be node-affinity,
+      and retain at least one other resource.
+  vars:
+    minecraft_ha_resource_id: "ct:{{ item.vmid }}"
+    minecraft_detach_ha_rules: >-
+      {{
+        minecraft_ha_rules.json.data
+        | selectattr('rule', 'equalto', item.ha_detach_from_rule)
+        | list
+      }}
+    minecraft_detach_ha_rule: >-
+      {{ (minecraft_detach_ha_rules | first) | default({}) }}
+    minecraft_detach_resources: >-
+      {{ minecraft_detach_ha_rule.get('resources', '').split(',') | select | list }}
+  loop: >-
+    {{
+      minecraft_ha_servers
+      | selectattr('ha_detach_from_rule', 'defined')
+      | list
+    }}
+  loop_control:
+    label: "{{ item.hostname }} (ct:{{ item.vmid }})"
+
 - name: Refuse conflicting Minecraft node affinity rules
   ansible.builtin.assert:
     that:
@@ -107,6 +140,11 @@
             '(^|,)ct:' ~ (item.vmid | string) ~ '(,|$)'
           )
         | rejectattr('rule', 'equalto', item.ha_rule)
+        | rejectattr(
+            'rule',
+            'equalto',
+            item.ha_detach_from_rule | default('')
+          )
         | list
       }}
   loop: "{{ minecraft_ha_servers }}"
@@ -173,6 +211,48 @@
       or
       minecraft_existing_ha_resource.get('auto-rebalance', true) | bool !=
       item.ha_auto_rebalance | default(false) | bool
+  no_log: true
+
+- name: Detach Minecraft servers from explicitly selected shared HA rules
+  ansible.builtin.uri:
+    url: >-
+      https://{{ proxmox_api_host }}:8006/api2/json/cluster/ha/rules/{{
+      item.ha_detach_from_rule | urlencode }}
+    method: PUT
+    headers:
+      Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+      CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+    body_format: form-urlencoded
+    body:
+      type: node-affinity
+      resources: "{{ minecraft_remaining_detach_resources | join(',') }}"
+      digest: "{{ minecraft_detach_ha_rule.digest }}"
+    validate_certs: "{{ proxmox_validate_certs | bool }}"
+  vars:
+    minecraft_ha_resource_id: "ct:{{ item.vmid }}"
+    minecraft_detach_ha_rule: >-
+      {{
+        minecraft_ha_rules.json.data
+        | selectattr('rule', 'equalto', item.ha_detach_from_rule)
+        | list
+        | first
+      }}
+    minecraft_remaining_detach_resources: >-
+      {{
+        minecraft_detach_ha_rule.resources.split(',')
+        | reject('equalto', minecraft_ha_resource_id)
+        | list
+      }}
+  loop: >-
+    {{
+      minecraft_ha_servers
+      | selectattr('ha_detach_from_rule', 'defined')
+      | list
+    }}
+  loop_control:
+    label: "{{ item.hostname }} (ct:{{ item.vmid }})"
+  when:
+    - minecraft_ha_resource_id in minecraft_detach_ha_rule.resources.split(',')
   no_log: true
 
 - name: Add missing Minecraft node affinity rules

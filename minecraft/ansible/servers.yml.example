@@ -18,6 +18,8 @@ servers:
     ha_strict: true
     ha_failback: false
     ha_auto_rebalance: false
+    # Set only when safely splitting this server out of an existing shared rule.
+    # ha_detach_from_rule: ha-rule-existing-shared
     cores: 4
     memory: 8192
     disk: 32

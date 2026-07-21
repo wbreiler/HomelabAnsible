@@ -61,6 +61,7 @@ Edit `servers.yml`. Each entry creates one LXC and configures it:
 | `ha_nodes` | Preferred/fallback nodes with priorities, highest first |
 | `ha_failback` | Automatically return to a higher-priority node |
 | `ha_auto_rebalance` | Allow non-failure load-balancing migrations |
+| `ha_detach_from_rule` | Existing shared HA rule to split this LXC out of |
 | `cores` / `memory` / `disk` | CPU cores, RAM in MB, disk in GB |
 | `modpack_slug` | Modrinth project slug, or `"vanilla"` |
 | `pack_name` | Human-friendly name for Discord notifications |
@@ -125,13 +126,17 @@ ha_nodes:
 ha_strict: true
 ha_failback: false
 ha_auto_rebalance: false
+ha_detach_from_rule: ha-rule-existing-shared
 ```
 
 `ha_auto_rebalance: false` prevents routine load-balancing migrations.
 `ha_failback: false` prevents another automatic interruption when `atlas`
 returns after a failure; migrate the LXC back manually. The strict rule still
 allows all three listed nodes but prevents placement on any future unlisted
-cluster node.
+cluster node. `ha_detach_from_rule` is needed only when adopting a server that
+already belongs to a shared rule. The playbook removes only that server,
+preserves the other rule members, and uses Proxmox's digest guard to refuse a
+concurrent overwrite.
 
 **To provision a single server** from the list:
 ```bash
