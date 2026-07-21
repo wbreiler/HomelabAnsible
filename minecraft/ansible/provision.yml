@@ -116,6 +116,10 @@
       no_log: true
       tags: always
 
+    - name: Reconcile HA resources and node affinity rules
+      ansible.builtin.include_tasks: tasks/manage_ha.yml
+      tags: ha
+
     - name: Poll until each container has a DHCP address
       ansible.builtin.uri:
         url: "https://{{ proxmox_api_host }}:8006/api2/json/nodes/{{ item.node }}/lxc/{{ item.vmid }}/interfaces"

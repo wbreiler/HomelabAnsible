@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Automates Minecraft server provisioning and modpack updates for a Proxmox cluster (`cluster-nash`, nodes: Prometheus, Atlas, Nyx). Two independent components:
 
 1. **`update-script/`** — Modpack update script deployed to each Minecraft server LXC
-2. **`ansible/`** — Playbook that creates LXCs via the Proxmox API, then SSHs in to configure them
+2. **`ansible/`** — Playbooks that manage HA placement, create LXCs via the Proxmox API, then SSH in to configure them
 
 These components are not coupled at the code level — they share conventions (paths, config format) but run independently on different machines.
 
@@ -55,6 +55,12 @@ the `ansible_host` values in ignored `servers.yml`, then applies the role with
 `serial: 1`. It never creates, moves, resizes, starts, or stops LXCs through
 Proxmox and does not modify cluster backup jobs.
 
+**HA-only entrypoint**: `ha.yml` reconciles PVE 9 HA resources and node-affinity
+rules from each server's optional `ha_*` values. It does not provision or
+configure guests. `ha_auto_rebalance: false` blocks routine balancing moves;
+`ha_failback: false` leaves a failed-over server in place until an operator
+manually returns it to its preferred node.
+
 **Vault setup**: `cp vault.yml.example vault.yml`, fill in values, `ansible-vault encrypt vault.yml`. The file `vault.yml` is gitignored.
 
 **Local configuration setup**: Copy `group_vars/all.yml.example` to
@@ -63,6 +69,11 @@ files are gitignored so node addresses, storage names, VMIDs, operators, and
 migration paths remain local.
 
 **Adding a server**: Edit the ignored `servers.yml`. For CurseForge packs add `pack_source: curseforge` and `curseforge_project_id: "NNNNNN"`. The numeric project ID is in the URL on curseforge.com.
+
+**HA placement**: Set `ha_enabled: true`, list preferred and fallback nodes in
+`ha_nodes` with priorities, and keep `ha_strict: true` to prevent placement on
+unlisted nodes. PVE 9 permits each HA resource in only one node-affinity rule;
+the playbook refuses to overwrite a conflicting rule.
 
 **server.properties overrides**: Add a `server_properties:` block to any server entry. Keys use underscores (`spawn_protection`, `allow_flight`, `online_mode`, etc.) — the template converts them to hyphenated Minecraft format. Omitted keys use vanilla defaults. Re-running the playbook rewrites the file.
 

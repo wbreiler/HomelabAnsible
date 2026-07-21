@@ -1,0 +1,39 @@
+---
+- name: Manage Minecraft Proxmox HA placement
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vault.yml
+
+  tasks:
+    - name: Load server definitions
+      ansible.builtin.include_vars:
+        file: servers.yml
+        name: server_defs
+
+    - name: Build HA target server list
+      ansible.builtin.set_fact:
+        target_servers: >-
+          {{
+            server_defs.servers
+            | selectattr('hostname', 'equalto', server_filter)
+            | list
+            if server_filter is defined
+            else server_defs.servers
+          }}
+
+    - name: Obtain Proxmox API ticket
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_api_host }}:8006/api2/json/access/ticket"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          username: "{{ proxmox_api_user }}"
+          password: "{{ proxmox_api_password }}"
+        validate_certs: "{{ proxmox_validate_certs | bool }}"
+      register: proxmox_auth
+      no_log: true
+
+    - name: Reconcile HA resources and node affinity rules
+      ansible.builtin.include_tasks: tasks/manage_ha.yml

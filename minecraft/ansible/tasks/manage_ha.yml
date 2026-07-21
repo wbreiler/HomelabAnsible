@@ -1,0 +1,213 @@
+---
+- name: Select HA-enabled Minecraft servers
+  ansible.builtin.set_fact:
+    minecraft_ha_servers: >-
+      {{
+        target_servers
+        | selectattr('ha_enabled', 'defined')
+        | selectattr('ha_enabled')
+        | list
+      }}
+
+- name: Validate Minecraft HA placement definitions
+  ansible.builtin.assert:
+    that:
+      - item.ha_nodes is defined
+      - item.ha_nodes | length > 0
+      - item.ha_nodes[0].split(':')[0] == item.node
+    fail_msg: >-
+      {{ item.hostname }} must list its provisioning node first in ha_nodes,
+      followed by any lower-priority failover nodes.
+  loop: "{{ minecraft_ha_servers }}"
+  loop_control:
+    label: "{{ item.hostname }} (ct:{{ item.vmid }})"
+
+- name: Read existing Proxmox HA resources
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_api_host }}:8006/api2/json/cluster/ha/resources"
+    method: GET
+    headers:
+      Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+      CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+    validate_certs: "{{ proxmox_validate_certs | bool }}"
+  register: minecraft_ha_resources
+  changed_when: false
+  no_log: true
+  when: minecraft_ha_servers | length > 0
+
+- name: Read existing Proxmox HA rules
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_api_host }}:8006/api2/json/cluster/ha/rules"
+    method: GET
+    headers:
+      Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+      CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+    validate_certs: "{{ proxmox_validate_certs | bool }}"
+  register: minecraft_ha_rules
+  changed_when: false
+  no_log: true
+  when: minecraft_ha_servers | length > 0
+
+- name: Refuse conflicting Minecraft node affinity rules
+  ansible.builtin.assert:
+    that:
+      - >-
+        minecraft_ha_rules.json.data
+        | selectattr('resources', 'defined')
+        | selectattr(
+            'resources',
+            'search',
+            '(^|,)ct:' ~ (item.vmid | string) ~ '(,|$)'
+          )
+        | rejectattr(
+            'rule',
+            'equalto',
+            item.ha_rule | default('minecraft-' ~ item.hostname)
+          )
+        | list
+        | length == 0
+    fail_msg: >-
+      ct:{{ item.vmid }} already belongs to a different HA node affinity
+      rule. Set ha_rule to that rule ID or resolve the conflict explicitly.
+  loop: "{{ minecraft_ha_servers }}"
+  loop_control:
+    label: "{{ item.hostname }} (ct:{{ item.vmid }})"
+
+- name: Add missing Minecraft HA resources
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_api_host }}:8006/api2/json/cluster/ha/resources"
+    method: POST
+    headers:
+      Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+      CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+    body_format: form-urlencoded
+    body:
+      sid: "ct:{{ item.vmid }}"
+      state: started
+      failback: "{{ item.ha_failback | default(false) | bool | int }}"
+      auto-rebalance: "{{ item.ha_auto_rebalance | default(false) | bool | int }}"
+    validate_certs: "{{ proxmox_validate_certs | bool }}"
+  loop: "{{ minecraft_ha_servers }}"
+  loop_control:
+    label: "{{ item.hostname }} (ct:{{ item.vmid }})"
+  when:
+    - >-
+      minecraft_ha_resources.json.data
+      | selectattr('sid', 'equalto', 'ct:' ~ (item.vmid | string))
+      | list
+      | length == 0
+  no_log: true
+
+- name: Reconcile existing Minecraft HA resource behavior
+  ansible.builtin.uri:
+    url: >-
+      https://{{ proxmox_api_host }}:8006/api2/json/cluster/ha/resources/{{
+      ('ct:' ~ (item.vmid | string)) | urlencode }}
+    method: PUT
+    headers:
+      Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+      CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+    body_format: form-urlencoded
+    body:
+      failback: "{{ item.ha_failback | default(false) | bool | int }}"
+      auto-rebalance: "{{ item.ha_auto_rebalance | default(false) | bool | int }}"
+    validate_certs: "{{ proxmox_validate_certs | bool }}"
+  vars:
+    minecraft_existing_ha_resource: >-
+      {{
+        (
+          minecraft_ha_resources.json.data
+          | selectattr('sid', 'equalto', 'ct:' ~ (item.vmid | string))
+          | list
+          | first
+        ) | default({})
+      }}
+  loop: "{{ minecraft_ha_servers }}"
+  loop_control:
+    label: "{{ item.hostname }} (ct:{{ item.vmid }})"
+  when:
+    - minecraft_existing_ha_resource | length > 0
+    - >-
+      minecraft_existing_ha_resource.get('failback', true) | bool !=
+      item.ha_failback | default(false) | bool
+      or
+      minecraft_existing_ha_resource.get('auto-rebalance', true) | bool !=
+      item.ha_auto_rebalance | default(false) | bool
+  no_log: true
+
+- name: Add missing Minecraft node affinity rules
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_api_host }}:8006/api2/json/cluster/ha/rules"
+    method: POST
+    headers:
+      Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+      CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+    body_format: form-urlencoded
+    body:
+      type: node-affinity
+      rule: "{{ item.ha_rule | default('minecraft-' ~ item.hostname) }}"
+      resources: "ct:{{ item.vmid }}"
+      nodes: "{{ item.ha_nodes | join(',') }}"
+      strict: "{{ item.ha_strict | default(true) | bool | int }}"
+      comment: "Preferred placement for {{ item.hostname }}"
+    validate_certs: "{{ proxmox_validate_certs | bool }}"
+  loop: "{{ minecraft_ha_servers }}"
+  loop_control:
+    label: "{{ item.hostname }} (ct:{{ item.vmid }})"
+  when:
+    - >-
+      minecraft_ha_rules.json.data
+      | selectattr(
+          'rule',
+          'equalto',
+          item.ha_rule | default('minecraft-' ~ item.hostname)
+        )
+      | list
+      | length == 0
+  no_log: true
+
+- name: Reconcile existing Minecraft node affinity rules
+  ansible.builtin.uri:
+    url: >-
+      https://{{ proxmox_api_host }}:8006/api2/json/cluster/ha/rules/{{
+      (item.ha_rule | default('minecraft-' ~ item.hostname)) | urlencode }}
+    method: PUT
+    headers:
+      Cookie: "PVEAuthCookie={{ proxmox_auth.json.data.ticket }}"
+      CSRFPreventionToken: "{{ proxmox_auth.json.data.CSRFPreventionToken }}"
+    body_format: form-urlencoded
+    body:
+      type: node-affinity
+      resources: "ct:{{ item.vmid }}"
+      nodes: "{{ item.ha_nodes | join(',') }}"
+      strict: "{{ item.ha_strict | default(true) | bool | int }}"
+      comment: "Preferred placement for {{ item.hostname }}"
+    validate_certs: "{{ proxmox_validate_certs | bool }}"
+  vars:
+    minecraft_existing_ha_rule: >-
+      {{
+        (
+          minecraft_ha_rules.json.data
+          | selectattr(
+              'rule',
+              'equalto',
+              item.ha_rule | default('minecraft-' ~ item.hostname)
+            )
+          | list
+          | first
+        ) | default({})
+      }}
+    minecraft_expected_ha_nodes: "{{ item.ha_nodes | join(',') }}"
+    minecraft_expected_ha_resource: "ct:{{ item.vmid }}"
+  loop: "{{ minecraft_ha_servers }}"
+  loop_control:
+    label: "{{ item.hostname }} (ct:{{ item.vmid }})"
+  when:
+    - minecraft_existing_ha_rule | length > 0
+    - >-
+      minecraft_existing_ha_rule.get('type') != 'node-affinity'
+      or minecraft_existing_ha_rule.get('resources') != minecraft_expected_ha_resource
+      or minecraft_existing_ha_rule.get('nodes') != minecraft_expected_ha_nodes
+      or minecraft_existing_ha_rule.get('strict', false) | bool !=
+         item.ha_strict | default(true) | bool
+  no_log: true

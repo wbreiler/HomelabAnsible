@@ -17,6 +17,8 @@ proxmox_backup_storage: "pbs"
 
 proxmox_node_ips:
   node1: "192.0.2.11"
+  node2: "192.0.2.12"
+  node3: "192.0.2.13"
 
 curseforge_api_key: "{{ vault_curseforge_api_key | default('') }}"
 

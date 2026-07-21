@@ -7,6 +7,17 @@ servers:
     ansible_host: 192.0.2.31
     vmid: 301
     node: node1
+    # Optional Proxmox HA placement. The first node has the highest priority;
+    # equal lower priorities allow either fallback node. auto_rebalance=false
+    # prevents load-balancing migrations while the preferred node is healthy.
+    ha_enabled: true
+    ha_nodes:
+      - node1:100
+      - node2:10
+      - node3:10
+    ha_strict: true
+    ha_failback: false
+    ha_auto_rebalance: false
     cores: 4
     memory: 8192
     disk: 32

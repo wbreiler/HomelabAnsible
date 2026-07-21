@@ -57,6 +57,10 @@ Edit `servers.yml`. Each entry creates one LXC and configures it:
 | `hostname` | LXC hostname (Greek/mythology theme) |
 | `vmid` | Proxmox VMID (must not conflict with existing VMs) |
 | `node` | Proxmox node: `prometheus`, `atlas`, or `nyx` |
+| `ha_enabled` | Manage this LXC as a Proxmox HA resource |
+| `ha_nodes` | Preferred/fallback nodes with priorities, highest first |
+| `ha_failback` | Automatically return to a higher-priority node |
+| `ha_auto_rebalance` | Allow non-failure load-balancing migrations |
 | `cores` / `memory` / `disk` | CPU cores, RAM in MB, disk in GB |
 | `modpack_slug` | Modrinth project slug, or `"vanilla"` |
 | `pack_name` | Human-friendly name for Discord notifications |
@@ -91,11 +95,43 @@ ansible-playbook provision.yml --ask-vault-pass
 
 The playbook:
 1. Creates each LXC via the Proxmox API (`community.proxmox.proxmox`)
-2. Waits for SSH to become available
-3. Applies the `minecraft_server` role to each new LXC
-4. Creates or updates the `Minecraft Server Backups` cluster backup job on Proxmox (hourly, storage: `mnemosyne`) — adds provisioned VMIDs to the job, creating it if it doesn't exist
+2. Reconciles optional PVE 9 HA resources and node-affinity rules
+3. Waits for SSH to become available
+4. Applies the `minecraft_server` role to each new LXC
+5. Creates or updates the `Minecraft Server Backups` cluster backup job on Proxmox (hourly, storage: `mnemosyne`) — adds provisioned VMIDs to the job, creating it if it doesn't exist
 
 > **Container type: Unprivileged** with `nesting=1`. Minecraft server LXCs don't need host mounts, so unprivileged is correct and is set automatically by the playbook.
+
+### Proxmox HA placement
+
+`ha.yml` manages only Proxmox HA resources and PVE 9 node-affinity rules. It
+does not create, resize, start, stop, or reconfigure Minecraft LXCs. Use it to
+reconcile placement without running provisioning or guest configuration:
+
+```bash
+cd ansible/
+ansible-playbook ha.yml --ask-vault-pass -e server_filter=atm10-nash
+```
+
+For a server that should normally remain on `atlas` but fail over to either
+other cluster node:
+
+```yaml
+ha_enabled: true
+ha_nodes:
+  - atlas:100
+  - prometheus:10
+  - nyx:10
+ha_strict: true
+ha_failback: false
+ha_auto_rebalance: false
+```
+
+`ha_auto_rebalance: false` prevents routine load-balancing migrations.
+`ha_failback: false` prevents another automatic interruption when `atlas`
+returns after a failure; migrate the LXC back manually. The strict rule still
+allows all three listed nodes but prevents placement on any future unlisted
+cluster node.
 
 **To provision a single server** from the list:
 ```bash
