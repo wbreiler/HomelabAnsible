@@ -342,12 +342,13 @@ This cluster uses a Prometheus + Grafana LXC stack (`prom-nash`, `grafana-nash` 
 
 ### Standalone App LXCs
 
-Thirteen repository-owned roles manage a single-purpose LXC. Each is opt-in and defaults off. All bootstrap through the shared `tasks/create_lxc.yml` and adopt existing containers by hostname. Because adopted containers can be HA-managed and moved by CRS auto-rebalance, each role resolves the node currently hosting its container at run time (`tasks/resolve_lxc_node.yml`); the configured `<role>_node` is only used as the target when creating a container that doesn't exist yet.
+Fourteen repository-owned roles manage a single-purpose LXC. Each is opt-in and defaults off. All bootstrap through the shared `tasks/create_lxc.yml` and adopt existing containers by hostname. Because adopted containers can be HA-managed and moved by CRS auto-rebalance, each role resolves the node currently hosting its container at run time (`tasks/resolve_lxc_node.yml`); the configured `<role>_node` is only used as the target when creating a container that doesn't exist yet.
 
 - **`apt_cacher_ng`** — Apt-Cacher NG package cache with HTTPS pass-through and self-proxy configuration. It adopts `apt-nash` (VMID 106 on `atlas`), removes its remote update hook, and uses the deployed 2 CPU, 512 MB RAM, and 25 GB configuration for replacement defaults.
 - **`prowlarr`** — Prowlarr indexer manager. It adopts `prowlarr-nash` (VMID 104 on `atlas`), pins version 2.3.0.5236 and its release checksum, removes the remote update hook, and verifies the web interface.
 - **`homebridge`** — HomeKit bridge. It adopts `homebridge-nash` (VMID 105 on `prometheus`), pins package version 2.0.5, checksum-verifies the Homebridge repository key, removes the remote update hook, and verifies Homebridge and Avahi.
 - **`spoolman`** — 3D-printer spool inventory. It adopts `spoolman-nash` (VMID 102 on `nyx`), pins and verifies Spoolman 0.24.0 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
+- **`bambuddy`** — Bambu Lab printer management. It creates or adopts an unprivileged Debian LXC, installs a pinned and checksum-verified Bambuddy release using the sizing recommended by the Community Scripts installer, preserves local environment and data files, and verifies the web interface on port 8000.
 - **`gitea_mirror`** — Gitea Mirror repository mirroring service. It adopts `git-mirror-nash` (VMID 119, HA-managed, currently on `atlas`), pins and verifies Gitea Mirror 3.21.0 and Bun 1.3.14, preserves the existing environment file and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the installed version.
 - **`seerr`** — Seerr media-request manager (successor to Overseerr; the container was already migrated by the community script). It adopts `overseerr-nash` (VMID 117, HA-managed, currently on `atlas`), pins and verifies Seerr 3.3.0 and pnpm 10.34.4, requires the NodeSource Node.js 22 runtime, preserves `/etc/seerr/seerr.conf` and the SQLite config data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the API-reported version.
 - **`pocket_id`** — Pocket ID OIDC identity provider. It adopts `pocketid-nash` (VMID 100, HA-managed, currently on `nyx`), pins and verifies the Pocket ID 2.11.0 binary, preserves the `.env` (including its encryption key) and SQLite data, checks database integrity, backs up the binary, data, and environment before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
@@ -379,6 +380,11 @@ install_spoolman: true
 spoolman_node: "nyx"
 spoolman_vmid: "102"
 spoolman_version: "0.24.0"
+
+install_bambuddy: true
+bambuddy_node: "nyx"
+bambuddy_vmid: ""  # selects the next available managed-app VMID
+bambuddy_version: "1.2.5"
 
 install_gitea_mirror: true
 gitea_mirror_node: "atlas"  # fresh-install fallback; the role finds the current host itself
@@ -420,6 +426,7 @@ ansible-playbook -i inventory.yml site.yml --tags apt_cacher_ng -e 'install_apt_
 ansible-playbook -i inventory.yml site.yml --tags prowlarr -e 'install_prowlarr=true' --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --tags homebridge -e 'install_homebridge=true' --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --tags spoolman -e 'install_spoolman=true' --ask-vault-pass
+ansible-playbook -i inventory.yml site.yml --tags bambuddy -e 'install_bambuddy=true' --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --tags gitea_mirror -e 'install_gitea_mirror=true' --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --tags seerr -e 'install_seerr=true' --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --tags pocket_id -e 'install_pocket_id=true' --ask-vault-pass

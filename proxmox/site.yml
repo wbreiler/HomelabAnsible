@@ -60,6 +60,10 @@
       when: install_spoolman | default(false) | bool
       tags: ['spoolman', 'lxc']
 
+    - role: bambuddy
+      when: install_bambuddy | default(false) | bool
+      tags: ['bambuddy', 'bambulab', 'lxc']
+
     - role: gitea_mirror
       when: install_gitea_mirror | default(false) | bool
       tags: ['gitea_mirror', 'lxc']

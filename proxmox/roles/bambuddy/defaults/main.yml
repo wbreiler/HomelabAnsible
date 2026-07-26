@@ -1,0 +1,21 @@
+---
+bambuddy_node: "nyx"
+bambuddy_vmid: ""
+bambuddy_hostname: "bambuddy-nash"
+bambuddy_storage: "local-zfs"
+bambuddy_template: ""
+bambuddy_cores: 2
+bambuddy_memory: 2048
+bambuddy_disk: 10
+bambuddy_bridge: "vmbr0"
+bambuddy_vlan: 40
+bambuddy_tags:
+  - "3d-printing"
+
+bambuddy_version: "1.2.5"
+bambuddy_release_url: >-
+  https://api.github.com/repos/maziggy/bambuddy/tarball/v{{ bambuddy_version }}
+bambuddy_release_checksum: "sha256:2a4ae9bab735798a3f42a291c688063cb2e5ca1930b0636a2ea198f5e29a9a71"
+bambuddy_install_dir: "/opt/bambuddy"
+bambuddy_bind_host: "0.0.0.0"
+bambuddy_port: 8000

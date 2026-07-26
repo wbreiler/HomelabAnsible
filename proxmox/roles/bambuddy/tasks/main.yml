@@ -1,0 +1,190 @@
+---
+- name: Validate Bambuddy configuration
+  ansible.builtin.assert:
+    that:
+      - bambuddy_version | length > 0
+      - bambuddy_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - bambuddy_port | int >= 1
+      - bambuddy_port | int <= 65535
+    fail_msg: >-
+      Bambuddy requires a pinned version, SHA-256 checksum, and a TCP port from
+      1 to 65535.
+
+- name: Resolve node currently hosting Bambuddy
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ bambuddy_hostname }}"
+    lxc_fallback_node: "{{ bambuddy_node }}"
+
+- name: Set up Bambuddy LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Bambuddy container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ bambuddy_hostname }}"
+        lxc_vmid: "{{ bambuddy_vmid }}"
+        lxc_storage: "{{ bambuddy_storage }}"
+        lxc_template: "{{ bambuddy_template }}"
+        lxc_cores: "{{ bambuddy_cores }}"
+        lxc_memory: "{{ bambuddy_memory }}"
+        lxc_disk: "{{ bambuddy_disk }}"
+        lxc_bridge: "{{ bambuddy_bridge }}"
+        lxc_vlan: "{{ bambuddy_vlan }}"
+        lxc_tags: "{{ bambuddy_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+          - curl
+          - ffmpeg
+          - npm
+          - python3
+          - python3-venv
+          - tar
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Read managed Bambuddy version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - "{{ bambuddy_install_dir }}/.ansible-version"
+      register: bambuddy_managed_version
+      changed_when: false
+      failed_when: bambuddy_managed_version.rc not in [0, 1]
+
+    - name: Download pinned Bambuddy release
+      ansible.builtin.get_url:
+        url: "{{ bambuddy_release_url }}"
+        dest: "/tmp/bambuddy-{{ bambuddy_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+        checksum: "{{ bambuddy_release_checksum }}"
+        mode: "0600"
+      when: >-
+        bambuddy_managed_version.rc != 0 or
+        bambuddy_managed_version.stdout | trim != bambuddy_version
+
+    - name: Push Bambuddy release into container
+      ansible.builtin.command:
+        argv:
+          - pct
+          - push
+          - "{{ lxc_resolved_vmid }}"
+          - "/tmp/bambuddy-{{ bambuddy_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+          - "/tmp/bambuddy-release.tar.gz"
+          - --perms
+          - "0600"
+      changed_when: true
+      when: >-
+        bambuddy_managed_version.rc != 0 or
+        bambuddy_managed_version.stdout | trim != bambuddy_version
+
+    - name: Install pinned Bambuddy release
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - >-
+            id bambuddy >/dev/null 2>&1 || useradd --system --home-dir {{ bambuddy_install_dir }} --shell /usr/sbin/nologin bambuddy;
+            systemctl stop bambuddy 2>/dev/null || true;
+            install -d -o bambuddy -g bambuddy {{ bambuddy_install_dir }};
+            tar -xzf /tmp/bambuddy-release.tar.gz -C {{ bambuddy_install_dir }} --strip-components=1;
+            chown -R bambuddy:bambuddy {{ bambuddy_install_dir }};
+            runuser -u bambuddy -- python3 -m venv {{ bambuddy_install_dir }}/venv;
+            runuser -u bambuddy -- {{ bambuddy_install_dir }}/venv/bin/pip install --disable-pip-version-check -r {{ bambuddy_install_dir }}/requirements.txt;
+            cd {{ bambuddy_install_dir }}/frontend;
+            runuser -u bambuddy -- npm ci;
+            runuser -u bambuddy -- npm run build;
+            printf '%s\n' {{ bambuddy_version }} > {{ bambuddy_install_dir }}/.ansible-version;
+            chown bambuddy:bambuddy {{ bambuddy_install_dir }}/.ansible-version;
+            rm -f /tmp/bambuddy-release.tar.gz
+      changed_when: true
+      when: >-
+        bambuddy_managed_version.rc != 0 or
+        bambuddy_managed_version.stdout | trim != bambuddy_version
+
+    - name: Render Bambuddy configuration artifacts on Proxmox host
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "/tmp/{{ item.dest }}-{{ lxc_resolved_vmid }}"
+        mode: "0600"
+      loop:
+        - src: bambuddy.env.j2
+          dest: bambuddy.env
+        - src: bambuddy.service.j2
+          dest: bambuddy.service
+
+    - name: Push Bambuddy configuration artifacts into container
+      ansible.builtin.command:
+        argv:
+          - pct
+          - push
+          - "{{ lxc_resolved_vmid }}"
+          - "/tmp/{{ item.src }}-{{ lxc_resolved_vmid }}"
+          - "{{ item.dest }}"
+          - --perms
+          - "{{ item.mode }}"
+      loop:
+        - src: bambuddy.env
+          dest: /tmp/bambuddy.env
+          mode: "0640"
+        - src: bambuddy.service
+          dest: /etc/systemd/system/bambuddy.service
+          mode: "0644"
+      register: bambuddy_config_push
+      changed_when: true
+
+    - name: Initialize Bambuddy environment without replacing local settings
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - >-
+            if test ! -e {{ bambuddy_install_dir }}/.env; then
+            install -o bambuddy -g bambuddy -m 0640 /tmp/bambuddy.env {{ bambuddy_install_dir }}/.env;
+            echo created;
+            fi;
+            rm -f /tmp/bambuddy.env
+      register: bambuddy_env_init
+      changed_when: bambuddy_env_init.stdout is search('created')
+
+    - name: Enable and restart Bambuddy
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - systemctl daemon-reload; systemctl enable bambuddy; systemctl restart bambuddy
+      changed_when: true
+
+    - name: Verify Bambuddy web service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - "http://127.0.0.1:{{ bambuddy_port }}/"
+      register: bambuddy_health
+      retries: 12
+      delay: 5
+      until: bambuddy_health.rc == 0
+      changed_when: false

@@ -54,24 +54,25 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 9. **prowlarr**: Adopts the Prowlarr LXC and manages a pinned release (conditional: `install_prowlarr`)
 10. **homebridge**: Adopts the Homebridge LXC and manages a pinned Debian package (conditional: `install_homebridge`)
 11. **spoolman**: Adopts the Spoolman LXC and manages pinned application and uv releases (conditional: `install_spoolman`)
-12. **gitea_mirror**: Adopts the Gitea Mirror LXC and manages pinned application and Bun releases (conditional: `install_gitea_mirror`)
-13. **seerr**: Adopts the Seerr LXC and manages pinned application and pnpm releases (conditional: `install_seerr`)
-14. **pocket_id**: Adopts the Pocket ID LXC and manages a pinned release binary (conditional: `install_pocket_id`)
-15. **forgejo**: Adopts the Forgejo LXC and manages a pinned release binary with strict upgrade guards (conditional: `install_forgejo`)
-16. **sonarr**: Adopts the Sonarr LXC and manages a pinned release (conditional: `install_sonarr`)
-17. **radarr**: Adopts the Radarr LXC and manages a pinned release (conditional: `install_radarr`)
-18. **discoverr_bot**: Installs the Discoverr Discord bot LXC, pinned to a commit SHA (conditional: `install_discoverr_bot`)
-19. **gallery_dl**: Installs a gallery-dl LXC on a cron schedule (conditional: `install_gallery_dl`)
-20. **stash**: Installs the Stash media server LXC, pinned to a release tag (conditional: `install_stash`)
-21. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
-22. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
-23. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
-24. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
-25. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
+12. **bambuddy**: Creates or adopts the Bambuddy LXC and manages a pinned, checksum-verified release (conditional: `install_bambuddy`)
+13. **gitea_mirror**: Adopts the Gitea Mirror LXC and manages pinned application and Bun releases (conditional: `install_gitea_mirror`)
+14. **seerr**: Adopts the Seerr LXC and manages pinned application and pnpm releases (conditional: `install_seerr`)
+15. **pocket_id**: Adopts the Pocket ID LXC and manages a pinned release binary (conditional: `install_pocket_id`)
+16. **forgejo**: Adopts the Forgejo LXC and manages a pinned release binary with strict upgrade guards (conditional: `install_forgejo`)
+17. **sonarr**: Adopts the Sonarr LXC and manages a pinned release (conditional: `install_sonarr`)
+18. **radarr**: Adopts the Radarr LXC and manages a pinned release (conditional: `install_radarr`)
+19. **discoverr_bot**: Installs the Discoverr Discord bot LXC, pinned to a commit SHA (conditional: `install_discoverr_bot`)
+20. **gallery_dl**: Installs a gallery-dl LXC on a cron schedule (conditional: `install_gallery_dl`)
+21. **stash**: Installs the Stash media server LXC, pinned to a release tag (conditional: `install_stash`)
+22. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
+23. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
+24. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
+25. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
+26. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-26. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
+27. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
 
 Each role in the first play uses a boolean gate variable with `| default(false) | bool`. When adding a new role, follow this same pattern.
 
@@ -312,6 +313,7 @@ rm -rf /tmp/test-isos
 - `prowlarr` adopts `prowlarr-nash` (VMID 104 on `atlas`), pins version 2.3.0.5236 and its release checksum, and manages the service and health check
 - `homebridge` adopts `homebridge-nash` (VMID 105 on `prometheus`), pins package version 2.0.5, verifies the repository key, and manages the APT source and service health
 - `spoolman` adopts `spoolman-nash` (VMID 102 on `nyx`), preserves its environment and SQLite data, pins Spoolman and uv releases, and verifies the reported application version
+- `bambuddy` creates or adopts `bambuddy-nash`, preserves its environment and data, pins and checksum-verifies Bambuddy, and verifies the web interface
 - `gitea_mirror` adopts `git-mirror-nash` (VMID 119, HA-managed, currently on `atlas`), pins Gitea Mirror 3.21.0 and Bun 1.3.14 releases with checksums, preserves the environment file and SQLite data, refuses destructive 2.x migrations, backs up before upgrades with automatic rollback on failed health checks, and verifies the installed version
 - `seerr` adopts `overseerr-nash` (VMID 117, HA-managed, currently on `atlas`), pins Seerr 3.3.0 and pnpm 10.34.4 with checksums, requires NodeSource Node.js 22, preserves `/etc/seerr/seerr.conf` and the SQLite config data, refuses to overwrite an unmigrated Overseerr install, backs up before upgrades with automatic rollback on failed health checks, and verifies the API-reported version
 - `pocket_id` adopts `pocketid-nash` (VMID 100, HA-managed, currently on `nyx`), pins the Pocket ID 2.11.0 release binary with a checksum, preserves the `.env` (including its encryption key) and SQLite data, backs up binary, data, and environment before upgrades with automatic rollback on failed health checks, and verifies the binary-reported version

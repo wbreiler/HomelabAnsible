@@ -138,6 +138,12 @@ install_spoolman: false
 # spoolman_hostname: "spoolman-nash"
 # spoolman_version: "0.24.0"
 
+install_bambuddy: false
+# bambuddy_node: "nyx"
+# bambuddy_vmid: ""  # empty selects the next available managed-app VMID
+# bambuddy_hostname: "bambuddy-nash"
+# bambuddy_version: "1.2.5"
+
 install_gitea_mirror: false
 # gitea_mirror_node: "atlas"
 # gitea_mirror_vmid: "119"
