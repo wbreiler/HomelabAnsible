@@ -94,8 +94,11 @@ Deployed to each server LXC at `/usr/local/bin/update-modpack.sh`. Config at `/e
 Flow: Discord announce → 5-min countdown (skipped with `--no-wait`) →
 download, stage, and validate required content while the server stays online →
 briefly stop the service → atomically swap the staged content → restart and
-verify, rolling back the mod directory and service on failure. The latest
-three backups are retained.
+verify that it remains active, rolling back the mod directory and service on
+failure. The updater records the version successfully started in
+`/opt/minecraft/.running_version`; if the installed and running markers differ,
+the next update check performs one corrective restart. The latest three backups
+are retained.
 
 `--no-wait` is used by the Ansible role for initial provisioning.
 

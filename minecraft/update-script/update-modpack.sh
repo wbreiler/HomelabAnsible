@@ -11,7 +11,7 @@ set -euo pipefail
 CONFIG_FILE="/etc/minecraft/update.conf"
 DRY_RUN=false
 NO_WAIT=false
-LOG_FILE="/var/log/minecraft-update.log"
+LOG_FILE="${LOG_FILE:-/var/log/minecraft-update.log}"
 MODRINTH_API="https://api.modrinth.com/v2"
 CF_API="https://api.curseforge.com/v1"
 UA="MinecraftLXCAnsible/1.0 (will.breiler@gmail.com)"
@@ -84,6 +84,7 @@ SERVICE_WAS_RUNNING=false
 SWAP_COMPLETE=false
 BACKUP_DIR=""
 MODS_STAGE=""
+RUNNING_VERSION_TMP=""
 
 on_error() {
     local exit_code=$?
@@ -131,6 +132,7 @@ source "$CONFIG_FILE"
 PACK_SOURCE="${PACK_SOURCE:-modrinth}"
 MINECRAFT_DIR="${MINECRAFT_DIR:-/opt/minecraft}"
 CURRENT_VERSION_FILE="${MINECRAFT_DIR}/.current_version"
+RUNNING_VERSION_FILE="${MINECRAFT_DIR}/.running_version"
 CURRENT_EXCLUDES_FILE="${MINECRAFT_DIR}/.current_excludes"
 MODS_DIR="${MINECRAFT_DIR}/mods"
 PACK_NAME_SAFE="${PACK_NAME:-unknown pack}"
@@ -141,6 +143,31 @@ for var in PACK_NAME INSTANCE_NAME MC_VERSION LOADER; do
         exit 1
     fi
 done
+
+SERVICE="minecraft@${INSTANCE_NAME}.service"
+
+record_running_version() {
+    local version_id="$1"
+    RUNNING_VERSION_TMP=$(mktemp "${MINECRAFT_DIR}/.running_version.XXXXXX")
+    printf '%s\n' "$version_id" > "$RUNNING_VERSION_TMP"
+    chown minecraft:minecraft "$RUNNING_VERSION_TMP"
+    chmod 0644 "$RUNNING_VERSION_TMP"
+    mv "$RUNNING_VERSION_TMP" "$RUNNING_VERSION_FILE"
+    RUNNING_VERSION_TMP=""
+}
+
+verify_service_started() {
+    local verify_delay="${SERVICE_VERIFY_DELAY:-10}"
+    if (( verify_delay > 0 )); then
+        log "Waiting ${verify_delay}s to verify ${SERVICE} remains active..."
+        sleep "$verify_delay"
+    fi
+    if ! systemctl is-active --quiet "$SERVICE"; then
+        log "ERROR: ${SERVICE} did not remain active after restart."
+        return 1
+    fi
+    log "Verified ${SERVICE} is active."
+}
 
 case "$PACK_SOURCE" in
     modrinth)
@@ -288,9 +315,26 @@ CURRENT_ID="(none)"
 CURRENT_EXCLUDES=""
 [[ -f "$CURRENT_EXCLUDES_FILE" ]] && CURRENT_EXCLUDES=$(cat "$CURRENT_EXCLUDES_FILE")
 
+RUNNING_ID="(unknown)"
+[[ -f "$RUNNING_VERSION_FILE" ]] && RUNNING_ID=$(cat "$RUNNING_VERSION_FILE")
+
 log "Installed: ${CURRENT_ID}"
 
 if [[ "$CURRENT_ID" == "$LATEST_ID" && "$CURRENT_EXCLUDES" == "${EXCLUDE_CF_PROJECTS:-}" ]]; then
+    if systemctl is-active --quiet "$SERVICE" 2>/dev/null && [[ "$RUNNING_ID" != "$CURRENT_ID" ]]; then
+        if [[ "$DRY_RUN" == true ]]; then
+            log "Installed version is current, but its restart is unverified; would restart ${SERVICE}."
+            exit 0
+        fi
+        SERVICE_WAS_RUNNING=true
+        log "Installed version is current, but running version is ${RUNNING_ID}; restarting ${SERVICE}..."
+        systemctl restart "$SERVICE"
+        verify_service_started
+        record_running_version "$CURRENT_ID"
+        log "Restarted ${SERVICE} with ${LATEST_NAME}."
+        discord_notify "✅ Restarted ${PACK_NAME} with ${LATEST_NAME}."
+        exit 0
+    fi
     log "Already up to date. Exiting."
     exit 0
 elif [[ "$CURRENT_ID" == "$LATEST_ID" ]]; then
@@ -317,7 +361,6 @@ else
     sleep 300
 fi
 
-SERVICE="minecraft@${INSTANCE_NAME}.service"
 if systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
     SERVICE_WAS_RUNNING=true
 fi
@@ -341,6 +384,7 @@ cleanup() {
     rm -f "$PACK_FILE"
     [[ -n "${VERSION_TMP:-}" ]] && rm -f "$VERSION_TMP"
     [[ -n "${EXCLUDES_TMP:-}" ]] && rm -f "$EXCLUDES_TMP"
+    [[ -n "${RUNNING_VERSION_TMP:-}" ]] && rm -f "$RUNNING_VERSION_TMP"
     if [[ -n "${MODS_STAGE:-}" && -d "$MODS_STAGE" ]]; then
         rm -rf "$MODS_STAGE"
     fi
@@ -568,6 +612,7 @@ fi
 if [[ "$SERVICE_WAS_RUNNING" == true ]]; then
     log "Starting ${SERVICE}..."
     systemctl start "$SERVICE"
+    verify_service_started
     log "${SERVICE} started."
 elif systemctl cat "$SERVICE" &>/dev/null; then
     log "${SERVICE} was stopped before the update; leaving it stopped."
@@ -589,9 +634,14 @@ printf '%s\n' "$LATEST_ID" > "$VERSION_TMP"
 chown minecraft:minecraft "$VERSION_TMP"
 chmod 0644 "$VERSION_TMP"
 
-# Move the version marker last: if committing the exclusion marker fails, the
-# old version remains authoritative and the next run retries the installation.
+# Move the version marker last. It remains authoritative if committing either
+# supporting marker fails, so the next run retries the installation.
 mv "$EXCLUDES_TMP" "$CURRENT_EXCLUDES_FILE"
+if [[ "$SERVICE_WAS_RUNNING" == true ]]; then
+    record_running_version "$LATEST_ID"
+else
+    rm -f "$RUNNING_VERSION_FILE"
+fi
 mv "$VERSION_TMP" "$CURRENT_VERSION_FILE"
 SWAP_COMPLETE=false
 

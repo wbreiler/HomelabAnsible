@@ -216,7 +216,7 @@
 # runs so there is only one staging, validation, swap, and rollback path.
 ###############################################################################
 
-- name: Install latest modpack transactionally
+- name: Install latest modpack and restart Minecraft if needed
   ansible.builtin.command:
     cmd: /usr/local/bin/update-modpack.sh --no-wait
   register: minecraft_server_modpack_update

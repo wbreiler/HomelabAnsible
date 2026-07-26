@@ -183,9 +183,11 @@ MINECRAFT_DIR="/opt/minecraft"
 
 **Update flow:** Discord announce → 5-min countdown → download, stage, and
 validate required content while the server stays online → briefly stop the
-service → atomically swap the staged content → restart and verify. Failures
-after the swap restore the previous mod directory and restart the service.
-The latest three backups are retained.
+service → atomically swap the staged content → restart and verify that it
+remains active. The successfully started version is recorded separately from
+the installed version, so a later check performs one corrective restart if the
+markers disagree. Failures after the swap restore the previous mod directory
+and restart the service. The latest three backups are retained.
 
 Logs: `/var/log/minecraft-update.log` (auto-rotates at 10 MB)
 
