@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically check Proxmox cluster nodes and guests for down status
+
+[Timer]
+OnCalendar={{ healthcheck_reminder_schedule }}
+RandomizedDelaySec={{ healthcheck_reminder_randomized_delay }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

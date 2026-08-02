@@ -1,6 +1,6 @@
 # Gemini Context: Proxmox Ansible Automation
 
-This project contains Ansible playbooks and roles for automating the deployment and management of a Proxmox VE cluster. It handles repository configuration, cluster formation, backup storage (PBS), and ISO management. Monitoring is handled by a Prometheus + Grafana LXC stack.
+This project contains Ansible playbooks and roles for automating the deployment and management of a Proxmox VE cluster. It handles repository configuration, cluster formation, backup storage (PBS), and ISO management. No monitoring/uptime-check stack is currently deployed.
 
 ## Project Structure
 

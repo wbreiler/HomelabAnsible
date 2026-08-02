@@ -1,0 +1,9 @@
+---
+# Installs a systemd timer on the cluster master node that checks Proxmox
+# node and guest status cluster-wide (via pvesh) and sends a Discord alert
+# when something is offline/stopped.
+healthcheck_reminder_schedule: "*:0/5"  # noqa: var-naming[no-role-prefix]
+healthcheck_reminder_randomized_delay: "10s"  # noqa: var-naming[no-role-prefix]
+healthcheck_reminder_repeat_after_minutes: 30  # noqa: var-naming[no-role-prefix]
+healthcheck_reminder_skip_vmids: []  # noqa: var-naming[no-role-prefix]
+healthcheck_reminder_discord_webhook_url: ""  # noqa: var-naming[no-role-prefix]

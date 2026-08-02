@@ -1,0 +1,351 @@
+---
+- name: Validate Gatus configuration
+  ansible.builtin.assert:
+    that:
+      - gatus_version | length > 0
+      - gatus_source_checksum is match('^sha256:[0-9a-f]{64}$')
+      - gatus_go_version | length > 0
+      - gatus_go_checksum is match('^sha256:[0-9a-f]{64}$')
+      - gatus_port | int >= 1
+      - gatus_port | int <= 65535
+    fail_msg: >-
+      Gatus requires a pinned version, SHA-256 source checksum, a pinned Go
+      toolchain with SHA-256 checksum, and a TCP port from 1 to 65535.
+
+- name: Resolve node currently hosting Gatus
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ gatus_hostname }}"
+    lxc_fallback_node: "{{ gatus_node }}"
+
+- name: Set up Gatus LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Gatus container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ gatus_hostname }}"
+        lxc_vmid: "{{ gatus_vmid }}"
+        lxc_storage: "{{ gatus_storage }}"
+        lxc_template: "{{ gatus_template }}"
+        lxc_cores: "{{ gatus_cores }}"
+        lxc_memory: "{{ gatus_memory }}"
+        lxc_disk: "{{ gatus_disk }}"
+        lxc_bridge: "{{ gatus_bridge }}"
+        lxc_vlan: "{{ gatus_vlan }}"
+        lxc_tags: "{{ gatus_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+          - curl
+          - tar
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Read managed Gatus version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - "{{ gatus_install_dir }}/.ansible-version"
+      register: gatus_managed_version
+      changed_when: false
+      failed_when: gatus_managed_version.rc not in [0, 1]
+
+    - name: Build and install pinned Gatus release
+      when: >-
+        gatus_managed_version.rc != 0 or
+        gatus_managed_version.stdout | trim != gatus_version
+      block:
+        - name: Download pinned Go toolchain
+          ansible.builtin.get_url:
+            url: "{{ gatus_go_url }}"
+            dest: "/tmp/go-{{ gatus_go_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            checksum: "{{ gatus_go_checksum }}"
+            mode: "0600"
+
+        - name: Download pinned Gatus source
+          ansible.builtin.get_url:
+            url: "{{ gatus_source_url }}"
+            dest: "/tmp/gatus-src-{{ gatus_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            checksum: "{{ gatus_source_checksum }}"
+            mode: "0600"
+
+        - name: Push Go toolchain into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/go-{{ gatus_go_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+              - "/tmp/go-toolchain.tar.gz"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Push Gatus source into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/gatus-src-{{ gatus_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+              - "/tmp/gatus-src.tar.gz"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Build Gatus binary from source
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -ceu
+              - >-
+                rm -rf /tmp/go-build && mkdir -p /tmp/go-build/src /tmp/go-build/toolchain;
+                tar -xzf /tmp/go-toolchain.tar.gz -C /tmp/go-build/toolchain;
+                tar -xzf /tmp/gatus-src.tar.gz -C /tmp/go-build/src --strip-components=1;
+                cd /tmp/go-build/src;
+                PATH=/tmp/go-build/toolchain/go/bin:$PATH
+                GOTOOLCHAIN=local
+                GOCACHE=/tmp/go-build/cache
+                GOMODCACHE=/tmp/go-build/modcache
+                CGO_ENABLED=0
+                go build -o /tmp/go-build/gatus .;
+                test -x /tmp/go-build/gatus;
+                install -m 0755 /tmp/go-build/gatus /tmp/gatus-built;
+                rm -rf /tmp/go-build /tmp/go-toolchain.tar.gz /tmp/gatus-src.tar.gz
+          changed_when: true
+
+        - name: Remove Gatus source/toolchain archives from Proxmox host
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "/tmp/go-{{ gatus_go_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            - "/tmp/gatus-src-{{ gatus_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+
+        - name: Ensure gatus system user exists
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -ceu
+              - >-
+                id gatus >/dev/null 2>&1 ||
+                useradd --system --home-dir {{ gatus_install_dir }} --shell /usr/sbin/nologin gatus
+          changed_when: true
+
+        - name: Install Gatus binary
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -ceu
+              - >-
+                systemctl stop gatus 2>/dev/null || true;
+                install -d -o gatus -g gatus {{ gatus_install_dir }};
+                install -o gatus -g gatus -m 0755 /tmp/gatus-built {{ gatus_install_dir }}/gatus;
+                rm -f /tmp/gatus-built;
+                printf '%s\n' {{ gatus_version }} > {{ gatus_install_dir }}/.ansible-version
+          changed_when: true
+
+    - name: Create Gatus data directory
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - install
+          - -d
+          - -o
+          - gatus
+          - -g
+          - gatus
+          - -m
+          - "0750"
+          - "{{ gatus_data_dir }}"
+      changed_when: true
+
+    - name: Build list of managed application health endpoints
+      ansible.builtin.set_fact:
+        gatus_app_endpoints: >-
+          {{
+            gatus_app_endpoints | default([]) +
+            ([{'name': item.name, 'url': item.url}]
+             if (item.enabled | bool) and (item.url | default('') | length > 0)
+             else [])
+          }}
+      loop:
+        - name: Forgejo
+          enabled: "{{ install_forgejo | default(false) }}"
+          url: "{{ forgejo_health_url | default('') }}"
+        - name: Homebridge
+          enabled: "{{ install_homebridge | default(false) }}"
+          url: "{{ homebridge_health_url | default('') }}"
+        - name: Gitea Mirror
+          enabled: "{{ install_gitea_mirror | default(false) }}"
+          url: "{{ gitea_mirror_health_url | default('') }}"
+        - name: Prowlarr
+          enabled: "{{ install_prowlarr | default(false) }}"
+          url: "{{ prowlarr_health_url | default('') }}"
+        - name: Radarr
+          enabled: "{{ install_radarr | default(false) }}"
+          url: "{{ radarr_health_url | default('') }}"
+        - name: Seerr
+          enabled: "{{ install_seerr | default(false) }}"
+          url: "{{ seerr_health_url | default('') }}"
+        - name: Spoolman
+          enabled: "{{ install_spoolman | default(false) }}"
+          url: "{{ spoolman_health_url | default('') }}"
+        - name: Pocket ID
+          enabled: "{{ install_pocket_id | default(false) }}"
+          url: "{{ pocket_id_health_url | default('') }}"
+        - name: Sonarr
+          enabled: "{{ install_sonarr | default(false) }}"
+          url: "{{ sonarr_health_url | default('') }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Render Gatus configuration
+      ansible.builtin.set_fact:
+        gatus_config: "{{ lookup('template', 'config.yaml.j2') }}"
+
+    - name: Read installed Gatus configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - "{{ gatus_install_dir }}/config.yaml"
+      register: gatus_config_current
+      changed_when: false
+      failed_when: gatus_config_current.rc not in [0, 1]
+      no_log: true
+
+    - name: Install Gatus configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - "{{ gatus_install_dir }}/config.yaml"
+        stdin: "{{ gatus_config }}"
+        stdin_add_newline: false
+      when: >-
+        gatus_config_current.rc != 0 or
+        gatus_config_current.stdout != gatus_config | trim
+      changed_when: true
+      notify: Restart Gatus
+      no_log: true
+
+    - name: Fix Gatus configuration ownership
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - chown
+          - gatus:gatus
+          - "{{ gatus_install_dir }}/config.yaml"
+      changed_when: true
+
+    - name: Render Gatus service
+      ansible.builtin.set_fact:
+        gatus_service: "{{ lookup('template', 'gatus.service.j2') }}"
+
+    - name: Read installed Gatus service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/gatus.service
+      register: gatus_service_current
+      changed_when: false
+      failed_when: gatus_service_current.rc not in [0, 1]
+
+    - name: Install Gatus service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/gatus.service
+        stdin: "{{ gatus_service }}"
+        stdin_add_newline: false
+      when: >-
+        gatus_service_current.rc != 0 or
+        gatus_service_current.stdout != gatus_service | trim
+      changed_when: true
+      notify: Restart Gatus
+
+    - name: Enable and start Gatus
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - gatus
+      register: gatus_service_enable
+      changed_when: "'Created symlink' in gatus_service_enable.stderr"
+
+    - name: Apply Gatus changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Gatus service is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - gatus
+      changed_when: false
+
+    - name: Verify Gatus web interface
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - "http://127.0.0.1:{{ gatus_port }}/health"
+      register: gatus_health
+      retries: 12
+      delay: 5
+      until: gatus_health.rc == 0
+      changed_when: false

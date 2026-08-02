@@ -77,8 +77,10 @@ proxmox-ansible/
 │   ├── discoverr_bot/       # Discoverr Discord bot LXC (custom install)
 │   ├── gallery_dl/          # gallery-dl LXC (custom install)
 │   ├── stash/               # Stash media server LXC (custom install)
+│   ├── gatus/               # Managed Gatus LXC (uptime monitoring/status page)
 │   ├── update_all/          # System updates role (nodes + LXCs)
 │   ├── update_reminder/     # Per-node Discord update reminders
+│   ├── healthcheck_reminder/# Cluster-wide Discord down-node/guest alerts
 │   ├── cleanup_storage/     # Stale ZFS dataset cleanup
 │   ├── pbs_restore/         # PBS backup restore role
 │   ├── vm_deploy/           # Full VM deployment from ISOs
@@ -338,7 +340,12 @@ pvecm nodes
 
 ### Monitoring
 
-This cluster uses a Prometheus + Grafana LXC stack (`prom-nash`, `grafana-nash` on prometheus) for monitoring.
+Two opt-in roles cover uptime monitoring, layered so neither is redundant:
+
+- **`healthcheck_reminder`** (`healthcheck_reminder_enabled: true`) — no new service. Installs a systemd timer on the cluster master node only (checks are cluster-wide via `pvesh get /cluster/resources`, so running it on all three nodes would triple-alert). Every 5 minutes by default, it flags any Proxmox node that isn't `online` and any LXC/VM that isn't `running` (skip intentionally-stopped guests via `healthcheck_reminder_skip_vmids`), and sends a Discord alert. Re-notifies immediately if the set of down items changes, otherwise backs off for `healthcheck_reminder_repeat_after_minutes` (default 30) so an ongoing outage doesn't spam.
+- **`gatus`** (`install_gatus: true`) — the one new service, for app-level checks and a status page/history that the script above can't give you. Adopts/creates `gatus-nash`, a small LXC running [Gatus](https://github.com/TwiN/gatus). Gatus has no prebuilt binary releases, so the role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain (Go itself verifies every dependency against sum.golang.org during the build). The generated `config.yaml` automatically probes: each Proxmox node's web UI (TCP 8006), the PBS server (TCP 8007), and every managed app LXC that already defines a `<role>_health_url` (HTTP 200 check) — no manual endpoint duplication. Add anything else via `gatus_extra_endpoints`.
+
+Together: `healthcheck_reminder` catches "is the node/guest even up" (Proxmox-native, zero footprint); `gatus` catches "is the app inside actually responding" plus gives you history and a dashboard.
 
 ### Standalone App LXCs
 
@@ -358,6 +365,7 @@ Fourteen repository-owned roles manage a single-purpose LXC. Each is opt-in and 
 - **`discoverr_bot`** — Discoverr Discord bot, pinned to a commit SHA. Needs `discoverr_bot_tmdb_api_key`, `discoverr_bot_seerr_url`/`discoverr_bot_seerr_password`, and `discoverr_bot_discord_token` (put these in the vault-encrypted `group_vars/proxmox_cluster.yml`, not host_vars).
 - **`gallery_dl`** — gallery-dl on a cron schedule, NFS-mounted to the vault share. Configure `gallery_dl_profiles` (usernames to archive) and optionally `gallery_dl_cookies_file`.
 - **`stash`** — Stash media server, pinned to a release tag, NFS-mounted to the vault share.
+- **`gatus`** — Uptime monitoring/status page. See [Monitoring](#monitoring) above for details.
 
 ```yaml
 install_apt_cacher_ng: true
@@ -419,6 +427,15 @@ radarr_version: "6.3.0.10514"
 install_discoverr_bot: true
 install_gallery_dl: true
 install_stash: true
+
+install_gatus: true
+gatus_node: "nyx"
+gatus_vmid: ""  # selects the next available managed-app VMID
+gatus_version: "5.36.0"
+gatus_discord_webhook_url: ""  # set in vault-encrypted group_vars
+
+healthcheck_reminder_enabled: true
+healthcheck_reminder_discord_webhook_url: ""  # set in vault-encrypted group_vars
 ```
 
 ```bash
@@ -436,6 +453,7 @@ ansible-playbook -i inventory.yml site.yml --tags radarr -e 'install_radarr=true
 ansible-playbook site.yml --tags discoverr_bot -e 'install_discoverr_bot=true' --ask-vault-pass
 ansible-playbook site.yml --tags gallery_dl -e 'install_gallery_dl=true' --ask-vault-pass
 ansible-playbook site.yml --tags stash -e 'install_stash=true' --ask-vault-pass
+ansible-playbook site.yml --tags gatus -e 'install_gatus=true' --ask-vault-pass
 ```
 
 After deployment, point APT clients at `http://<container-ip>:3142`. The report page is available at `http://<container-ip>:3142/acng-report.html`.
@@ -510,6 +528,46 @@ Inspect the schedule and most recent check on a node:
 ```bash
 systemctl list-timers homelab-update-reminder.timer
 journalctl -u homelab-update-reminder.service
+```
+
+### Health Check Reminders
+
+The `healthcheck_reminder` role installs a systemd timer on the cluster
+master node only — checks are cluster-wide via `pvesh get /cluster/resources`,
+so running it on all three nodes would triple-alert. Every 5 minutes by
+default it flags any Proxmox node that isn't `online` and any LXC/VM that
+isn't `running`, then sends a Discord alert. It re-notifies immediately if the
+set of down items changes, otherwise backs off for
+`healthcheck_reminder_repeat_after_minutes` (default 30) so an ongoing
+outage doesn't spam.
+
+Store the webhook only in the Vault-encrypted
+`group_vars/proxmox_cluster.yml`, not in the tracked example:
+
+```yaml
+healthcheck_reminder_enabled: true
+healthcheck_reminder_discord_webhook_url: >-
+  https://discord.com/api/webhooks/REPLACE_WITH_REAL_SECRET
+healthcheck_reminder_schedule: "*:0/5"
+healthcheck_reminder_randomized_delay: "10s"
+healthcheck_reminder_repeat_after_minutes: 30
+healthcheck_reminder_skip_vmids:
+  - 100  # e.g. templates or guests intentionally kept stopped
+```
+
+Deploy or reconfigure only the reminder:
+
+```bash
+ansible-playbook -i inventory.yml site.yml \
+  --tags healthcheck_reminder \
+  --ask-vault-pass
+```
+
+Inspect the schedule and most recent check on the cluster master node:
+
+```bash
+systemctl list-timers homelab-healthcheck-reminder.timer
+journalctl -u homelab-healthcheck-reminder.service
 ```
 
 ### PBS Restore

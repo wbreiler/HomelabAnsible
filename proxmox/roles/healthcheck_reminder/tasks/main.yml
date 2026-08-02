@@ -1,0 +1,79 @@
+---
+# Cluster/guest status is cluster-wide (pvesh /cluster/resources); run the
+# timer on the master node only so a down node/guest is not alerted 3x.
+- name: Validate healthcheck reminder configuration
+  ansible.builtin.assert:
+    that:
+      - healthcheck_reminder_discord_webhook_url | length > 0
+      - >-
+        healthcheck_reminder_discord_webhook_url is
+        match('^https://([a-z]+\.)?discord(app)?\.com/api/webhooks/')
+      - healthcheck_reminder_repeat_after_minutes | int >= 1
+      - healthcheck_reminder_schedule | length > 0
+      - healthcheck_reminder_randomized_delay | length > 0
+    fail_msg: >-
+      Configure a Discord HTTPS webhook and a positive repeat interval in
+      the Vault-encrypted group variables.
+    quiet: true
+  no_log: true
+  when: inventory_hostname == cluster_master_node
+
+- name: Set up healthcheck reminder on cluster master node only
+  when: inventory_hostname == cluster_master_node
+  block:
+    - name: Install healthcheck reminder dependencies
+      ansible.builtin.apt:
+        name:
+          - curl
+          - python3
+        state: present
+
+    - name: Create healthcheck reminder state directory
+      ansible.builtin.file:
+        path: /var/lib/homelab-healthcheck-reminder
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Install healthcheck reminder configuration
+      ansible.builtin.template:
+        src: homelab-healthcheck-reminder.env.j2
+        dest: /etc/homelab-healthcheck-reminder.env
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Install healthcheck reminder script
+      ansible.builtin.template:
+        src: homelab-healthcheck-reminder.sh.j2
+        dest: /usr/local/sbin/homelab-healthcheck-reminder
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Install healthcheck reminder service
+      ansible.builtin.template:
+        src: homelab-healthcheck-reminder.service.j2
+        dest: /etc/systemd/system/homelab-healthcheck-reminder.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart healthcheck reminder timer
+
+    - name: Install healthcheck reminder timer
+      ansible.builtin.template:
+        src: homelab-healthcheck-reminder.timer.j2
+        dest: /etc/systemd/system/homelab-healthcheck-reminder.timer
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart healthcheck reminder timer
+
+    - name: Enable healthcheck reminder timer
+      ansible.builtin.systemd_service:
+        name: homelab-healthcheck-reminder.timer
+        daemon_reload: true
+        enabled: true
+        state: started

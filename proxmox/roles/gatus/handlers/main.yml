@@ -1,0 +1,12 @@
+---
+- name: Restart Gatus
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - gatus
+  changed_when: true

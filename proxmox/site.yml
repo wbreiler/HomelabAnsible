@@ -100,6 +100,10 @@
       when: install_stash | default(false) | bool
       tags: ['stash', 'lxc']
 
+    - role: gatus
+      when: install_gatus | default(false) | bool
+      tags: ['gatus', 'monitoring', 'lxc']
+
     - role: update_all
       when: run_updates | default(false) | bool
       tags: ['update', 'maintenance']
@@ -107,6 +111,10 @@
     - role: update_reminder
       when: update_reminder_enabled | default(false) | bool
       tags: ['update_reminder', 'maintenance']
+
+    - role: healthcheck_reminder
+      when: healthcheck_reminder_enabled | default(false) | bool
+      tags: ['healthcheck_reminder', 'monitoring', 'maintenance']
 
     - role: cleanup_storage
       when: run_cleanup_storage | default(false) | bool

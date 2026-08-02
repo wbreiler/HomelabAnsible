@@ -196,6 +196,16 @@ install_gallery_dl: false
 install_stash: false
 # stash_node: "nyx"
 
+install_gatus: false
+# gatus_node: "nyx"
+# gatus_vmid: ""  # empty selects the next available managed-app VMID
+# gatus_hostname: "gatus-nash"
+# gatus_version: "5.36.0"
+# gatus_discord_webhook_url: ""  # store the real value in vault-encrypted group_vars
+# gatus_extra_endpoints:
+#   - name: "My other service"
+#     url: "http://10.10.40.x:port/health"
+
 # =============================================================================
 # System Updates Configuration
 # =============================================================================
@@ -219,6 +229,16 @@ update_reminder_repeat_after_days: 7
 update_reminder_include_lxcs: true
 # update_reminder_skip_vmids:
 #   - 100
+
+# Runs on the cluster master node only (checks are cluster-wide via pvesh).
+# Alerts to Discord when a node goes offline or a guest stops unexpectedly.
+healthcheck_reminder_enabled: false
+# healthcheck_reminder_discord_webhook_url: "https://discord.com/api/webhooks/..."
+healthcheck_reminder_schedule: "*:0/5"
+healthcheck_reminder_randomized_delay: "10s"
+healthcheck_reminder_repeat_after_minutes: 30
+# healthcheck_reminder_skip_vmids:
+#   - 100  # e.g. templates or guests that are intentionally kept stopped
 
 # =============================================================================
 # PBS Restore Configuration

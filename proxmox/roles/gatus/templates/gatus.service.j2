@@ -1,0 +1,19 @@
+[Unit]
+Description=Gatus - Automated Uptime Monitoring
+Documentation=https://github.com/TwiN/gatus
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gatus
+Group=gatus
+WorkingDirectory={{ gatus_install_dir }}
+Environment=GATUS_CONFIG_PATH={{ gatus_install_dir }}/config.yaml
+ExecStart={{ gatus_install_dir }}/gatus
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

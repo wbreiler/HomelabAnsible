@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an Ansible automation project for deploying and managing a Proxmox VE cluster with Proxmox Backup Server (PBS) storage, ISO management, VM deployment, and network tuning. Ceph and Tailscale are not used in this environment. Monitoring is handled by a Prometheus + Grafana LXC stack.
+This is an Ansible automation project for deploying and managing a Proxmox VE cluster with Proxmox Backup Server (PBS) storage, ISO management, VM deployment, and network tuning. Ceph and Tailscale are not used in this environment. No monitoring/uptime-check stack is currently deployed.
 
 **Target Environment**: Homelab infrastructure (3 Proxmox nodes: nyx/10.10.30.2, prometheus/10.10.30.3, atlas/10.10.30.9) running PVE 9 / Debian trixie.
 
@@ -64,15 +64,17 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 19. **discoverr_bot**: Installs the Discoverr Discord bot LXC, pinned to a commit SHA (conditional: `install_discoverr_bot`)
 20. **gallery_dl**: Installs a gallery-dl LXC on a cron schedule (conditional: `install_gallery_dl`)
 21. **stash**: Installs the Stash media server LXC, pinned to a release tag (conditional: `install_stash`)
-22. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
-23. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
-24. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
-25. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
-26. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
+22. **gatus**: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain (conditional: `install_gatus`)
+23. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
+24. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
+25. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests (conditional: `healthcheck_reminder_enabled`)
+26. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
+27. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
+28. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-27. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
+29. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
 
 Each role in the first play uses a boolean gate variable with `| default(false) | bool`. When adding a new role, follow this same pattern.
 
@@ -305,7 +307,7 @@ rm -rf /tmp/test-isos
 - Skipped by default unless `manage_isos: true`
 - Cancelling in-progress downloads and pruning unmanaged ISOs are separate default-false controls (`manage_isos_cancel_in_progress`, `manage_isos_prune_unmanaged`); leaving both false never touches pre-existing files
 
-### apt_cacher_ng, prowlarr, homebridge, spoolman, gitea_mirror, seerr, pocket_id, forgejo, sonarr, radarr, discoverr_bot, gallery_dl, stash Roles
+### apt_cacher_ng, prowlarr, homebridge, spoolman, gitea_mirror, seerr, pocket_id, forgejo, sonarr, radarr, discoverr_bot, gallery_dl, stash, gatus Roles
 
 - Repository-owned single-purpose LXC roles, each bootstrapped through the shared `tasks/create_lxc.yml`
 - Each resolves the node currently hosting its container at run time via the shared `tasks/resolve_lxc_node.yml` (all CTs are HA-managed and CRS auto-rebalance can move them); `<role>_node` is only the fallback for creating a container that doesn't exist yet
@@ -323,6 +325,7 @@ rm -rf /tmp/test-isos
 - `discoverr_bot` and `stash` pin third-party code (`discoverr_bot_repo_version` commit SHA, `stash_version` release tag)
 - `gallery_dl` and `stash` NFS-mount the vault share and are created privileged (kernel NFS requires it)
 - `discoverr_bot` secrets (TMDB key, Discord token, Seerr password) must go in vault-encrypted group_vars, not host_vars or role defaults
+- `gatus` creates or adopts `gatus-nash`. Gatus has no prebuilt binary releases, so the role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain (dependencies are additionally verified by Go against sum.golang.org during the build). `config.yaml` is generated: it probes every Proxmox node (TCP 8006), the PBS server (TCP 8007), and every managed app LXC that already defines a `<role>_health_url` — extend via `gatus_extra_endpoints`
 - Each skipped by default unless its `install_*` var is `true`
 
 ### update_all Role
@@ -343,6 +346,14 @@ rm -rf /tmp/test-isos
 - Uses a persistent cooldown to avoid repeated notifications
 - Keeps the Vault-supplied webhook in a root-only file and out of process arguments
 - Skipped by default unless `update_reminder_enabled: true`
+
+### healthcheck_reminder Role
+
+- Installs a systemd timer on the cluster master node only (`inventory_hostname == cluster_master_node`); checks are cluster-wide via `pvesh get /cluster/resources`, so running it on every node would triple-alert
+- Flags any Proxmox node not `online` and any LXC/VM not `running`; guests can be excluded with `healthcheck_reminder_skip_vmids`
+- Re-notifies immediately if the set of down items changes (signature comparison), otherwise backs off for `healthcheck_reminder_repeat_after_minutes`
+- Keeps the Vault-supplied webhook in a root-only file and out of process arguments
+- Skipped by default unless `healthcheck_reminder_enabled: true`
 
 ### pbs_restore Role
 

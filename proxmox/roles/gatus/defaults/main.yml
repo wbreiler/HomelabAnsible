@@ -1,0 +1,36 @@
+---
+gatus_node: "nyx"
+gatus_vmid: ""
+gatus_hostname: "gatus-nash"
+gatus_storage: "local-zfs"
+gatus_template: ""
+gatus_cores: 2
+gatus_memory: 1024
+gatus_disk: 6
+gatus_bridge: "vmbr0"
+gatus_vlan: 40
+gatus_tags:
+  - monitoring
+
+# Gatus ships no prebuilt binary releases (source/Docker only), so it is
+# built from a pinned, checksum-verified source tarball using a pinned,
+# checksum-verified Go toolchain. Go's module system verifies every
+# dependency it downloads against sum.golang.org during the build.
+gatus_version: "5.36.0"
+gatus_source_url: "https://api.github.com/repos/TwiN/gatus/tarball/v{{ gatus_version }}"
+gatus_source_checksum: "sha256:d88d296c8a1a0ccb6e45f59b3d66212ed792c503ebee4659d47243da0423fa70"
+
+gatus_go_version: "1.26.5"
+gatus_go_url: "https://go.dev/dl/go{{ gatus_go_version }}.linux-amd64.tar.gz"
+gatus_go_checksum: "sha256:5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053"
+
+gatus_install_dir: "/opt/gatus"
+gatus_data_dir: "/var/lib/gatus"
+gatus_port: 8080
+gatus_check_interval: "60s"
+gatus_discord_webhook_url: ""
+
+# Extra endpoints Gatus should probe beyond the Proxmox nodes, PBS server,
+# and managed app LXCs that already expose a "<role>_health_url" default.
+# Each entry: {name: "...", url: "http://..." or "tcp://host:port", conditions: ["[STATUS] == 200"]}
+gatus_extra_endpoints: []

@@ -1,0 +1,16 @@
+[Unit]
+Description=Check Proxmox cluster nodes and guests for down status
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/homelab-healthcheck-reminder.env
+ExecStart=/usr/local/sbin/homelab-healthcheck-reminder
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

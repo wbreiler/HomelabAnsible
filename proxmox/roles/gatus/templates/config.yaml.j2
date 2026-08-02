@@ -1,0 +1,65 @@
+web:
+  port: {{ gatus_port }}
+
+storage:
+  type: sqlite
+  path: {{ gatus_data_dir }}/data.db
+
+{% if gatus_discord_webhook_url | length > 0 %}
+alerting:
+  discord:
+    webhook-url: "{{ gatus_discord_webhook_url }}"
+    default-alert:
+      enabled: true
+      failure-threshold: 3
+      success-threshold: 2
+      send-on-resolved: true
+{% endif %}
+
+endpoints:
+{% for host in groups['proxmox_cluster'] %}
+  - name: "{{ host }} (Proxmox node)"
+    url: "tcp://{{ hostvars[host].ansible_host }}:8006"
+    interval: {{ gatus_check_interval }}
+    conditions:
+      - "[CONNECTED] == true"
+{% if gatus_discord_webhook_url | length > 0 %}
+    alerts:
+      - type: discord
+{% endif %}
+{% endfor %}
+{% for host in groups['pbs_nodes'] | default([]) %}
+  - name: "{{ host }} (PBS)"
+    url: "tcp://{{ hostvars[host].ansible_host }}:8007"
+    interval: {{ gatus_check_interval }}
+    conditions:
+      - "[CONNECTED] == true"
+{% if gatus_discord_webhook_url | length > 0 %}
+    alerts:
+      - type: discord
+{% endif %}
+{% endfor %}
+{% for app in gatus_app_endpoints | default([]) %}
+  - name: "{{ app.name }}"
+    url: "{{ app.url }}"
+    interval: {{ gatus_check_interval }}
+    conditions:
+      - "[STATUS] == 200"
+{% if gatus_discord_webhook_url | length > 0 %}
+    alerts:
+      - type: discord
+{% endif %}
+{% endfor %}
+{% for ep in gatus_extra_endpoints | default([]) %}
+  - name: "{{ ep.name }}"
+    url: "{{ ep.url }}"
+    interval: {{ ep.interval | default(gatus_check_interval) }}
+    conditions:
+{% for condition in ep.conditions | default(["[STATUS] == 200"]) %}
+      - "{{ condition }}"
+{% endfor %}
+{% if gatus_discord_webhook_url | length > 0 %}
+    alerts:
+      - type: discord
+{% endif %}
+{% endfor %}

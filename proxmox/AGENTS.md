@@ -13,7 +13,7 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
 **Key Decisions**:
 
 * This environment does not use Ceph or Tailscale.
-* Monitoring is handled by a Prometheus + Grafana LXC stack.
+* No monitoring/uptime-check stack is currently deployed.
 * The main playbook `site.yml` has two plays: the first sets up Proxmox nodes, the second runs `network_tuning` on both `proxmox_cluster` and `pbs_nodes` groups.
 * The SSH key `~/.ssh/cluster-nash` is configured in `ansible.cfg`.
 
@@ -40,8 +40,10 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
   * `forgejo`: Creates or adopts the Forgejo LXC with a pinned release binary and strict upgrade guards.
   * `sonarr`: Creates or adopts the Sonarr LXC with a pinned, checksum-verified release.
   * `radarr`: Creates or adopts the Radarr LXC with a pinned, checksum-verified release.
+  * `gatus`: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain.
   * `update_all`: Updates Proxmox host nodes and LXC containers.
   * `update_reminder`: Installs per-node Discord package-update reminders.
+  * `healthcheck_reminder`: Installs a cluster-master-only Discord alert for down nodes/guests.
   * `cleanup_storage`: Detects and optionally destroys stale ZFS datasets.
   * `pbs_restore`: Restores LXC containers from PBS backups.
   * `vm_deploy`: Deploys full VMs from ISOs.
@@ -94,15 +96,17 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 14. **forgejo**: Creates or adopts the Forgejo LXC and manages a pinned release binary with strict upgrade guards.
 15. **sonarr**: Creates or adopts the Sonarr LXC and manages a pinned release.
 16. **radarr**: Creates or adopts the Radarr LXC and manages a pinned release.
-17. **update_all**: Updates Proxmox nodes and LXC containers.
-18. **update_reminder**: Installs independent Discord update reminders on each node.
-19. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
-20. **pbs_restore**: Restores LXC containers from PBS backups.
-21. **vm_deploy**: Deploys full VMs from ISOs.
+17. **gatus**: Creates or adopts the Gatus LXC, built from a pinned source tarball with a pinned Go toolchain.
+18. **update_all**: Updates Proxmox nodes and LXC containers.
+19. **update_reminder**: Installs independent Discord update reminders on each node.
+20. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests.
+21. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
+22. **pbs_restore**: Restores LXC containers from PBS backups.
+23. **vm_deploy**: Deploys full VMs from ISOs.
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-22. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
+24. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
 
 ### PBS Storage Pattern
 
@@ -174,6 +178,8 @@ ansible-playbook -i inventory.yml site.yml --limit atlas --tags "pbs,update" --a
 * `isos`: Manage ISO downloads/mounts.
 * `update`: Update nodes and LXC containers (requires `-e 'run_updates=true'`).
 * `update_reminder`: Install per-node Discord package-update reminders.
+* `healthcheck_reminder`: Install the cluster-master-only Discord down-node/guest alert.
+* `gatus`: Create or adopt the Gatus uptime monitoring LXC.
 * `restore`: Restore containers from PBS backups (requires `-e 'restore_from_pbs=true'`).
 * `network`: Apply network tuning.
 
@@ -330,6 +336,30 @@ See the `CLAUDE.md` or `README.md` files for extensive examples of role-specific
 * Stores the Vault-supplied webhook in a root-only environment file and keeps
   it out of logs and process arguments.
 * Skipped by default unless `update_reminder_enabled: true`.
+
+### healthcheck_reminder
+
+* Installs a systemd timer on the cluster master node only; checks are
+  cluster-wide via `pvesh get /cluster/resources`, so running it on every
+  node would triple-alert.
+* Flags any Proxmox node not `online` and any LXC/VM not `running`; guests
+  can be excluded with `healthcheck_reminder_skip_vmids`.
+* Re-notifies immediately if the set of down items changes, otherwise backs
+  off for `healthcheck_reminder_repeat_after_minutes`.
+* Stores the Vault-supplied webhook in a root-only environment file and keeps
+  it out of logs and process arguments.
+* Skipped by default unless `healthcheck_reminder_enabled: true`.
+
+### gatus
+
+* Creates or adopts `gatus-nash`. Gatus has no prebuilt binary releases, so
+  the role builds it from a pinned, checksum-verified source tarball using a
+  pinned, checksum-verified Go toolchain; Go additionally verifies every
+  dependency against sum.golang.org during the build.
+* Generates `config.yaml`: probes every Proxmox node (TCP 8006), the PBS
+  server (TCP 8007), and every managed app LXC that already defines a
+  `<role>_health_url` — extend via `gatus_extra_endpoints`.
+* Skipped by default unless `install_gatus: true`.
 
 ### pbs_restore
 

@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+readonly STATE_DIR="${HEALTHCHECK_STATE_DIR:-/var/lib/homelab-healthcheck-reminder}"
+readonly LAST_NOTIFIED_FILE="${STATE_DIR}/last-notified"
+readonly LAST_SIGNATURE_FILE="${STATE_DIR}/last-signature"
+
+log_error() {
+  logger -t homelab-healthcheck-reminder -- "$*"
+}
+
+find_down_items() {
+  SKIP_VMIDS="${SKIP_VMIDS:-}" python3 -c '
+import json
+import os
+import subprocess
+import sys
+
+skip_vmids = set(os.environ.get("SKIP_VMIDS", "").split())
+
+try:
+    raw = subprocess.check_output(
+        ["pvesh", "get", "/cluster/resources", "--output-format", "json"]
+    )
+except subprocess.CalledProcessError as exc:
+    print(f"failed to query cluster resources: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+down = []
+for res in json.loads(raw):
+    rtype = res.get("type")
+    if rtype == "node":
+        status = res.get("status", "unknown")
+        if status != "online":
+            down.append(f"Node {res.get(\"node\", \"?\")}: {status}")
+    elif rtype in ("lxc", "qemu"):
+        vmid = str(res.get("vmid", ""))
+        if vmid in skip_vmids:
+            continue
+        status = res.get("status", "unknown")
+        if status != "running":
+            kind = "LXC" if rtype == "lxc" else "VM"
+            name = res.get("name", "unknown")
+            node = res.get("node", "?")
+            down.append(f"{kind} {vmid} ({name}) on {node}: {status}")
+
+print("\n".join(sorted(down)))
+'
+}
+
+send_discord_message() {
+  local message="$1"
+  local webhook_url="${DISCORD_WEBHOOK_URL}"
+  local payload_file
+  local curl_status
+
+  unset DISCORD_WEBHOOK_URL
+  payload_file="$(mktemp)"
+  trap 'rm -f "${payload_file}"' RETURN
+
+  MESSAGE="${message}" python3 -c '
+import json
+import os
+
+message = os.environ["MESSAGE"]
+print(json.dumps({"content": message[:1900]}))
+' >"${payload_file}"
+
+  {
+    printf 'url = "%s"\n' "${webhook_url}"
+    printf '%s\n' 'fail' 'silent' 'show-error'
+    printf '%s\n' 'header = "Content-Type: application/json"'
+  } | curl --config - --data-binary "@${payload_file}"
+  curl_status=$?
+
+  rm -f "${payload_file}"
+  trap - RETURN
+  return "${curl_status}"
+}
+
+main() {
+  local down_items
+  local signature
+  local last_signature=""
+  local last_notified=0
+  local now
+  local message
+
+  if [[ ! "${DISCORD_WEBHOOK_URL:-}" =~ ^https://([a-z]+\.)?discord(app)?\.com/api/webhooks/ ]]; then
+    log_error "Refusing to use an invalid Discord webhook URL"
+    return 1
+  fi
+
+  if ! down_items="$(find_down_items)"; then
+    log_error "Cluster resource check failed"
+    return 1
+  fi
+
+  if [[ -z "${down_items}" ]]; then
+    rm -f "${LAST_NOTIFIED_FILE}" "${LAST_SIGNATURE_FILE}"
+    return 0
+  fi
+
+  signature="$(printf '%s' "${down_items}" | sha256sum | cut -d' ' -f1)"
+  now="$(date +%s)"
+
+  [[ -r "${LAST_SIGNATURE_FILE}" ]] && read -r last_signature <"${LAST_SIGNATURE_FILE}"
+  if [[ -r "${LAST_NOTIFIED_FILE}" ]]; then
+    read -r last_notified <"${LAST_NOTIFIED_FILE}" || last_notified=0
+  fi
+
+  # Re-notify immediately when the set of down items changes, otherwise only
+  # after the cooldown, so an ongoing outage does not spam every 5 minutes.
+  if [[ "${signature}" == "${last_signature}" ]] &&
+    [[ "${last_notified}" =~ ^[0-9]+$ ]] &&
+    ((now - last_notified < REPEAT_AFTER_SECONDS)); then
+    return 0
+  fi
+
+  printf -v message '🔴 Homelab health check failed:\n\n%s' "${down_items}"
+
+  if send_discord_message "${message}"; then
+    printf '%s\n' "${signature}" >"${LAST_SIGNATURE_FILE}"
+    printf '%s\n' "${now}" >"${LAST_NOTIFIED_FILE}"
+  else
+    log_error "Discord notification failed"
+    return 1
+  fi
+}
+
+main "$@"
