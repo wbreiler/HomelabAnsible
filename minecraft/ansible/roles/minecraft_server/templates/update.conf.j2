@@ -23,3 +23,7 @@ MODPACK_SLUG="{{ modpack_slug }}"
 EXCLUDE_CF_PROJECTS="{{ exclude_cf_projects | join(' ') }}"
 {% endif %}
 {% endif %}
+
+{% if extra_modrinth_mods | default([]) %}
+EXTRA_MODRINTH_MODS="{{ extra_modrinth_mods | join(' ') }}"
+{% endif %}

@@ -220,7 +220,7 @@
   ansible.builtin.command:
     cmd: /usr/local/bin/update-modpack.sh --no-wait
   register: minecraft_server_modpack_update
-  when: modpack_slug != 'vanilla'
+  when: modpack_slug != 'vanilla' and (pack_source | default('modrinth')) != 'manual'
   changed_when: >-
     'Already up to date. Exiting.'
     not in minecraft_server_modpack_update.stdout
@@ -435,6 +435,81 @@
     - not (_server_jar_stat.stat.exists | default(false))
 
 ###############################################################################
+# 9d. Forge/NeoForge loader install for manually-provided packs
+# pack_source: manual means the mods/config/etc were dropped into /opt/minecraft
+# by hand (e.g. from a ServerPackCreator zip) instead of fetched by
+# update-modpack.sh, so nothing has installed the loader yet. Requires
+# loader_version (e.g. "47.4.20") on the server entry.
+###############################################################################
+
+- name: Check if run.sh already exists (manual pack)
+  ansible.builtin.stat:
+    path: /opt/minecraft/run.sh
+  register: _manual_run_sh_stat
+  when:
+    - (pack_source | default('modrinth')) == 'manual'
+    - (loader | default('')) in ['forge', 'neoforge']
+
+- name: Download Forge installer (manual pack)
+  ansible.builtin.get_url:
+    url: "https://maven.minecraftforge.net/net/minecraftforge/forge/{{ mc_version }}-{{ loader_version }}/forge-{{ mc_version }}-{{ loader_version }}-installer.jar"
+    dest: /tmp/loader-installer.jar
+    mode: "0644"
+    timeout: 300
+  when:
+    - (pack_source | default('modrinth')) == 'manual'
+    - loader | default('') == 'forge'
+    - not (_manual_run_sh_stat.stat.exists | default(false))
+
+- name: Download NeoForge installer (manual pack)
+  ansible.builtin.get_url:
+    url: "https://maven.neoforged.net/releases/net/neoforged/neoforge/{{ loader_version }}/neoforge-{{ loader_version }}-installer.jar"
+    dest: /tmp/loader-installer.jar
+    mode: "0644"
+    timeout: 300
+  when:
+    - (pack_source | default('modrinth')) == 'manual'
+    - loader | default('') == 'neoforge'
+    - not (_manual_run_sh_stat.stat.exists | default(false))
+
+- name: Run loader installer (manual pack)
+  ansible.builtin.command:
+    cmd: java -jar /tmp/loader-installer.jar --installServer
+    chdir: /opt/minecraft
+  when:
+    - (pack_source | default('modrinth')) == 'manual'
+    - (loader | default('')) in ['forge', 'neoforge']
+    - not (_manual_run_sh_stat.stat.exists | default(false))
+  changed_when: true
+
+- name: Remove loader installer jar (manual pack)
+  ansible.builtin.file:
+    path: /tmp/loader-installer.jar
+    state: absent
+  when:
+    - (pack_source | default('modrinth')) == 'manual'
+    - (loader | default('')) in ['forge', 'neoforge']
+
+- name: Fix ownership and run.sh permissions after loader install (manual pack)
+  ansible.builtin.file:
+    path: /opt/minecraft
+    owner: minecraft
+    group: minecraft
+    recurse: true
+  when:
+    - (pack_source | default('modrinth')) == 'manual'
+    - (loader | default('')) in ['forge', 'neoforge']
+    - not (_manual_run_sh_stat.stat.exists | default(false))
+
+- name: Ensure run.sh is executable (manual pack)
+  ansible.builtin.file:
+    path: /opt/minecraft/run.sh
+    mode: "0755"
+  when:
+    - (pack_source | default('modrinth')) == 'manual'
+    - (loader | default('')) in ['forge', 'neoforge']
+
+###############################################################################
 # 10. EULA, server.properties, ops.json
 ###############################################################################
 
@@ -510,6 +585,7 @@
     group: root
     mode: "0644"
   notify: Reload systemd
+  when: (pack_source | default('modrinth')) != 'manual'
 
 - name: Deploy minecraft-update.timer
   ansible.builtin.template:
@@ -519,6 +595,15 @@
     group: root
     mode: "0644"
   notify: Reload systemd
+  when: (pack_source | default('modrinth')) != 'manual'
+
+- name: Disable minecraft-update.timer for manually-managed packs
+  ansible.builtin.systemd_service:
+    name: minecraft-update.timer
+    enabled: false
+    state: stopped
+  when: (pack_source | default('modrinth')) == 'manual'
+  failed_when: false
 
 ###############################################################################
 # 14. Flush handlers (daemon-reload) before enabling units
@@ -548,3 +633,4 @@
     enabled: true
     state: started
     daemon_reload: false
+  when: (pack_source | default('modrinth')) != 'manual'

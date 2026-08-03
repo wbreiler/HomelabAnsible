@@ -29,6 +29,11 @@ servers:
     mc_version: "1.21.1"
     loader: ""
     instance_name: example
+    # Standalone Modrinth mods layered on top of the pack (e.g. an add-on the
+    # pack author doesn't bundle). Resolved to each mod's latest release for
+    # this server's mc_version/loader; works with either pack_source.
+    # extra_modrinth_mods:
+    #   - dynamictrees
     xmx: 6G
     xms: 2G
     server_properties:
@@ -53,5 +58,31 @@ servers:
   #   loader: forge
   #   instance_name: example-pack
   #   discord_webhook_url: "{{ vault_discord_webhook_example }}"
+  #   xmx: 6G
+  #   xms: 2G
+
+  # pack_source: manual — recommended when the CurseForge/Modrinth auto-fetch
+  # reconstruction of a pack misbehaves in ways that aren't an obvious single-mod
+  # config bug. Disables update-modpack.sh entirely (no auto-fetch, no update
+  # timer). Requires loader_version (exact Forge/NeoForge version — from the
+  # zip's variables.txt/manifest.json, or auto-reported by apply-manual-pack.sh
+  # when using a .mrpack). Deploy mods/config/defaultconfigs/datapacks with
+  # update-script/apply-manual-pack.sh <pack.zip|pack.mrpack> root@<ansible_host>
+  # — it handles both CurseForge server-pack zips and Modrinth .mrpack files.
+  # See minecraft/CLAUDE.md for the full procedure.
+  # - hostname: example-manual-pack
+  #   ansible_host: 192.0.2.33
+  #   vmid: 303
+  #   node: node1
+  #   cores: 4
+  #   memory: 8192
+  #   disk: 32
+  #   pack_source: manual
+  #   modpack_slug: example-pack
+  #   pack_name: Example Modpack
+  #   mc_version: "1.20.1"
+  #   loader: forge
+  #   loader_version: "47.4.20"
+  #   instance_name: example-manual-pack
   #   xmx: 6G
   #   xms: 2G

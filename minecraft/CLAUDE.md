@@ -70,6 +70,17 @@ migration paths remain local.
 
 **Adding a server**: Edit the ignored `servers.yml`. For CurseForge packs add `pack_source: curseforge` and `curseforge_project_id: "NNNNNN"`. The numeric project ID is in the URL on curseforge.com.
 
+**`pack_source: manual` — recommended fallback for broken auto-fetched packs**: Some CurseForge/Modrinth-side reconstructions of a modpack (via `update-modpack.sh`'s API-driven fetch) can differ subtly from the pack's official server-pack download — e.g. mismatched mod jar builds — in ways that cause runtime bugs the auto-fetch path can't detect (a client "Connection Lost" `ResourceLocationException` on `bettermc-nash`/`bettermc2-nash` traced back to exactly this: the auto-fetched mod set corrupted a large network sync packet; rebuilding from the official ServerPackCreator/CurseForge server-pack zip fixed it immediately). When a pack is misbehaving and the cause isn't an obvious single-mod config issue, prefer recreating from the official server pack over continuing to debug the auto-fetched version:
+
+1. Get the official server pack onto the controller (e.g. `~/Downloads/<name>.zip` or `.mrpack`) — either a CurseForge/ServerPackCreator-style zip (mods/config/etc. at the zip root) or a Modrinth `.mrpack` file.
+2. Set `pack_source: "manual"` on the server entry. For CurseForge-style zips also add `loader_version: "X.Y.Z"` (check `variables.txt`/`manifest.json` in the zip); for `.mrpack` files the exact loader version is read from `modrinth.index.json`'s `dependencies` automatically by the script in step 3 — set `loader_version` in `servers.yml` to match what it reports. This disables `update-modpack.sh` entirely for that server: no auto-fetch during provisioning, and `minecraft-update.timer` is not deployed (or is disabled if converting an existing server).
+3. Run `minecraft/update-script/apply-manual-pack.sh <path-to-zip-or-mrpack> root@<ansible_host>`. It runs on the controller (not the LXC), detects the format, and for `.mrpack` assembles a full server pack first — downloading each server-required file from `modrinth.index.json` and layering `overrides/` then `server-overrides/` on top — before deploying the same way as a plain zip: stops the service, backs up the existing `mods/`, `config/`, `defaultconfigs/` (e.g. `mods.pre-zip-recreate.<timestamp>`, never deleted outright), and rsyncs the fresh `mods/`, `config/`, `defaultconfigs/`, `datapacks/` (→ remote `world/datapacks/`) into `/opt/minecraft`.
+4. Run `site.yml` (`-e server_filter=<hostname>`) to reconcile everything else (JVM env, systemd unit, server.properties, timer state). If `run.sh` is already present with the matching loader version, the role skips reinstalling it; if not, a "manual pack" task section installs Forge/NeoForge via the official installer using `loader_version`.
+
+A server on `pack_source: manual` gets no further automatic mod updates — updating it means repeating this process with a newer server pack.
+
+**Extra mods on top of a modpack**: Add `extra_modrinth_mods: ["slug", ...]` to a server entry to layer standalone Modrinth mods onto a pack that doesn't bundle them (works with either `pack_source`). `update-modpack.sh` resolves each slug to its latest release for the server's `MC_VERSION`/`LOADER` and installs it alongside the pack's mods. The resolved versions are recorded in `.current_extra_mods` (parallel to `.current_excludes`) so a change to the list, or a new upstream release of one of these mods, triggers a reinstall even when the pack version itself is unchanged.
+
 **HA placement**: Set `ha_enabled: true`, list preferred and fallback nodes in
 `ha_nodes` with priorities, and keep `ha_strict: true` to prevent placement on
 unlisted nodes. PVE 9 permits each HA resource in only one node-affinity rule;
@@ -86,6 +97,43 @@ the other resources and supplies the rule digest to prevent concurrent writes.
 **CurseForge provisioning** in the role delegates to `update-modpack.sh --no-wait` rather than reimplementing the API logic. The script and its config are deployed in step 5 (before the download steps) for this reason.
 
 **Backup job**: At the end of Play 1, the playbook creates or updates a Proxmox cluster backup job (comment: `Minecraft Server Backups`, schedule: `0 * * * *`, storage: `mnemosyne`, mode: snapshot, compress: zstd). If the job already exists it merges the provisioned VMIDs into the existing VMID list. Identified by the comment string — don't rename it in the Proxmox UI. `proxmox_backup_storage` in `group_vars/all.yml` controls the target storage.
+
+## External connectivity (`*.mc.wbreiler.com`)
+
+Friends connect to `<name>.mc.wbreiler.com` with no port suffix. This works via
+a Minecraft SRV record per server, managed in Cloudflare DNS (not part of this
+repo — `wbreiler.com` uses Cloudflare nameservers, but there is no Cloudflare
+API automation here; records are created by hand in the dashboard):
+
+```
+Name:     _minecraft._tcp.<name>.mc
+Type:     SRV
+Priority: 0
+Weight:   0
+Port:     <external_port>
+Target:   mc.wbreiler.com
+```
+
+`mc.wbreiler.com` itself is a plain `A` record pointing at the home WAN IP.
+There is no wildcard record and no per-subdomain `A`/`CNAME` — only the SRV
+record resolves `<name>.mc.wbreiler.com`, which is why a plain `dig A` for a
+server's subdomain returns nothing even when it's reachable in-game.
+
+The router (outside this repo — not Ansible-managed) forwards
+`WAN:<external_port>` → the server LXC's `ansible_host:25565`. Each externally
+reachable server needs a unique external port both forwarded on the router
+and published in its SRV record.
+
+Current known assignments (from live DNS, not tracked anywhere else — update
+this table by hand when ports change):
+
+| Server | Subdomain | External port |
+|---|---|---|
+| cobbleverse-nash | cobbleverse.mc.wbreiler.com | 25565 |
+| yabu-nash | yabu.mc.wbreiler.com | 25566 |
+| homestead-nash | homestead.mc.wbreiler.com | 25569 |
+| atm10-nash | atm10.mc.wbreiler.com | 6767 (legacy, inherited from the pre-migration DiscoPanel setup) |
+| bettermc-nash | bmc.mc.wbreiler.com | 25567 |
 
 ## Modpack update script (`update-modpack.sh`)
 

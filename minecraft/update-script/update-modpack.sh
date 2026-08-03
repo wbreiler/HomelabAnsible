@@ -85,6 +85,7 @@ SWAP_COMPLETE=false
 BACKUP_DIR=""
 MODS_STAGE=""
 RUNNING_VERSION_TMP=""
+EXTRA_MODS_TMP=""
 
 on_error() {
     local exit_code=$?
@@ -134,6 +135,7 @@ MINECRAFT_DIR="${MINECRAFT_DIR:-/opt/minecraft}"
 CURRENT_VERSION_FILE="${MINECRAFT_DIR}/.current_version"
 RUNNING_VERSION_FILE="${MINECRAFT_DIR}/.running_version"
 CURRENT_EXCLUDES_FILE="${MINECRAFT_DIR}/.current_excludes"
+CURRENT_EXTRA_MODS_FILE="${MINECRAFT_DIR}/.current_extra_mods"
 MODS_DIR="${MINECRAFT_DIR}/mods"
 PACK_NAME_SAFE="${PACK_NAME:-unknown pack}"
 
@@ -222,6 +224,54 @@ cf_get() {
         "${CF_API}${1}"
 }
 
+# Installs the Forge/NeoForge server loader (run.sh, run.bat, libraries/) from
+# the official installer given an exact loader version string (e.g. "47.4.20").
+install_loader_version() {
+    local loader_version="$1"
+    local installer_url installer_jar
+    if [[ "${LOADER,,}" == "forge" ]]; then
+        installer_url="https://maven.minecraftforge.net/net/minecraftforge/forge/${MC_VERSION}-${loader_version}/forge-${MC_VERSION}-${loader_version}-installer.jar"
+    else
+        installer_url="https://maven.neoforged.net/releases/net/neoforged/neoforge/${loader_version}/neoforge-${loader_version}-installer.jar"
+    fi
+    log "Installing ${LOADER} ${loader_version} server..."
+    installer_jar=$(mktemp --suffix='.jar')
+    curl -fsSL -H "User-Agent: ${UA}" -o "$installer_jar" "$installer_url"
+    (cd "$MINECRAFT_DIR" && java -jar "$installer_jar" --installServer)
+    rm -f "$installer_jar"
+    chown -R minecraft:minecraft "$MINECRAFT_DIR"
+    if [[ -f "${MINECRAFT_DIR}/run.sh" ]]; then
+        chmod +x "${MINECRAFT_DIR}/run.sh"
+        log "${LOADER} ${loader_version} server installed."
+    else
+        log "ERROR: ${LOADER} installer ran but run.sh was not produced."
+        exit 1
+    fi
+}
+
+# Looks up the exact Forge/NeoForge version a Modrinth-distributed pack depends
+# on, by downloading its mrpack and reading modrinth.index.json. Used as a
+# fallback when a CurseForge server pack doesn't bundle the loader itself.
+lookup_loader_version_via_modrinth() {
+    local slug="$1" version_json download_url mrpack index_tmp result
+    version_json=$(curl -fsSL -H "User-Agent: ${UA}" \
+        "${MODRINTH_API}/project/${slug}/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22${LOADER,,}%22%5D" \
+        | jq -r '[.[] | select(.version_type == "release")] | sort_by(.date_published) | reverse | .[0] | (.files[] | select(.primary == true) | .url) // empty')
+    if [[ -z "$version_json" ]]; then
+        return 1
+    fi
+    download_url="$version_json"
+    mrpack=$(mktemp --suffix='.mrpack.zip')
+    index_tmp=$(mktemp -d --tmpdir mc-loaderlookup-XXXXXX)
+    curl -fsSL -H "User-Agent: ${UA}" -o "$mrpack" "$download_url" || { rm -f "$mrpack"; rm -rf "$index_tmp"; return 1; }
+    unzip -o "$mrpack" "modrinth.index.json" -d "$index_tmp" >/dev/null 2>&1 || true
+    result=$(jq -r --arg l "${LOADER,,}" '.dependencies[$l] // empty' "${index_tmp}/modrinth.index.json" 2>/dev/null)
+    rm -f "$mrpack"
+    rm -rf "$index_tmp"
+    [[ -n "$result" ]] || return 1
+    echo "$result"
+}
+
 ###############################################################################
 # Fetch latest version
 ###############################################################################
@@ -306,6 +356,30 @@ fi
 log "Latest: ${LATEST_NAME} (ID: ${LATEST_ID})"
 
 ###############################################################################
+# Extra standalone Modrinth mods (layered on top of the modpack, e.g. add-ons
+# not bundled by the pack author). Space-separated slugs in EXTRA_MODRINTH_MODS.
+###############################################################################
+
+declare -A EXTRA_MOD_VERSIONS
+EXTRA_MOD_COUNT=0
+EXTRA_MODS_SIG=""
+for _slug in ${EXTRA_MODRINTH_MODS:-}; do
+    _extra_version_id=$(curl -fsSL \
+        -H "User-Agent: ${UA}" \
+        "${MODRINTH_API}/project/${_slug}/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22${LOADER}%22%5D" \
+        | jq -r '[.[] | select(.version_type == "release")] | sort_by(.date_published) | reverse | .[0].id // empty')
+    if [[ -z "$_extra_version_id" ]]; then
+        log "ERROR: No stable release found for extra mod '${_slug}' on MC ${MC_VERSION} / ${LOADER}."
+        discord_notify "❌ Update check failed for ${PACK_NAME}: no stable Modrinth release found for extra mod ${_slug}."
+        exit 1
+    fi
+    EXTRA_MOD_VERSIONS["$_slug"]="$_extra_version_id"
+    EXTRA_MOD_COUNT=$(( EXTRA_MOD_COUNT + 1 ))
+    EXTRA_MODS_SIG+="${_slug}@${_extra_version_id} "
+done
+EXTRA_MODS_SIG="${EXTRA_MODS_SIG% }"
+
+###############################################################################
 # Compare against current version
 ###############################################################################
 
@@ -315,12 +389,15 @@ CURRENT_ID="(none)"
 CURRENT_EXCLUDES=""
 [[ -f "$CURRENT_EXCLUDES_FILE" ]] && CURRENT_EXCLUDES=$(cat "$CURRENT_EXCLUDES_FILE")
 
+CURRENT_EXTRA_MODS=""
+[[ -f "$CURRENT_EXTRA_MODS_FILE" ]] && CURRENT_EXTRA_MODS=$(cat "$CURRENT_EXTRA_MODS_FILE")
+
 RUNNING_ID="(unknown)"
 [[ -f "$RUNNING_VERSION_FILE" ]] && RUNNING_ID=$(cat "$RUNNING_VERSION_FILE")
 
 log "Installed: ${CURRENT_ID}"
 
-if [[ "$CURRENT_ID" == "$LATEST_ID" && "$CURRENT_EXCLUDES" == "${EXCLUDE_CF_PROJECTS:-}" ]]; then
+if [[ "$CURRENT_ID" == "$LATEST_ID" && "$CURRENT_EXCLUDES" == "${EXCLUDE_CF_PROJECTS:-}" && "$CURRENT_EXTRA_MODS" == "$EXTRA_MODS_SIG" ]]; then
     if systemctl is-active --quiet "$SERVICE" 2>/dev/null && [[ "$RUNNING_ID" != "$CURRENT_ID" ]]; then
         if [[ "$DRY_RUN" == true ]]; then
             log "Installed version is current, but its restart is unverified; would restart ${SERVICE}."
@@ -338,7 +415,7 @@ if [[ "$CURRENT_ID" == "$LATEST_ID" && "$CURRENT_EXCLUDES" == "${EXCLUDE_CF_PROJ
     log "Already up to date. Exiting."
     exit 0
 elif [[ "$CURRENT_ID" == "$LATEST_ID" ]]; then
-    log "Pack version unchanged but exclusion list changed — reinstalling to remove excluded mods."
+    log "Pack version unchanged but exclusion list or extra mods changed — reinstalling."
 fi
 
 log "Update: ${CURRENT_ID} → ${LATEST_ID} (${LATEST_NAME})"
@@ -384,6 +461,7 @@ cleanup() {
     rm -f "$PACK_FILE"
     [[ -n "${VERSION_TMP:-}" ]] && rm -f "$VERSION_TMP"
     [[ -n "${EXCLUDES_TMP:-}" ]] && rm -f "$EXCLUDES_TMP"
+    [[ -n "${EXTRA_MODS_TMP:-}" ]] && rm -f "$EXTRA_MODS_TMP"
     [[ -n "${RUNNING_VERSION_TMP:-}" ]] && rm -f "$RUNNING_VERSION_TMP"
     if [[ -n "${MODS_STAGE:-}" && -d "$MODS_STAGE" ]]; then
         rm -rf "$MODS_STAGE"
@@ -465,6 +543,23 @@ if [[ "$PACK_SOURCE" == "modrinth" ]]; then
         log "WARN: modrinth.index.json not found in mrpack; only overrides/ mods were installed."
     fi
 
+    # Bootstrap the Forge/NeoForge server loader (run.sh, run.bat, libraries/) on
+    # first install. Modrinth mrpacks only ship mods — unlike a CurseForge server
+    # pack, they never bundle the loader itself. modrinth.index.json declares the
+    # exact loader version to install under .dependencies.forge / .dependencies.neoforge.
+    if [[ "${LOADER,,}" == "forge" || "${LOADER,,}" == "neoforge" ]] && [[ ! -f "${MINECRAFT_DIR}/run.sh" ]]; then
+        if [[ ! -f "$INDEX" ]]; then
+            log "ERROR: modrinth.index.json missing; cannot determine ${LOADER} version to install."
+            exit 1
+        fi
+        LOADER_VERSION=$(jq -r --arg l "${LOADER,,}" '.dependencies[$l] // empty' "$INDEX")
+        if [[ -z "$LOADER_VERSION" ]]; then
+            log "ERROR: modrinth.index.json has no dependencies.${LOADER,,} entry; cannot install ${LOADER} server."
+            exit 1
+        fi
+        install_loader_version "$LOADER_VERSION"
+    fi
+
 elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "server_pack" ]]; then
 
     unzip -o "$PACK_FILE" "mods/*" -d "$EXTRACT_TMP" 2>/dev/null || true
@@ -487,6 +582,19 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "server_pack"
         log "Launcher libraries staged."
     else
         log "WARN: No libraries/ in server pack; NeoForge/Forge may not be installed."
+    fi
+
+    # This CurseForge pack's server pack doesn't bundle the loader (some don't).
+    # Cross-reference the same pack on Modrinth (by MODPACK_SLUG) to find the
+    # exact loader version, then install it via the official installer.
+    if [[ "${LOADER,,}" == "forge" || "${LOADER,,}" == "neoforge" ]] && [[ ! -f "${MINECRAFT_DIR}/run.sh" ]]; then
+        log "Looking up ${LOADER} version via Modrinth pack '${MODPACK_SLUG}' (server pack didn't include the loader)..."
+        if LOOKUP_VERSION=$(lookup_loader_version_via_modrinth "$MODPACK_SLUG"); then
+            install_loader_version "$LOOKUP_VERSION"
+        else
+            log "ERROR: Could not determine ${LOADER} version from Modrinth pack '${MODPACK_SLUG}'; cannot install ${LOADER} server."
+            exit 1
+        fi
     fi
 
 elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]]; then
@@ -560,6 +668,22 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]]
 
 fi
 
+###############################################################################
+# Download extra standalone Modrinth mods (layered on top of the modpack)
+###############################################################################
+
+if (( EXTRA_MOD_COUNT > 0 )); then
+    log "Downloading ${EXTRA_MOD_COUNT} extra Modrinth mod(s)..."
+    for _slug in "${!EXTRA_MOD_VERSIONS[@]}"; do
+        _extra_url=$(curl -fsSL -H "User-Agent: ${UA}" \
+            "${MODRINTH_API}/version/${EXTRA_MOD_VERSIONS[$_slug]}" \
+            | jq -r '.files[] | select(.primary == true) | .url')
+        _extra_filename="${_extra_url##*/}"
+        log "Extra mod: ${_slug} (${_extra_filename})"
+        curl -fsSL -H "User-Agent: ${UA}" -o "${MODS_STAGE}/${_extra_filename}" "$_extra_url"
+    done
+fi
+
 chown -R minecraft:minecraft "$MODS_STAGE"
 find "$MODS_STAGE" -type d -exec chmod 755 {} +
 find "$MODS_STAGE" -type f -exec chmod 644 {} +
@@ -629,6 +753,11 @@ printf '%s' "${EXCLUDE_CF_PROJECTS:-}" > "$EXCLUDES_TMP"
 chown minecraft:minecraft "$EXCLUDES_TMP"
 chmod 0644 "$EXCLUDES_TMP"
 
+EXTRA_MODS_TMP=$(mktemp "${MINECRAFT_DIR}/.current_extra_mods.XXXXXX")
+printf '%s' "$EXTRA_MODS_SIG" > "$EXTRA_MODS_TMP"
+chown minecraft:minecraft "$EXTRA_MODS_TMP"
+chmod 0644 "$EXTRA_MODS_TMP"
+
 VERSION_TMP=$(mktemp "${MINECRAFT_DIR}/.current_version.XXXXXX")
 printf '%s\n' "$LATEST_ID" > "$VERSION_TMP"
 chown minecraft:minecraft "$VERSION_TMP"
@@ -637,6 +766,8 @@ chmod 0644 "$VERSION_TMP"
 # Move the version marker last. It remains authoritative if committing either
 # supporting marker fails, so the next run retries the installation.
 mv "$EXCLUDES_TMP" "$CURRENT_EXCLUDES_FILE"
+mv "$EXTRA_MODS_TMP" "$CURRENT_EXTRA_MODS_FILE"
+EXTRA_MODS_TMP=""
 if [[ "$SERVICE_WAS_RUNNING" == true ]]; then
     record_running_version "$LATEST_ID"
 else
