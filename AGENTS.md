@@ -8,7 +8,17 @@ inside its own directory.
 
 - `proxmox/` — Proxmox VE cluster automation. Deep agent docs: `proxmox/CLAUDE.md` / `proxmox/AGENTS.md`.
 - `pbs/` — Proxmox Backup Server setup (`pbs/README.md`).
-- `minecraft/` — Minecraft LXC provisioning + modpack update script. Agent docs: `minecraft/CLAUDE.md`.
+- `minecraft/` — Minecraft LXC provisioning + modpack update script. Agent docs:
+  `minecraft/CLAUDE.md`. If a modpack misbehaves in a way that isn't an
+  obvious single-mod config bug (e.g. a client crash tied to a corrupted
+  network sync packet), prefer recreating the server from the modpack's
+  official server pack (`pack_source: manual` in `servers.yml`, deployed via
+  `minecraft/update-script/apply-manual-pack.sh` — supports both CurseForge
+  server-pack zips and Modrinth `.mrpack` files) over continuing to debug the
+  CurseForge/Modrinth auto-fetched mod set — see `minecraft/CLAUDE.md` for the
+  procedure. External access is `<name>.mc.wbreiler.com` via a per-server DNS
+  SRV record (Cloudflare, managed by hand, not part of this repo) plus a
+  router port-forward — see `minecraft/CLAUDE.md` for the current port table.
 - `truenas/` — Desired-state config for TrueNAS host `erebus`. **Read
   `truenas/AGENTS.md` before touching it** — it has strict safety rules
   (read-only discovery, explicit approval for anything destructive, never
