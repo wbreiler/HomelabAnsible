@@ -77,7 +77,7 @@
   ansible.builtin.debug:
     msg: "Restoring {{ pbs_restore_type | upper }} from: {{ pbs_restore_backup_volid }}"
 
-- name: "Stop and destroy existing guest if force - VMID {{ restore_item.vmid }}"
+- name: "Stop, unregister, and destroy existing guest if force - VMID {{ restore_item.vmid }}"
   when:
     - pbs_restore_target_exists.rc == 0
     - restore_item.force | default(false) | bool
@@ -91,19 +91,16 @@
       changed_when: true
       failed_when: false
 
-    - name: "Destroy existing guest - VMID {{ restore_item.vmid }}"
-      ansible.builtin.command: "{{ pbs_restore_existing_cmd }} destroy {{ pbs_restore_effective_vmid }}"
-      changed_when: true
-
-- name: "Remove from HA and delete config for force restore - VMID {{ restore_item.vmid }}"
-  when:
-    - pbs_restore_target_exists.rc == 0
-    - restore_item.force | default(false) | bool
-  block:
     - name: "Remove from HA resources - VMID {{ restore_item.vmid }}"
+      # Must happen before destroy: Proxmox refuses to destroy a guest that is
+      # still registered in HA ("used in HA resources and purge parameter not set").
       ansible.builtin.shell:
         cmd: "ha-manager remove {{ pbs_restore_type }}:{{ pbs_restore_effective_vmid }} 2>/dev/null || true"
         executable: /bin/bash
+      changed_when: true
+
+    - name: "Destroy existing guest - VMID {{ restore_item.vmid }}"
+      ansible.builtin.command: "{{ pbs_restore_existing_cmd }} destroy {{ pbs_restore_effective_vmid }}"
       changed_when: true
 
     - name: "Remove VM/CT config file - VMID {{ restore_item.vmid }}"
