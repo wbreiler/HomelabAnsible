@@ -83,6 +83,26 @@
   delay: 5
   changed_when: false
 
+- name: Configure apt-cacher-ng proxy inside container
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - bash
+      - -c
+      - |
+        set -eu
+        host="$1"
+        port="$2"
+        printf 'Acquire::http { Proxy "http://%s:%s"; }\n' "$host" "$port" > /etc/apt/apt.conf.d/99proxy
+      - apt-proxy
+      - "{{ apt_proxy_host | default('10.10.40.175') }}"
+      - "{{ apt_proxy_port | default(3142) | string }}"
+  changed_when: true
+  when: configure_apt_proxy | default(true) | bool
+
 - name: Install packages
   ansible.builtin.command:
     cmd: >
