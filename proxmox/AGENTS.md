@@ -288,7 +288,7 @@ See the `CLAUDE.md` or `README.md` files for extensive examples of role-specific
 ### seerr
 
 * Manages Seerr with repository-owned Ansible tasks.
-* Adopts `overseerr-nash` (VMID 117, HA-managed, currently on `atlas`) while preserving `/etc/seerr/seerr.conf` and the SQLite config data; the container was already migrated from Overseerr to Seerr by its legacy updater.
+* Adopts `seerr-nash` (VMID 117, HA-managed, currently on `atlas`) while preserving `/etc/seerr/seerr.conf` and the SQLite config data; the container was already migrated from Overseerr to Seerr by its legacy updater.
 * Pins and checksum-verifies both Seerr and pnpm releases, requires NodeSource Node.js 22, refuses to overwrite an unmigrated Overseerr install, checks SQLite integrity before upgrades, builds the new release before stopping the service, keeps a pre-upgrade backup, rolls back automatically when the upgraded service fails its health check, removes the remote updater, and verifies the API-reported version.
 * Skipped by default unless `install_seerr: true`.
 

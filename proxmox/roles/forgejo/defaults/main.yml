@@ -15,11 +15,11 @@ forgejo_tags:
 # Forgejo upgrades must not skip a major version. The role refuses
 # downgrades and any target more than one major ahead of the installed
 # version, so step through majors one pinned release at a time.
-forgejo_version: "13.0.4"
+forgejo_version: "16.0.2"
 forgejo_release_url: >-
   https://codeberg.org/forgejo/forgejo/releases/download/v{{ forgejo_version
   }}/forgejo-{{ forgejo_version }}-linux-amd64
-forgejo_release_checksum: "sha256:a120c0c1abad72933b8579090864de1f55bbc4fceb0a5de8aa09e419fc23d521"
+forgejo_release_checksum: "sha256:5e50539cdd9ffb870ef0d461000ed38f5220abf903e82812a38e3c1b0cdbfa0c"
 forgejo_install_dir: "/opt/forgejo"
 forgejo_config_file: "/etc/forgejo/app.ini"
 forgejo_work_dir: "/var/lib/forgejo"

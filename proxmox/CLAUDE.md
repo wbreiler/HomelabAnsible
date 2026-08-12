@@ -61,20 +61,19 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 16. **forgejo**: Adopts the Forgejo LXC and manages a pinned release binary with strict upgrade guards (conditional: `install_forgejo`)
 17. **sonarr**: Adopts the Sonarr LXC and manages a pinned release (conditional: `install_sonarr`)
 18. **radarr**: Adopts the Radarr LXC and manages a pinned release (conditional: `install_radarr`)
-19. **discoverr_bot**: Installs the Discoverr Discord bot LXC, pinned to a commit SHA (conditional: `install_discoverr_bot`)
-20. **gallery_dl**: Installs a gallery-dl LXC on a cron schedule (conditional: `install_gallery_dl`)
-21. **stash**: Installs the Stash media server LXC, pinned to a release tag (conditional: `install_stash`)
-22. **gatus**: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain (conditional: `install_gatus`)
-23. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
-24. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
-25. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests (conditional: `healthcheck_reminder_enabled`)
-26. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
-27. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
-28. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
+19. **gallery_dl**: Installs a gallery-dl LXC on a cron schedule (conditional: `install_gallery_dl`)
+20. **stash**: Installs the Stash media server LXC, pinned to a release tag (conditional: `install_stash`)
+21. **gatus**: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain (conditional: `install_gatus`)
+22. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
+23. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
+24. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests (conditional: `healthcheck_reminder_enabled`)
+25. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
+26. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
+27. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-29. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
+28. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
 
 Each role in the first play uses a boolean gate variable with `| default(false) | bool`. When adding a new role, follow this same pattern.
 
@@ -307,24 +306,23 @@ rm -rf /tmp/test-isos
 - Skipped by default unless `manage_isos: true`
 - Cancelling in-progress downloads and pruning unmanaged ISOs are separate default-false controls (`manage_isos_cancel_in_progress`, `manage_isos_prune_unmanaged`); leaving both false never touches pre-existing files
 
-### apt_cacher_ng, prowlarr, homebridge, spoolman, gitea_mirror, seerr, pocket_id, forgejo, sonarr, radarr, discoverr_bot, gallery_dl, stash, gatus Roles
+### apt_cacher_ng, prowlarr, homebridge, spoolman, gitea_mirror, seerr, pocket_id, forgejo, sonarr, radarr, gallery_dl, stash, gatus Roles
 
 - Repository-owned single-purpose LXC roles, each bootstrapped through the shared `tasks/create_lxc.yml`
 - Each resolves the node currently hosting its container at run time via the shared `tasks/resolve_lxc_node.yml` (all CTs are HA-managed and CRS auto-rebalance can move them); `<role>_node` is only the fallback for creating a container that doesn't exist yet
 - `apt_cacher_ng` installs distribution packages, removes the legacy remote updater, manages HTTPS pass-through and self-proxy configuration, and adopts `apt-nash` (VMID 106 on `atlas`)
-- `prowlarr` adopts `prowlarr-nash` (VMID 104 on `atlas`), pins version 2.3.0.5236 and its release checksum, and manages the service and health check
+- `prowlarr` adopts `prowlarr-nash` (VMID 104 on `atlas`), pins version 2.5.2.5491 and its release checksum, and manages the service and health check
 - `homebridge` adopts `homebridge-nash` (VMID 105 on `prometheus`), pins package version 2.0.5, verifies the repository key, and manages the APT source and service health
-- `spoolman` adopts `spoolman-nash` (VMID 102 on `nyx`), preserves its environment and SQLite data, pins Spoolman and uv releases, and verifies the reported application version
+- `spoolman` adopts `spoolman-nash` (VMID 102 on `nyx`), preserves its environment and SQLite data, pins Spoolman 0.26.1 and uv releases, and verifies the reported application version
 - `bambuddy` creates or adopts `bambuddy-nash`, preserves its environment and data, pins and checksum-verifies Bambuddy, and verifies the web interface
-- `gitea_mirror` adopts `git-mirror-nash` (VMID 119, HA-managed, currently on `atlas`), pins Gitea Mirror 3.21.0 and Bun 1.3.14 releases with checksums, preserves the environment file and SQLite data, refuses destructive 2.x migrations, backs up before upgrades with automatic rollback on failed health checks, and verifies the installed version
-- `seerr` adopts `overseerr-nash` (VMID 117, HA-managed, currently on `atlas`), pins Seerr 3.3.0 and pnpm 10.34.4 with checksums, requires NodeSource Node.js 22, preserves `/etc/seerr/seerr.conf` and the SQLite config data, refuses to overwrite an unmigrated Overseerr install, backs up before upgrades with automatic rollback on failed health checks, and verifies the API-reported version
-- `pocket_id` adopts `pocketid-nash` (VMID 100, HA-managed, currently on `nyx`), pins the Pocket ID 2.11.0 release binary with a checksum, preserves the `.env` (including its encryption key) and SQLite data, backs up binary, data, and environment before upgrades with automatic rollback on failed health checks, and verifies the binary-reported version
-- `forgejo` adopts `forgejo-nash` (VMID 103, HA-managed, currently on `prometheus` — it serves `git.wbreiler.com`, this repo's remote), pins the Forgejo 13.0.4 release binary with a checksum, refuses downgrades and skipped major versions, preserves `app.ini` and repository data, backs up binary, config, and SQLite database before upgrades with automatic rollback on failed health checks, and verifies the binary-reported version
+- `gitea_mirror` adopts `git-mirror-nash` (VMID 119, HA-managed, currently on `prometheus`), pins Gitea Mirror 3.26.2 and Bun 1.3.14 releases with checksums, preserves the environment file and SQLite data, refuses destructive 2.x migrations, backs up before upgrades with automatic rollback on failed health checks, and verifies the installed version
+- `seerr` adopts `seerr-nash` (VMID 117, HA-managed, currently on `prometheus`), pins Seerr 3.4.1 and pnpm 10.34.4 with checksums, requires NodeSource Node.js 22, preserves `/etc/seerr/seerr.conf` and the SQLite config data, refuses to overwrite an unmigrated Overseerr install, backs up before upgrades with automatic rollback on failed health checks, and verifies the API-reported version
+- `pocket_id` adopts `pocketid-nash` (VMID 100, HA-managed, currently on `nyx`), pins the Pocket ID 2.13.0 release binary with a checksum, preserves the `.env` (including its encryption key) and SQLite data, backs up binary, data, and environment before upgrades with automatic rollback on failed health checks, and verifies the binary-reported version
+- `forgejo` adopts `forgejo-nash` (VMID 103, HA-managed, currently on `prometheus` — it serves `git.wbreiler.com`, this repo's remote), pins the Forgejo 16.0.2 release binary with a checksum, refuses downgrades and skipped major versions, preserves `app.ini` and repository data, backs up binary, config, and SQLite database before upgrades with automatic rollback on failed health checks, and verifies the binary-reported version
 - `sonarr` adopts `sonarr-nash` (VMID 110, HA-managed, currently on `atlas`), pins the Sonarr 4.0.19.2979 release with a checksum, preserves `config.xml` and the SQLite databases, backs up before upgrades with automatic rollback on failed `/ping` checks, and verifies the API-reported version
 - `radarr` adopts `radarr-nash` (VMID 111, HA-managed, currently on `prometheus`), pins the Radarr 6.3.0.10514 release with a checksum, preserves `config.xml` and the SQLite databases, backs up before upgrades with automatic rollback on failed `/ping` checks, and verifies the API-reported version
-- `discoverr_bot` and `stash` pin third-party code (`discoverr_bot_repo_version` commit SHA, `stash_version` release tag)
+- `stash` pins third-party code (`stash_version` release tag)
 - `gallery_dl` and `stash` NFS-mount the vault share and are created privileged (kernel NFS requires it)
-- `discoverr_bot` secrets (TMDB key, Discord token, Seerr password) must go in vault-encrypted group_vars, not host_vars or role defaults
 - `gatus` creates or adopts `gatus-nash`. Gatus has no prebuilt binary releases, so the role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain (dependencies are additionally verified by Go against sum.golang.org during the build). `config.yaml` is generated: it probes every Proxmox node (TCP 8006), the PBS server (TCP 8007), and every managed app LXC that already defines a `<role>_health_url` — extend via `gatus_extra_endpoints`
 - Each skipped by default unless its `install_*` var is `true`
 

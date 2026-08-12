@@ -180,13 +180,6 @@ install_radarr: false
 # radarr_hostname: "radarr-nash"
 # radarr_version: "6.3.0.10514"
 
-install_discoverr_bot: false
-# discoverr_bot_node: "nyx"
-# discoverr_bot_tmdb_api_key: ""
-# discoverr_bot_seerr_url: ""
-# discoverr_bot_seerr_password: ""
-# discoverr_bot_discord_token: ""
-
 install_gallery_dl: false
 # gallery_dl_node: "nyx"
 # gallery_dl_profiles:

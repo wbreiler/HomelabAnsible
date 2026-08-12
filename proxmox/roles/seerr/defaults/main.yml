@@ -1,7 +1,7 @@
 ---
 seerr_node: "atlas"
 seerr_vmid: "117"
-seerr_hostname: "overseerr-nash"
+seerr_hostname: "seerr-nash"
 seerr_storage: "helios"
 seerr_template: ""  # auto-detect latest debian-1[23]-standard if empty
 seerr_cores: 4
@@ -12,10 +12,10 @@ seerr_vlan: 40
 seerr_tags:
   - "media"
 
-seerr_version: "3.3.0"
+seerr_version: "3.4.1"
 seerr_release_url: >-
   https://codeload.github.com/seerr-team/seerr/tar.gz/refs/tags/v{{ seerr_version }}
-seerr_release_checksum: "sha256:3a6caf9266f7525c3ac2aecb666f5939034e383296761bdea14ad3105237721c"
+seerr_release_checksum: "sha256:38bb1f2c90ea648a327244352d5b4b13b19526e384655be8779bbfe7f6a8f447"
 seerr_install_dir: "/opt/seerr"
 seerr_conf_file: "/etc/seerr/seerr.conf"
 seerr_backup_dir: "/opt/seerr-backups"

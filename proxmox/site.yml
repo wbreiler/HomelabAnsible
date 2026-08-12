@@ -88,10 +88,6 @@
       when: install_radarr | default(false) | bool
       tags: ['radarr', 'lxc']
 
-    - role: discoverr_bot
-      when: install_discoverr_bot | default(false) | bool
-      tags: ['discoverr_bot', 'lxc']
-
     - role: gallery_dl
       when: install_gallery_dl | default(false) | bool
       tags: ['gallery_dl', 'lxc']

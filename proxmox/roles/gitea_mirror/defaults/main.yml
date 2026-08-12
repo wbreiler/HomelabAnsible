@@ -13,10 +13,10 @@ gitea_mirror_tags:
   - "automation"
   - "git"
 
-gitea_mirror_version: "3.21.0"
+gitea_mirror_version: "3.26.2"
 gitea_mirror_release_url: >-
   https://codeload.github.com/RayLabsHQ/gitea-mirror/tar.gz/refs/tags/v{{ gitea_mirror_version }}
-gitea_mirror_release_checksum: "sha256:6cb91915305ea05f835358f4867e41e51dc86bdc6027b11d9ac25cce752293f4"
+gitea_mirror_release_checksum: "sha256:1904e38189f1701e17e339b1c3fa850970d67d1beebaab1132d3211e1c0e6cfd"
 gitea_mirror_install_dir: "/opt/gitea-mirror"
 gitea_mirror_env_file: "/opt/gitea-mirror.env"
 gitea_mirror_backup_dir: "/opt/gitea-mirror-backups"

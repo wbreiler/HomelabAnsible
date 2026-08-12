@@ -12,11 +12,11 @@ prowlarr_vlan: 40
 prowlarr_tags:
   - media
 
-prowlarr_version: "2.3.0.5236"
+prowlarr_version: "2.5.2.5491"
 prowlarr_release_url: >-
   https://github.com/Prowlarr/Prowlarr/releases/download/v{{ prowlarr_version
   }}/Prowlarr.master.{{ prowlarr_version }}.linux-core-x64.tar.gz
-prowlarr_release_checksum: "sha256:50900ed274bd76abadfefa78ba7ec7077fbe28662a0860a638692a879bc1a6fa"
+prowlarr_release_checksum: "sha256:22fe95742869d7af5e16d420c7889185579152ea8324be6c6e4e3cd011f4c37b"
 prowlarr_install_dir: "/opt/Prowlarr"
 prowlarr_data_dir: "/var/lib/prowlarr"
 prowlarr_port: 9696

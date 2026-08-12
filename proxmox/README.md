@@ -14,7 +14,7 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
 - **ISO Management**: Automatically downloads ISOs from HTTP server, direct URLs, NFS, or SMB shares with real-time progress display
 - **LXC Template Downloads**: Automatically downloads latest LXC OS templates on all nodes
 - **Managed App LXCs**: Creates or adopts Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, and Radarr through repository-owned roles
-- **Standalone App LXCs**: Custom installs for Discoverr (Discord bot), gallery-dl, and Stash, each opt-in and off by default
+- **Standalone App LXCs**: Custom installs for gallery-dl and Stash, each opt-in and off by default
 - **PBS Backup Job**: Creates/reconciles a scheduled backup job on the PBS storage, opt-in and off by default
 - **VM Deployment**: Deploys full VMs from ISOs with customizable hardware (disk bus, BIOS, TPM, network model)
 - **Network Tuning**: Configures storage VLAN subinterface and 10G TCP sysctl tuning (BBR, large buffers)
@@ -74,7 +74,6 @@ proxmox-ansible/
 │   ├── forgejo/             # Managed Forgejo LXC
 │   ├── sonarr/              # Managed Sonarr LXC
 │   ├── radarr/              # Managed Radarr LXC
-│   ├── discoverr_bot/       # Discoverr Discord bot LXC (custom install)
 │   ├── gallery_dl/          # gallery-dl LXC (custom install)
 │   ├── stash/               # Stash media server LXC (custom install)
 │   ├── gatus/               # Managed Gatus LXC (uptime monitoring/status page)
@@ -357,12 +356,11 @@ Fourteen repository-owned roles manage a single-purpose LXC. Each is opt-in and 
 - **`spoolman`** — 3D-printer spool inventory. It adopts `spoolman-nash` (VMID 102 on `nyx`), pins and verifies Spoolman 0.24.0 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
 - **`bambuddy`** — Bambu Lab printer management. It creates or adopts an unprivileged Debian LXC, installs a pinned and checksum-verified Bambuddy release using the sizing recommended by the Community Scripts installer, preserves local environment and data files, and verifies the web interface on port 8000. The pinned `nils_ost.bambuddy` collection is also installed for future API-driven printer and settings management; its Docker installer is not used.
 - **`gitea_mirror`** — Gitea Mirror repository mirroring service. It adopts `git-mirror-nash` (VMID 119, HA-managed, currently on `atlas`), pins and verifies Gitea Mirror 3.21.0 and Bun 1.3.14, preserves the existing environment file and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the installed version.
-- **`seerr`** — Seerr media-request manager (successor to Overseerr; the container was already migrated by the community script). It adopts `overseerr-nash` (VMID 117, HA-managed, currently on `atlas`), pins and verifies Seerr 3.3.0 and pnpm 10.34.4, requires the NodeSource Node.js 22 runtime, preserves `/etc/seerr/seerr.conf` and the SQLite config data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the API-reported version.
+- **`seerr`** — Seerr media-request manager (successor to Overseerr; the container was already migrated by the community script). It adopts `seerr-nash` (VMID 117, HA-managed, currently on `atlas`), pins and verifies Seerr 3.3.0 and pnpm 10.34.4, requires the NodeSource Node.js 22 runtime, preserves `/etc/seerr/seerr.conf` and the SQLite config data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the API-reported version.
 - **`pocket_id`** — Pocket ID OIDC identity provider. It adopts `pocketid-nash` (VMID 100, HA-managed, currently on `nyx`), pins and verifies the Pocket ID 2.11.0 binary, preserves the `.env` (including its encryption key) and SQLite data, checks database integrity, backs up the binary, data, and environment before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
 - **`forgejo`** — Forgejo Git hosting (serves `git.wbreiler.com`). It adopts `forgejo-nash` (VMID 103, HA-managed, currently on `prometheus`), pins and verifies the Forgejo 13.0.4 release binary, refuses downgrades and skipped major versions, preserves `app.ini` and all repository data, checks SQLite integrity, backs up the binary, config, and database before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
 - **`sonarr`** — Sonarr TV manager. It adopts `sonarr-nash` (VMID 110, HA-managed, currently on `atlas`), pins and verifies the Sonarr 4.0.19.2979 release, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`radarr`** — Radarr movie manager. It adopts `radarr-nash` (VMID 111, HA-managed, currently on `prometheus`), pins and verifies the Radarr 6.3.0.10514 release, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
-- **`discoverr_bot`** — Discoverr Discord bot, pinned to a commit SHA. Needs `discoverr_bot_tmdb_api_key`, `discoverr_bot_seerr_url`/`discoverr_bot_seerr_password`, and `discoverr_bot_discord_token` (put these in the vault-encrypted `group_vars/proxmox_cluster.yml`, not host_vars).
 - **`gallery_dl`** — gallery-dl on a cron schedule, NFS-mounted to the vault share. Configure `gallery_dl_profiles` (usernames to archive) and optionally `gallery_dl_cookies_file`.
 - **`stash`** — Stash media server, pinned to a release tag, NFS-mounted to the vault share.
 - **`gatus`** — Uptime monitoring/status page. See [Monitoring](#monitoring) above for details.
@@ -424,7 +422,6 @@ radarr_node: "prometheus"
 radarr_vmid: "111"
 radarr_version: "6.3.0.10514"
 
-install_discoverr_bot: true
 install_gallery_dl: true
 install_stash: true
 
@@ -450,7 +447,6 @@ ansible-playbook -i inventory.yml site.yml --tags pocket_id -e 'install_pocket_i
 ansible-playbook -i inventory.yml site.yml --tags forgejo -e 'install_forgejo=true' --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --tags sonarr -e 'install_sonarr=true' --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --tags radarr -e 'install_radarr=true' --ask-vault-pass
-ansible-playbook site.yml --tags discoverr_bot -e 'install_discoverr_bot=true' --ask-vault-pass
 ansible-playbook site.yml --tags gallery_dl -e 'install_gallery_dl=true' --ask-vault-pass
 ansible-playbook site.yml --tags stash -e 'install_stash=true' --ask-vault-pass
 ansible-playbook site.yml --tags gatus -e 'install_gatus=true' --ask-vault-pass
