@@ -6,6 +6,9 @@
 {% if img.sort_tags is defined %}
   sort_tags: "{{ img.sort_tags }}"
 {% endif %}
+{% if img.max_tags is defined %}
+  max_tags: {{ img.max_tags }}
+{% endif %}
 {% if img.include_tags is defined %}
   include_tags:
 {% for pattern in img.include_tags %}

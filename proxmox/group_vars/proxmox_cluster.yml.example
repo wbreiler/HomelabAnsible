@@ -211,6 +211,7 @@ install_diun: false
 #   - name: "ghcr.io/example/app:1.2.3"
 #     watch_repo: true       # also detect newer version tags, not just digest drift
 #     sort_tags: "semver"
+#     max_tags: 3            # cap tracked tag history — keeps re-baselines quiet
 #   - name: "example/rolling-tag-app:latest"  # only detects digest changes on this tag
 
 # =============================================================================

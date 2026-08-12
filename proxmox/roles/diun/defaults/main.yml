@@ -24,6 +24,11 @@ diun_config_dir: "/etc/diun"
 # Cron schedule for the watch loop (default: every 6 hours).
 diun_schedule: "0 */6 * * *"
 
+# Notify on an image's very first scan too, not just on later changes — an
+# image already behind when Diun starts watching it should still be flagged,
+# not silently adopted as the new baseline.
+diun_first_check_notif: true
+
 # Discord notification (set in vault-encrypted group_vars).
 diun_discord_webhook_url: ""
 diun_discord_mentions: []

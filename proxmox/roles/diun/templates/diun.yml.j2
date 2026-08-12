@@ -2,6 +2,7 @@ watch:
   workers: 5
   schedule: "{{ diun_schedule }}"
   runOnStartup: true
+  firstCheckNotif: {{ diun_first_check_notif | lower }}
 
 providers:
   file:
