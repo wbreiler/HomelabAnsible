@@ -1,0 +1,16 @@
+[Unit]
+Description=Diun
+Documentation=https://crazymax.dev/diun/
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=DIUN_DB_PATH={{ diun_data_dir }}/diun.db
+ExecStart={{ diun_install_dir }}/diun serve --config {{ diun_config_dir }}/diun.yml --log-level info
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -199,6 +199,20 @@ install_gatus: false
 #   - name: "My other service"
 #     url: "http://10.10.40.x:port/health"
 
+install_diun: false
+# diun_node: "nyx"
+# diun_vmid: ""  # empty selects the next available managed-app VMID
+# diun_hostname: "diun-nash"
+# diun_version: "4.33.0"
+# diun_schedule: "0 */6 * * *"  # cron; default checks every 6 hours
+# diun_discord_webhook_url: ""  # store the real value in vault-encrypted group_vars
+# diun_discord_mentions: []
+# diun_watch_images:
+#   - name: "ghcr.io/example/app:1.2.3"
+#     watch_repo: true       # also detect newer version tags, not just digest drift
+#     sort_tags: "semver"
+#   - name: "example/rolling-tag-app:latest"  # only detects digest changes on this tag
+
 # =============================================================================
 # System Updates Configuration
 # =============================================================================

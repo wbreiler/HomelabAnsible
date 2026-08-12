@@ -1,0 +1,18 @@
+watch:
+  workers: 5
+  schedule: "{{ diun_schedule }}"
+  runOnStartup: true
+
+providers:
+  file:
+    filename: {{ diun_config_dir }}/watch.yml
+
+notif:
+  discord:
+    webhookURL: "{{ diun_discord_webhook_url }}"
+{% if diun_discord_mentions | length > 0 %}
+    mentions:
+{% for mention in diun_discord_mentions %}
+      - "{{ mention }}"
+{% endfor %}
+{% endif %}

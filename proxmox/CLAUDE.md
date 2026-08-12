@@ -64,16 +64,17 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 19. **gallery_dl**: Installs a gallery-dl LXC on a cron schedule (conditional: `install_gallery_dl`)
 20. **stash**: Installs the Stash media server LXC, pinned to a release tag (conditional: `install_stash`)
 21. **gatus**: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain (conditional: `install_gatus`)
-22. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
-23. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
-24. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests (conditional: `healthcheck_reminder_enabled`)
-25. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
-26. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
-27. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
+22. **diun**: Creates or adopts the Diun LXC (Docker image update watcher), a pinned release binary watching a static image list via Discord (conditional: `install_diun`)
+23. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
+24. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
+25. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests (conditional: `healthcheck_reminder_enabled`)
+26. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
+27. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
+28. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-28. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
+29. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
 
 Each role in the first play uses a boolean gate variable with `| default(false) | bool`. When adding a new role, follow this same pattern.
 
@@ -306,7 +307,7 @@ rm -rf /tmp/test-isos
 - Skipped by default unless `manage_isos: true`
 - Cancelling in-progress downloads and pruning unmanaged ISOs are separate default-false controls (`manage_isos_cancel_in_progress`, `manage_isos_prune_unmanaged`); leaving both false never touches pre-existing files
 
-### apt_cacher_ng, prowlarr, homebridge, spoolman, gitea_mirror, seerr, pocket_id, forgejo, sonarr, radarr, gallery_dl, stash, gatus Roles
+### apt_cacher_ng, prowlarr, homebridge, spoolman, gitea_mirror, seerr, pocket_id, forgejo, sonarr, radarr, gallery_dl, stash, gatus, diun Roles
 
 - Repository-owned single-purpose LXC roles, each bootstrapped through the shared `tasks/create_lxc.yml`
 - Each resolves the node currently hosting its container at run time via the shared `tasks/resolve_lxc_node.yml` (all CTs are HA-managed and CRS auto-rebalance can move them); `<role>_node` is only the fallback for creating a container that doesn't exist yet
@@ -324,6 +325,7 @@ rm -rf /tmp/test-isos
 - `stash` pins third-party code (`stash_version` release tag)
 - `gallery_dl` and `stash` NFS-mount the vault share and are created privileged (kernel NFS requires it)
 - `gatus` creates or adopts `gatus-nash`. Gatus has no prebuilt binary releases, so the role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain (dependencies are additionally verified by Go against sum.golang.org during the build). `config.yaml` is generated: it probes every Proxmox node (TCP 8006), the PBS server (TCP 8007), and every managed app LXC that already defines a `<role>_health_url` — extend via `gatus_extra_endpoints`
+- `diun` creates or adopts `diun-nash`, a pinned, checksum-verified release binary that watches Docker images for new tags/digests and posts to Discord. Uses Diun's static `file` provider (`diun_watch_images`), not live Docker/API access to the watched host — currently seeded from a one-time read-only `docker ps` on TrueNAS (`erebus`); refresh the list by hand if erebus's containers change
 - Each skipped by default unless its `install_*` var is `true`
 
 ### update_all Role

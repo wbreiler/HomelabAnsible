@@ -1,0 +1,21 @@
+{% for img in diun_watch_images %}
+- name: "{{ img.name }}"
+{% if img.watch_repo | default(false) %}
+  watch_repo: true
+{% endif %}
+{% if img.sort_tags is defined %}
+  sort_tags: "{{ img.sort_tags }}"
+{% endif %}
+{% if img.include_tags is defined %}
+  include_tags:
+{% for pattern in img.include_tags %}
+    - "{{ pattern }}"
+{% endfor %}
+{% endif %}
+{% if img.notify_on is defined %}
+  notify_on:
+{% for event in img.notify_on %}
+    - "{{ event }}"
+{% endfor %}
+{% endif %}
+{% endfor %}

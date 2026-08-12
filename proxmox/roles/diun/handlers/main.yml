@@ -1,0 +1,25 @@
+---
+- name: Reload Diun systemd
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - daemon-reload
+  changed_when: true
+  listen: Restart Diun
+
+- name: Restart Diun service
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - diun
+  changed_when: true
+  listen: Restart Diun

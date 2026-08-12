@@ -1,0 +1,35 @@
+---
+diun_node: "nyx"
+diun_vmid: ""  # auto-assign next available managed-app VMID
+diun_hostname: "diun-nash"
+diun_storage: "local-zfs"
+diun_template: ""  # auto-detect latest debian-1[23]-standard if empty
+diun_cores: 1
+diun_memory: 256
+diun_disk: 2
+diun_bridge: "vmbr0"
+diun_vlan: 40
+diun_tags:
+  - "monitoring"
+
+diun_version: "4.33.0"
+diun_release_url: >-
+  https://github.com/crazy-max/diun/releases/download/v{{ diun_version
+  }}/diun_{{ diun_version }}_linux_amd64.tar.gz
+diun_release_checksum: "sha256:87cf5b69cd29c88bf57e6c6d38dd483a5226b3c434771f96c78ccd72b23fd738"
+diun_install_dir: "/opt/diun"
+diun_data_dir: "/var/lib/diun"
+diun_config_dir: "/etc/diun"
+
+# Cron schedule for the watch loop (default: every 6 hours).
+diun_schedule: "0 */6 * * *"
+
+# Discord notification (set in vault-encrypted group_vars).
+diun_discord_webhook_url: ""
+diun_discord_mentions: []
+
+# Static list of images to watch — no live Docker/API access to the target
+# host required. Each entry: name (registry/path:tag, required), and
+# optionally watch_repo (bool), sort_tags, include_tags (list of regex),
+# notify_on (list).
+diun_watch_images: []

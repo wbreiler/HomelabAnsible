@@ -100,6 +100,10 @@
       when: install_gatus | default(false) | bool
       tags: ['gatus', 'monitoring', 'lxc']
 
+    - role: diun
+      when: install_diun | default(false) | bool
+      tags: ['diun', 'monitoring', 'lxc']
+
     - role: update_all
       when: run_updates | default(false) | bool
       tags: ['update', 'maintenance']

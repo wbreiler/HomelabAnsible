@@ -77,6 +77,7 @@ proxmox-ansible/
 │   ├── gallery_dl/          # gallery-dl LXC (custom install)
 │   ├── stash/               # Stash media server LXC (custom install)
 │   ├── gatus/               # Managed Gatus LXC (uptime monitoring/status page)
+│   ├── diun/                # Managed Diun LXC (Docker image update watcher)
 │   ├── update_all/          # System updates role (nodes + LXCs)
 │   ├── update_reminder/     # Per-node Discord update reminders
 │   ├── healthcheck_reminder/# Cluster-wide Discord down-node/guest alerts
@@ -339,31 +340,33 @@ pvecm nodes
 
 ### Monitoring
 
-Two opt-in roles cover uptime monitoring, layered so neither is redundant:
+Three opt-in roles cover monitoring, layered so none is redundant:
 
 - **`healthcheck_reminder`** (`healthcheck_reminder_enabled: true`) — no new service. Installs a systemd timer on the cluster master node only (checks are cluster-wide via `pvesh get /cluster/resources`, so running it on all three nodes would triple-alert). Every 5 minutes by default, it flags any Proxmox node that isn't `online` and any LXC/VM that isn't `running` (skip intentionally-stopped guests via `healthcheck_reminder_skip_vmids`), and sends a Discord alert. Re-notifies immediately if the set of down items changes, otherwise backs off for `healthcheck_reminder_repeat_after_minutes` (default 30) so an ongoing outage doesn't spam.
-- **`gatus`** (`install_gatus: true`) — the one new service, for app-level checks and a status page/history that the script above can't give you. Adopts/creates `gatus-nash`, a small LXC running [Gatus](https://github.com/TwiN/gatus). Gatus has no prebuilt binary releases, so the role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain (Go itself verifies every dependency against sum.golang.org during the build). The generated `config.yaml` automatically probes: each Proxmox node's web UI (TCP 8006), the PBS server (TCP 8007), and every managed app LXC that already defines a `<role>_health_url` (HTTP 200 check) — no manual endpoint duplication. Add anything else via `gatus_extra_endpoints`.
+- **`gatus`** (`install_gatus: true`) — app-level checks and a status page/history that the script above can't give you. Adopts/creates `gatus-nash`, a small LXC running [Gatus](https://github.com/TwiN/gatus). Gatus has no prebuilt binary releases, so the role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain (Go itself verifies every dependency against sum.golang.org during the build). The generated `config.yaml` automatically probes: each Proxmox node's web UI (TCP 8006), the PBS server (TCP 8007), and every managed app LXC that already defines a `<role>_health_url` (HTTP 200 check) — no manual endpoint duplication. Add anything else via `gatus_extra_endpoints`.
+- **`diun`** (`install_diun: true`) — watches container images (anywhere, not just this cluster) for new tags/digests and sends a Discord alert. Adopts/creates `diun-nash`, a small LXC running [Diun](https://github.com/crazy-max/diun) (pinned, checksum-verified release binary). Uses Diun's static `file` provider — a fixed `diun_watch_images` list of `registry/path:tag` entries — rather than live Docker/API access to the target host, so it needs no new access to whatever it's watching. Currently seeded from a one-time read-only `docker ps` on TrueNAS (`erebus`); refresh the list by hand if erebus's running containers change. Checks every 6 hours by default (`diun_schedule`).
 
-Together: `healthcheck_reminder` catches "is the node/guest even up" (Proxmox-native, zero footprint); `gatus` catches "is the app inside actually responding" plus gives you history and a dashboard.
+Together: `healthcheck_reminder` catches "is the node/guest even up" (Proxmox-native, zero footprint); `gatus` catches "is the app inside actually responding" plus gives you history and a dashboard; `diun` catches "is there a newer image available" for anything running Docker, cluster or not.
 
 ### Standalone App LXCs
 
 Fourteen repository-owned roles manage a single-purpose LXC. Each is opt-in and defaults off. All bootstrap through the shared `tasks/create_lxc.yml` and adopt existing containers by hostname. Because adopted containers can be HA-managed and moved by CRS auto-rebalance, each role resolves the node currently hosting its container at run time (`tasks/resolve_lxc_node.yml`); the configured `<role>_node` is only used as the target when creating a container that doesn't exist yet.
 
 - **`apt_cacher_ng`** — Apt-Cacher NG package cache with HTTPS pass-through and self-proxy configuration. It adopts `apt-nash` (VMID 106 on `atlas`), removes its remote update hook, and uses the deployed 2 CPU, 512 MB RAM, and 25 GB configuration for replacement defaults.
-- **`prowlarr`** — Prowlarr indexer manager. It adopts `prowlarr-nash` (VMID 104 on `atlas`), pins version 2.3.0.5236 and its release checksum, removes the remote update hook, and verifies the web interface.
+- **`prowlarr`** — Prowlarr indexer manager. It adopts `prowlarr-nash` (VMID 104 on `atlas`), pins version 2.5.2.5491 and its release checksum, removes the remote update hook, and verifies the web interface.
 - **`homebridge`** — HomeKit bridge. It adopts `homebridge-nash` (VMID 105 on `prometheus`), pins package version 2.0.5, checksum-verifies the Homebridge repository key, removes the remote update hook, and verifies Homebridge and Avahi.
-- **`spoolman`** — 3D-printer spool inventory. It adopts `spoolman-nash` (VMID 102 on `nyx`), pins and verifies Spoolman 0.24.0 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
+- **`spoolman`** — 3D-printer spool inventory. It adopts `spoolman-nash` (VMID 102 on `nyx`), pins and verifies Spoolman 0.26.1 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
 - **`bambuddy`** — Bambu Lab printer management. It creates or adopts an unprivileged Debian LXC, installs a pinned and checksum-verified Bambuddy release using the sizing recommended by the Community Scripts installer, preserves local environment and data files, and verifies the web interface on port 8000. The pinned `nils_ost.bambuddy` collection is also installed for future API-driven printer and settings management; its Docker installer is not used.
-- **`gitea_mirror`** — Gitea Mirror repository mirroring service. It adopts `git-mirror-nash` (VMID 119, HA-managed, currently on `atlas`), pins and verifies Gitea Mirror 3.21.0 and Bun 1.3.14, preserves the existing environment file and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the installed version.
-- **`seerr`** — Seerr media-request manager (successor to Overseerr; the container was already migrated by the community script). It adopts `seerr-nash` (VMID 117, HA-managed, currently on `atlas`), pins and verifies Seerr 3.3.0 and pnpm 10.34.4, requires the NodeSource Node.js 22 runtime, preserves `/etc/seerr/seerr.conf` and the SQLite config data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the API-reported version.
-- **`pocket_id`** — Pocket ID OIDC identity provider. It adopts `pocketid-nash` (VMID 100, HA-managed, currently on `nyx`), pins and verifies the Pocket ID 2.11.0 binary, preserves the `.env` (including its encryption key) and SQLite data, checks database integrity, backs up the binary, data, and environment before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
-- **`forgejo`** — Forgejo Git hosting (serves `git.wbreiler.com`). It adopts `forgejo-nash` (VMID 103, HA-managed, currently on `prometheus`), pins and verifies the Forgejo 13.0.4 release binary, refuses downgrades and skipped major versions, preserves `app.ini` and all repository data, checks SQLite integrity, backs up the binary, config, and database before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
+- **`gitea_mirror`** — Gitea Mirror repository mirroring service. It adopts `git-mirror-nash` (VMID 119, HA-managed, currently on `prometheus`), pins and verifies Gitea Mirror 3.26.2 and Bun 1.3.14, preserves the existing environment file and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the installed version.
+- **`seerr`** — Seerr media-request manager (successor to Overseerr; the container was already migrated by the community script). It adopts `seerr-nash` (VMID 117, HA-managed, currently on `prometheus`), pins and verifies Seerr 3.4.1 and pnpm 10.34.4, requires the NodeSource Node.js 22 runtime, preserves `/etc/seerr/seerr.conf` and the SQLite config data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the API-reported version.
+- **`pocket_id`** — Pocket ID OIDC identity provider. It adopts `pocketid-nash` (VMID 100, HA-managed, currently on `nyx`), pins and verifies the Pocket ID 2.13.0 binary, preserves the `.env` (including its encryption key) and SQLite data, checks database integrity, backs up the binary, data, and environment before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
+- **`forgejo`** — Forgejo Git hosting (serves `git.wbreiler.com`). It adopts `forgejo-nash` (VMID 103, HA-managed, currently on `prometheus`), pins and verifies the Forgejo 16.0.2 release binary, refuses downgrades and skipped major versions, preserves `app.ini` and all repository data, checks SQLite integrity, backs up the binary, config, and database before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
 - **`sonarr`** — Sonarr TV manager. It adopts `sonarr-nash` (VMID 110, HA-managed, currently on `atlas`), pins and verifies the Sonarr 4.0.19.2979 release, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`radarr`** — Radarr movie manager. It adopts `radarr-nash` (VMID 111, HA-managed, currently on `prometheus`), pins and verifies the Radarr 6.3.0.10514 release, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`gallery_dl`** — gallery-dl on a cron schedule, NFS-mounted to the vault share. Configure `gallery_dl_profiles` (usernames to archive) and optionally `gallery_dl_cookies_file`.
 - **`stash`** — Stash media server, pinned to a release tag, NFS-mounted to the vault share.
 - **`gatus`** — Uptime monitoring/status page. See [Monitoring](#monitoring) above for details.
+- **`diun`** — Docker image update watcher. See [Monitoring](#monitoring) above for details.
 
 ```yaml
 install_apt_cacher_ng: true
@@ -431,6 +434,16 @@ gatus_vmid: ""  # selects the next available managed-app VMID
 gatus_version: "5.36.0"
 gatus_discord_webhook_url: ""  # set in vault-encrypted group_vars
 
+install_diun: true
+diun_node: "nyx"
+diun_vmid: ""  # selects the next available managed-app VMID
+diun_version: "4.33.0"
+diun_discord_webhook_url: ""  # set in vault-encrypted group_vars
+diun_watch_images:
+  - name: "example/app:1.2.3"
+    watch_repo: true
+    sort_tags: "semver"
+
 healthcheck_reminder_enabled: true
 healthcheck_reminder_discord_webhook_url: ""  # set in vault-encrypted group_vars
 ```
@@ -450,6 +463,7 @@ ansible-playbook -i inventory.yml site.yml --tags radarr -e 'install_radarr=true
 ansible-playbook site.yml --tags gallery_dl -e 'install_gallery_dl=true' --ask-vault-pass
 ansible-playbook site.yml --tags stash -e 'install_stash=true' --ask-vault-pass
 ansible-playbook site.yml --tags gatus -e 'install_gatus=true' --ask-vault-pass
+ansible-playbook site.yml --tags diun -e 'install_diun=true' --ask-vault-pass
 ```
 
 After deployment, point APT clients at `http://<container-ip>:3142`. The report page is available at `http://<container-ip>:3142/acng-report.html`.

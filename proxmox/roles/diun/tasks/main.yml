@@ -1,0 +1,293 @@
+---
+- name: Validate Diun configuration
+  ansible.builtin.assert:
+    that:
+      - diun_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - diun_release_url | length > 0
+      - diun_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - diun_schedule | length > 0
+      - diun_discord_webhook_url | length > 0
+      - >-
+        diun_discord_webhook_url is
+        match('^https://([a-z]+\.)?discord(app)?\.com/api/webhooks/')
+      - diun_watch_images | length > 0
+    fail_msg: >-
+      Diun requires a pinned version with a SHA-256 checksum, a Discord HTTPS
+      webhook, and at least one image in diun_watch_images.
+    quiet: true
+  no_log: true
+
+- name: Resolve node currently hosting Diun
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ diun_hostname }}"
+    lxc_fallback_node: "{{ diun_node }}"
+
+- name: Set up Diun LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Diun container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ diun_hostname }}"
+        lxc_vmid: "{{ diun_vmid }}"
+        lxc_storage: "{{ diun_storage }}"
+        lxc_template: "{{ diun_template }}"
+        lxc_cores: "{{ diun_cores }}"
+        lxc_memory: "{{ diun_memory }}"
+        lxc_disk: "{{ diun_disk }}"
+        lxc_bridge: "{{ diun_bridge }}"
+        lxc_vlan: "{{ diun_vlan }}"
+        lxc_tags: "{{ diun_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Check installed Diun version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - "{{ diun_install_dir }}/diun --version"
+      register: diun_installed_version
+      changed_when: false
+      failed_when: diun_installed_version.rc not in [0, 1, 126, 127]
+
+    - name: Install pinned Diun release
+      when: >-
+        diun_installed_version.rc != 0 or
+        diun_version not in diun_installed_version.stdout
+      block:
+        - name: Download pinned Diun release
+          ansible.builtin.get_url:
+            url: "{{ diun_release_url }}"
+            dest: "/tmp/diun-{{ diun_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            checksum: "{{ diun_release_checksum }}"
+            mode: "0600"
+
+        - name: Push Diun release into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/diun-{{ diun_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+              - "/tmp/diun-{{ diun_version }}.tar.gz"
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Deploy pinned Diun release atomically
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                install_dir="$1"
+                archive="$2"
+                new_dir="${install_dir}.ansible-new"
+                rm -rf "${new_dir}"
+                mkdir -p "${new_dir}"
+                tar -xzf "${archive}" -C "${new_dir}"
+                test -x "${new_dir}/diun"
+                had_service=0
+                if systemctl list-unit-files diun.service --no-legend |
+                  grep -q '^diun.service'; then
+                  had_service=1
+                  systemctl stop diun
+                fi
+                rm -rf "${install_dir}"
+                mv "${new_dir}" "${install_dir}"
+                if test "${had_service}" -eq 1; then
+                  systemctl start diun
+                fi
+                rm -f "${archive}"
+              - diun-deploy
+              - "{{ diun_install_dir }}"
+              - "/tmp/diun-{{ diun_version }}.tar.gz"
+          changed_when: true
+          notify: Restart Diun
+
+        - name: Remove Diun release from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/diun-{{ diun_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+            state: absent
+
+    - name: Create Diun data directory
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - install
+          - -d
+          - -m
+          - "0700"
+          - "{{ diun_data_dir }}"
+      changed_when: false
+
+    - name: Render Diun watch list
+      ansible.builtin.set_fact:
+        diun_watch_config: "{{ lookup('template', 'watch.yml.j2') }}"
+
+    - name: Read installed Diun watch list
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - "{{ diun_config_dir }}/watch.yml"
+      register: diun_watch_current
+      changed_when: false
+      failed_when: diun_watch_current.rc not in [0, 1]
+
+    - name: Install Diun watch list
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - "install -d -m 0755 {{ diun_config_dir }} && cat > {{ diun_config_dir }}/watch.yml"
+        stdin: "{{ diun_watch_config }}"
+        stdin_add_newline: false
+      when: >-
+        diun_watch_current.rc != 0 or
+        diun_watch_current.stdout != diun_watch_config | trim
+      changed_when: true
+      notify: Restart Diun
+
+    - name: Render Diun configuration
+      ansible.builtin.set_fact:
+        diun_main_config: "{{ lookup('template', 'diun.yml.j2') }}"
+      no_log: true
+
+    - name: Read installed Diun configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - "{{ diun_config_dir }}/diun.yml"
+      register: diun_config_current
+      changed_when: false
+      failed_when: diun_config_current.rc not in [0, 1]
+      no_log: true
+
+    - name: Install Diun configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - "install -d -m 0755 {{ diun_config_dir }} && cat > {{ diun_config_dir }}/diun.yml"
+        stdin: "{{ diun_main_config }}"
+        stdin_add_newline: false
+      when: >-
+        diun_config_current.rc != 0 or
+        diun_config_current.stdout != diun_main_config | trim
+      changed_when: true
+      no_log: true
+      notify: Restart Diun
+
+    - name: Render Diun service
+      ansible.builtin.set_fact:
+        diun_service: "{{ lookup('template', 'diun.service.j2') }}"
+
+    - name: Read installed Diun service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/diun.service
+      register: diun_service_current
+      changed_when: false
+      failed_when: diun_service_current.rc not in [0, 1]
+
+    - name: Install Diun service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/diun.service
+        stdin: "{{ diun_service }}"
+        stdin_add_newline: false
+      when: >-
+        diun_service_current.rc != 0 or
+        diun_service_current.stdout != diun_service | trim
+      changed_when: true
+      notify: Restart Diun
+
+    - name: Enable and start Diun
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - diun
+      register: diun_service_enable
+      changed_when: "'Created symlink' in diun_service_enable.stderr"
+
+    - name: Apply Diun changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Diun service is active
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - diun
+      changed_when: false
+
+    - name: Verify Diun started without fatal errors
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - journalctl
+          - -u
+          - diun
+          - --since
+          - "-2 minutes"
+          - --no-pager
+      register: diun_recent_log
+      changed_when: false
+      failed_when: "'level=fatal' in diun_recent_log.stdout"
