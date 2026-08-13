@@ -26,10 +26,14 @@ ansible-galaxy collection install -r requirements.yml
 cp inventory.yml.example inventory.yml
 cp group_vars/octopi_servers.yml.example group_vars/octopi_servers.yml
 cp vault.yml.example vault.yml
+install -d -m 0700 ~/.config/ansible/vault-passwords
+install -m 0600 /dev/stdin ~/.config/ansible/vault-passwords/octopi
 ```
 
-Edit the three copied files. At minimum, set the OctoPi address, printer model
-and dimensions, desired plugins/settings, web username, and web password.
+Enter the vault password, then press `Ctrl-D`.
+
+Edit the three copied files. Set the OctoPi address, printer model, dimensions,
+plugins, settings, web username, and web password.
 Encrypt the secret:
 
 ```bash
@@ -40,14 +44,14 @@ Validate before applying:
 
 ```bash
 ansible-lint
-ansible-playbook site.yml --syntax-check --ask-vault-pass
-ansible-playbook site.yml --check --diff --ask-vault-pass
+ansible-playbook site.yml --syntax-check
+ansible-playbook site.yml --check --diff
 ```
 
 Apply:
 
 ```bash
-ansible-playbook site.yml --ask-vault-pass
+ansible-playbook site.yml
 ```
 
 The playbook restarts OctoPrint only when a user, plugin, or setting changes.
