@@ -77,6 +77,7 @@ proxmox-ansible/
 │   ├── gallery_dl/          # gallery-dl LXC (custom install)
 │   ├── gatus/               # Managed Gatus LXC (uptime monitoring/status page)
 │   ├── diun/                # Managed Diun LXC (Docker image update watcher)
+│   ├── tailscale_router/    # Managed Tailscale subnet router LXC
 │   ├── update_all/          # System updates role (nodes + LXCs)
 │   ├── update_reminder/     # Per-node Discord update reminders
 │   ├── healthcheck_reminder/# Cluster-wide Discord down-node/guest alerts
@@ -464,6 +465,23 @@ ansible-playbook site.yml --tags diun -e 'install_diun=true' --ask-vault-pass
 ```
 
 After deployment, point APT clients at `http://<container-ip>:3142`. The report page is available at `http://<container-ip>:3142/acng-report.html`.
+
+### Tailscale Subnet Router
+
+`tailscale_router` (`install_tailscale_router: true`) gives every device on your tailnet access to the whole homelab LAN without per-device WireGuard configs. It creates or adopts an unprivileged LXC (`tailscale-router-nash`), passes through `/dev/net/tun` and enables IPv4/IPv6 forwarding, installs a pinned, checksum-verified-key `tailscale` package, and runs `tailscale up --advertise-routes=...` using a reusable auth key from the Tailscale admin console (`tailscale_router_auth_key`, vault-encrypted).
+
+Set `tailscale_router_advertise_routes` to your LAN CIDR(s) (e.g. `["10.10.0.0/16"]`) — the role refuses to run without at least one. **New or changed routes still need one-time approval** in the Tailscale admin console (Machines → this device → Edit route settings), unless `autoApprovers` is configured in your tailnet ACL. Once approved, any device on the tailnet can reach the homelab subnet directly — no client-side routes or WireGuard peers to manage.
+
+```yaml
+install_tailscale_router: true
+tailscale_router_auth_key: ""  # set in vault-encrypted group_vars
+tailscale_router_advertise_routes:
+  - "10.10.0.0/16"
+```
+
+```bash
+ansible-playbook -i inventory.yml site.yml --tags tailscale_router -e 'install_tailscale_router=true' --ask-vault-pass
+```
 
 ### System Updates
 

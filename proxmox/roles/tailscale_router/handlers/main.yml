@@ -1,0 +1,12 @@
+---
+- name: Apply Tailscale forwarding config
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - sysctl
+      - -p
+      - /etc/sysctl.d/99-tailscale.conf
+  changed_when: true

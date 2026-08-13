@@ -1,0 +1,33 @@
+---
+tailscale_router_node: "nyx"
+tailscale_router_vmid: ""  # empty selects the next available managed-app VMID
+tailscale_router_hostname: "tailscale-router-nash"
+tailscale_router_storage: "local-zfs"
+tailscale_router_template: ""  # auto-detect latest debian-1[23]-standard if empty
+tailscale_router_cores: 1
+tailscale_router_memory: 256
+tailscale_router_disk: 2
+tailscale_router_bridge: "vmbr0"
+tailscale_router_vlan: 40
+tailscale_router_tags:
+  - "networking"
+
+# Same signing key across bookworm/trixie/bullseye (verified by content hash);
+# the repo always targets bookworm regardless of the container's own Debian
+# release, since Tailscale ships static binaries with no libc dependency.
+tailscale_router_repo_key_url: "https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg"
+tailscale_router_repo_key_checksum: "sha256:3e03dacf222698c60b8e2f990b809ca1b3e104de127767864284e6c228f1fb39"
+tailscale_router_version: "1.102.2"
+
+# Reusable auth key from the Tailscale admin console (Settings -> Keys).
+# Store the real value in vault-encrypted group_vars.
+tailscale_router_auth_key: ""
+
+# CIDR(s) this container advertises into the tailnet, e.g. ["10.10.0.0/16"].
+# Required — the role refuses to run with no routes to advertise. New or
+# changed routes still need one-time approval in the Tailscale admin console
+# unless autoApprovers is set in your tailnet ACL.
+tailscale_router_advertise_routes: []
+
+# Use the tailnet's MagicDNS/DNS settings for this node.
+tailscale_router_accept_dns: false

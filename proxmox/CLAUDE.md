@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an Ansible automation project for deploying and managing a Proxmox VE cluster with Proxmox Backup Server (PBS) storage, ISO management, VM deployment, and network tuning. Ceph and Tailscale are not used in this environment. No monitoring/uptime-check stack is currently deployed.
+This is an Ansible automation project for deploying and managing a Proxmox VE cluster with Proxmox Backup Server (PBS) storage, ISO management, VM deployment, and network tuning. Ceph is not used in this environment. Tailscale is used only via the opt-in `tailscale_router` subnet-router LXC (`install_tailscale_router`); it is not otherwise installed on cluster nodes.
 
 **Target Environment**: Homelab infrastructure (3 Proxmox nodes: nyx/10.10.30.2, prometheus/10.10.30.3, atlas/10.10.30.9) running PVE 9 / Debian trixie.
 
@@ -64,16 +64,17 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 19. **gallery_dl**: Installs a gallery-dl LXC on a cron schedule (conditional: `install_gallery_dl`)
 20. **gatus**: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain (conditional: `install_gatus`)
 21. **diun**: Creates or adopts the Diun LXC (Docker image update watcher), a pinned release binary watching a static image list via Discord (conditional: `install_diun`)
-22. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
-23. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
-24. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests (conditional: `healthcheck_reminder_enabled`)
-25. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
-26. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
-27. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
+22. **tailscale_router**: Creates or adopts a Tailscale subnet router LXC, giving tailnet devices routed access to the homelab LAN without per-device WireGuard configs (conditional: `install_tailscale_router`)
+23. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
+24. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
+25. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests (conditional: `healthcheck_reminder_enabled`)
+26. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
+27. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
+28. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-28. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
+29. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
 
 Each role in the first play uses a boolean gate variable with `| default(false) | bool`. When adding a new role, follow this same pattern.
 
@@ -324,6 +325,7 @@ rm -rf /tmp/test-isos
 - `gallery_dl` NFS-mounts the vault share and is created privileged because kernel NFS requires it
 - `gatus` creates or adopts `gatus-nash`. Gatus has no prebuilt binary releases, so the role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain (dependencies are additionally verified by Go against sum.golang.org during the build). `config.yaml` is generated: it probes every Proxmox node (TCP 8006), the PBS server (TCP 8007), and every managed app LXC that already defines a `<role>_health_url` — extend via `gatus_extra_endpoints`
 - `diun` creates or adopts `diun-nash`, a pinned, checksum-verified release binary that watches Docker images for new tags/digests and posts to Discord. Uses Diun's static `file` provider (`diun_watch_images`), not live Docker/API access to the watched host — currently seeded from a one-time read-only `docker ps` on TrueNAS (`erebus`); refresh the list by hand if erebus's containers change
+- `tailscale_router` creates or adopts `tailscale-router-nash`, an unprivileged LXC acting as a Tailscale subnet router. Unlike the other roles here, it also edits the container's Proxmox-side config (`/etc/pve/lxc/<vmid>.conf`) to pass through `/dev/net/tun` and restarts the container when that changes, then enables IPv4/IPv6 forwarding inside it. Installs a pinned `tailscale` package from a checksum-verified-key apt repo and runs `tailscale up --advertise-routes=...` with a vault-encrypted reusable auth key (`tailscale_router_auth_key`). Requires at least one CIDR in `tailscale_router_advertise_routes`; new/changed routes still need one-time approval in the Tailscale admin console unless `autoApprovers` is set on the tailnet
 - Each is skipped by default unless its `install_*` variable is `true`
 
 ### update_all Role

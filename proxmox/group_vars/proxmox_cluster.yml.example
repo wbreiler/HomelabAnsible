@@ -211,6 +211,16 @@ install_diun: false
 #     max_tags: 3            # cap tracked tag history — keeps re-baselines quiet
 #   - name: "example/rolling-tag-app:latest"  # only detects digest changes on this tag
 
+install_tailscale_router: false
+# tailscale_router_node: "nyx"
+# tailscale_router_vmid: ""  # empty selects the next available managed-app VMID
+# tailscale_router_hostname: "tailscale-router-nash"
+# tailscale_router_version: "1.102.2"
+# tailscale_router_auth_key: ""  # store the real value in vault-encrypted group_vars
+# tailscale_router_advertise_routes:
+#   - "10.10.0.0/16"  # replace with your homelab LAN CIDR(s)
+# tailscale_router_accept_dns: false
+
 # =============================================================================
 # System Updates Configuration
 # =============================================================================

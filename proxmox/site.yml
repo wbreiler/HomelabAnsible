@@ -100,6 +100,10 @@
       when: install_diun | default(false) | bool
       tags: ['diun', 'monitoring', 'lxc']
 
+    - role: tailscale_router
+      when: install_tailscale_router | default(false) | bool
+      tags: ['tailscale_router', 'networking', 'lxc']
+
     - role: update_all
       when: run_updates | default(false) | bool
       tags: ['update', 'maintenance']

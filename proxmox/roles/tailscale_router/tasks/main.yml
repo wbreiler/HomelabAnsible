@@ -1,0 +1,398 @@
+---
+- name: Validate Tailscale subnet router configuration
+  ansible.builtin.assert:
+    that:
+      - tailscale_router_version | length > 0
+      - tailscale_router_auth_key | length > 0
+      - tailscale_router_advertise_routes | length > 0
+      - >-
+        tailscale_router_advertise_routes
+        | select('match', '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$')
+        | list | length == tailscale_router_advertise_routes | length
+    fail_msg: >-
+      Tailscale subnet router requires a pinned version, a vault-encrypted
+      auth key, and at least one valid CIDR in
+      tailscale_router_advertise_routes (e.g. "10.10.0.0/16").
+
+- name: Resolve node currently hosting the Tailscale subnet router
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ tailscale_router_hostname }}"
+    lxc_fallback_node: "{{ tailscale_router_node }}"
+
+- name: Set up Tailscale subnet router LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Tailscale subnet router container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ tailscale_router_hostname }}"
+        lxc_vmid: "{{ tailscale_router_vmid }}"
+        lxc_storage: "{{ tailscale_router_storage }}"
+        lxc_template: "{{ tailscale_router_template }}"
+        lxc_cores: "{{ tailscale_router_cores }}"
+        lxc_memory: "{{ tailscale_router_memory }}"
+        lxc_disk: "{{ tailscale_router_disk }}"
+        lxc_bridge: "{{ tailscale_router_bridge }}"
+        lxc_vlan: "{{ tailscale_router_vlan }}"
+        lxc_tags: "{{ tailscale_router_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+          - curl
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Allow the TUN device in the container's cgroup
+      ansible.builtin.lineinfile:
+        path: "/etc/pve/lxc/{{ lxc_resolved_vmid }}.conf"
+        line: "lxc.cgroup2.devices.allow: c 10:200 rwm"
+      register: tailscale_router_cgroup_conf
+
+    - name: Bind-mount /dev/net/tun into the container
+      ansible.builtin.lineinfile:
+        path: "/etc/pve/lxc/{{ lxc_resolved_vmid }}.conf"
+        line: "lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file"
+      register: tailscale_router_tun_conf
+
+    - name: Restart container to apply TUN device passthrough
+      ansible.builtin.command:
+        cmd: pct reboot {{ lxc_resolved_vmid }}
+      when: tailscale_router_cgroup_conf.changed or tailscale_router_tun_conf.changed
+      changed_when: true
+
+    - name: Wait for container to be ready after restart
+      ansible.builtin.command:
+        cmd: pct exec {{ lxc_resolved_vmid }} -- echo ok
+      register: tailscale_router_ready
+      until: tailscale_router_ready.rc == 0
+      retries: 12
+      delay: 5
+      changed_when: false
+      when: tailscale_router_cgroup_conf.changed or tailscale_router_tun_conf.changed
+
+    - name: Read current IPv4/IPv6 forwarding config
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/sysctl.d/99-tailscale.conf
+      register: tailscale_router_forwarding_current
+      changed_when: false
+      failed_when: tailscale_router_forwarding_current.rc not in [0, 1]
+
+    - name: Install IPv4/IPv6 forwarding config
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/sysctl.d/99-tailscale.conf
+        stdin: |
+          net.ipv4.ip_forward = 1
+          net.ipv6.conf.all.forwarding = 1
+        stdin_add_newline: false
+      when: >-
+        tailscale_router_forwarding_current.rc != 0 or
+        tailscale_router_forwarding_current.stdout != "net.ipv4.ip_forward = 1\nnet.ipv6.conf.all.forwarding = 1"
+      changed_when: true
+      notify: Apply Tailscale forwarding config
+
+    - name: Apply pending forwarding config before Tailscale starts routing
+      ansible.builtin.meta: flush_handlers
+
+    - name: Check installed Tailscale repository key
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - sha256sum
+          - /etc/apt/keyrings/tailscale.asc
+      register: tailscale_router_repo_key_current
+      changed_when: false
+      failed_when: tailscale_router_repo_key_current.rc not in [0, 1]
+
+    - name: Decide whether Tailscale repository key update is required
+      ansible.builtin.set_fact:
+        tailscale_router_repo_key_needs_update: >-
+          {{
+            tailscale_router_repo_key_current.rc != 0 or
+            (tailscale_router_repo_key_checksum | regex_replace('^sha256:', ''))
+            not in tailscale_router_repo_key_current.stdout
+          }}
+
+    - name: Install checksum-verified Tailscale repository key
+      when: tailscale_router_repo_key_needs_update | bool
+      block:
+        - name: Download Tailscale repository key
+          ansible.builtin.get_url:
+            url: "{{ tailscale_router_repo_key_url }}"
+            dest: "/tmp/tailscale-{{ lxc_resolved_vmid }}.asc"
+            checksum: "{{ tailscale_router_repo_key_checksum }}"
+            mode: "0600"
+
+        - name: Create Tailscale keyring directory
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - install
+              - -d
+              - -m
+              - "0755"
+              - /etc/apt/keyrings
+          changed_when: false
+
+        - name: Push Tailscale repository key into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "/tmp/tailscale-{{ lxc_resolved_vmid }}.asc"
+              - /etc/apt/keyrings/tailscale.asc
+              - --perms
+              - "0644"
+          changed_when: true
+
+        - name: Remove Tailscale repository key from Proxmox host
+          ansible.builtin.file:
+            path: "/tmp/tailscale-{{ lxc_resolved_vmid }}.asc"
+            state: absent
+
+    - name: Render Tailscale repository configuration
+      ansible.builtin.set_fact:
+        tailscale_router_repo_source: "{{ lookup('template', 'tailscale_router.sources.j2') }}"
+
+    - name: Read installed Tailscale repository configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/apt/sources.list.d/tailscale.sources
+      register: tailscale_router_repo_source_current
+      changed_when: false
+      failed_when: tailscale_router_repo_source_current.rc not in [0, 1]
+
+    - name: Decide whether Tailscale repository configuration update is required
+      ansible.builtin.set_fact:
+        tailscale_router_repo_source_needs_update: >-
+          {{
+            tailscale_router_repo_source_current.rc != 0 or
+            tailscale_router_repo_source_current.stdout
+            != tailscale_router_repo_source | trim
+          }}
+
+    - name: Install Tailscale repository configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/apt/sources.list.d/tailscale.sources
+        stdin: "{{ tailscale_router_repo_source }}"
+        stdin_add_newline: false
+      when: tailscale_router_repo_source_needs_update | bool
+      changed_when: true
+
+    - name: Render Tailscale package pin
+      ansible.builtin.set_fact:
+        tailscale_router_package_pin: "{{ lookup('template', 'tailscale_router.pref.j2') }}"
+
+    - name: Read installed Tailscale package pin
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/apt/preferences.d/tailscale
+      register: tailscale_router_package_pin_current
+      changed_when: false
+      failed_when: tailscale_router_package_pin_current.rc not in [0, 1]
+
+    - name: Install Tailscale package pin
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/apt/preferences.d/tailscale
+        stdin: "{{ tailscale_router_package_pin }}"
+        stdin_add_newline: false
+      when: >-
+        tailscale_router_package_pin_current.rc != 0 or
+        tailscale_router_package_pin_current.stdout != tailscale_router_package_pin | trim
+      changed_when: true
+
+    - name: Read installed Tailscale package version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - dpkg-query
+          - -W
+          - "-f=${Version}"
+          - tailscale
+      register: tailscale_router_package_version
+      changed_when: false
+      failed_when: tailscale_router_package_version.rc not in [0, 1]
+
+    - name: Refresh Tailscale package metadata
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - apt-get
+          - update
+          - -qq
+      when: >-
+        tailscale_router_repo_key_needs_update | bool or
+        tailscale_router_repo_source_needs_update | bool or
+        tailscale_router_package_version.rc != 0 or
+        tailscale_router_package_version.stdout | trim != tailscale_router_version
+      changed_when: false
+
+    - name: Install pinned Tailscale package
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - env
+          - DEBIAN_FRONTEND=noninteractive
+          - apt-get
+          - install
+          - -y
+          - -q
+          - --allow-downgrades
+          - "tailscale={{ tailscale_router_version }}"
+      when: >-
+        tailscale_router_package_version.rc != 0 or
+        tailscale_router_package_version.stdout | trim != tailscale_router_version
+      changed_when: true
+
+    - name: Enable and start tailscaled service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - tailscaled
+      register: tailscale_router_service_enable
+      changed_when: "'Created symlink' in tailscale_router_service_enable.stderr"
+
+    - name: Authenticate Tailscale and advertise homelab routes
+      no_log: true
+      block:
+        - name: Create temporary Tailscale auth key file on host
+          ansible.builtin.tempfile:
+            state: file
+            suffix: tailscale-authkey
+          register: tailscale_router_authkey_host_file
+
+        - name: Write Tailscale auth key to host tempfile
+          ansible.builtin.copy:
+            content: "{{ tailscale_router_auth_key }}"
+            dest: "{{ tailscale_router_authkey_host_file.path }}"
+            mode: "0600"
+
+        - name: Push Tailscale auth key into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "{{ tailscale_router_authkey_host_file.path }}"
+              - /tmp/tailscale-authkey
+              - --perms
+              - "0600"
+          changed_when: true
+
+        - name: Bring up Tailscale and advertise homelab routes
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - tailscale
+              - up
+              - "--authkey=file:/tmp/tailscale-authkey"
+              - "--advertise-routes={{ tailscale_router_advertise_routes | join(',') }}"
+              - "--accept-dns={{ tailscale_router_accept_dns | bool | lower }}"
+          register: tailscale_router_up
+          changed_when: "'Success' in tailscale_router_up.stdout or tailscale_router_up.rc == 0"
+
+      always:
+        - name: Remove Tailscale auth key from container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - rm
+              - -f
+              - /tmp/tailscale-authkey
+          changed_when: false
+          failed_when: false
+
+        - name: Remove Tailscale auth key tempfile from host
+          ansible.builtin.file:
+            path: "{{ tailscale_router_authkey_host_file.path }}"
+            state: absent
+          when: >-
+            tailscale_router_authkey_host_file is defined and
+            tailscale_router_authkey_host_file.path is defined
+
+    - name: Verify Tailscale backend is running
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tailscale
+          - status
+          - --json
+      register: tailscale_router_status
+      changed_when: false
+      retries: 6
+      delay: 5
+      until: (tailscale_router_status.stdout | from_json).BackendState == "Running"
+
+    - name: Remind about one-time route approval
+      ansible.builtin.debug:
+        msg: >-
+          {{ tailscale_router_hostname }} is advertising
+          {{ tailscale_router_advertise_routes | join(', ') }}. New or
+          changed routes need one-time approval in the Tailscale admin
+          console (Machines -> this device -> Edit route settings) unless
+          autoApprovers is configured for your tailnet.
