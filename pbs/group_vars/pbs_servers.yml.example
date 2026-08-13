@@ -21,6 +21,8 @@ pbs_zfs_dataset: "backup/pbs"                   # Dataset dedicated to PBS
 pbs_zfs_create_dataset: true                    # Create the dataset if absent
 pbs_datastore_name: "MainStore"                 # PBS datastore name
 pbs_datastore_path: "/mnt/datastore"            # Dataset mountpoint
+pbs_namespaces: []                                # Optional namespaces to create
+pbs_namespace_password: ""                       # Required when pbs_namespaces is not empty
 
 # Sync Job Configuration (set pbs_configure_sync_job: true to enable)
 # This syncs FROM a remote PBS server TO this server (Saturday at 11:30 PM)

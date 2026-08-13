@@ -123,6 +123,14 @@
     - "'already exists' not in pbs_datastore_result.stderr"
     - "'not empty' not in pbs_datastore_result.stderr"
 
+- name: Validate namespace password
+  ansible.builtin.assert:
+    that:
+      - pbs_namespace_password | length > 0
+    fail_msg: "pbs_namespace_password must be set when pbs_namespaces is not empty."
+  when: pbs_namespaces | default([]) | length > 0
+  no_log: true
+
 - name: Create namespaces
   ansible.builtin.command:
     argv:
@@ -133,7 +141,7 @@
       - --repository
       - "{{ pbs_datastore_name }}"
   environment:
-    PBS_PASSWORD: "{{ users_root_password | default(ansible_password, true) }}"
+    PBS_PASSWORD: "{{ pbs_namespace_password }}"
   loop: "{{ pbs_namespaces | default([]) }}"
   register: pbs_namespace_result
   changed_when: pbs_namespace_result.rc == 0

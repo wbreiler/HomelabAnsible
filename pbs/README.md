@@ -20,6 +20,7 @@ role-based structure.
 - Debian-based system (tested on Debian 12 Bookworm)
 - ansible-core 2.16 through 2.21 installed on the control node
 - Root or sudo access on target PBS server
+- SSH key authentication for routine playbook runs
 - A local ZFS pool created on the PBS server
 - Python 3 on target hosts
 
@@ -60,8 +61,11 @@ ansible-vault encrypt group_vars/pbs_servers.yml
 ### 3. Run the Playbook
 
 ```bash
-# Run all roles
+# Run all roles with SSH key authentication
 ansible-playbook site.yml --vault-password-file .vault_pass
+
+# Use password authentication only for an initial bootstrap, if required
+ansible-playbook site.yml --vault-password-file .vault_pass --ask-pass
 
 # Run with tags (specific roles only)
 ansible-playbook site.yml --vault-password-file .vault_pass --tags pbs,users
@@ -136,6 +140,8 @@ pbs_zfs_pool: "backup"
 pbs_zfs_dataset: "backup/pbs"
 pbs_zfs_create_dataset: true
 pbs_datastore_path: "/mnt/datastore"
+pbs_namespaces: []
+pbs_namespace_password: ""  # Required when pbs_namespaces is not empty
 
 # Pull Job (runs weekly on Saturday at 11:30 PM)
 pbs_configure_pull_job: true
@@ -168,6 +174,8 @@ Installs Proxmox Backup Server, configures datastore, and manages remote sync/pu
 - `pbs_zfs_dataset`: Dataset dedicated to PBS (default: `<pool>/pbs`)
 - `pbs_zfs_create_dataset`: Create that dataset when it is absent
 - `pbs_datastore_path`: Dataset mountpoint and PBS datastore path
+- `pbs_namespaces`: Optional namespaces to create
+- `pbs_namespace_password`: PBS repository password used for namespace creation
 - `pbs_configure_remote_sync`: Enable remote sync (push)
 - `pbs_configure_pull_job`: Enable pull job
 - `pbs_pull_schedule`: Pull schedule (e.g., `"sat 23:30"`)
