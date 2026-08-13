@@ -4,13 +4,13 @@
     cmd: |
       set -o pipefail
       for pid in $(pgrep -x wget || true); do
-        if grep -ql "{{ manage_isos_storage_path }}" /proc/"$pid"/cmdline 2>/dev/null; then
+        if grep -ql {{ manage_isos_storage_path | quote }} /proc/"$pid"/cmdline 2>/dev/null; then
           target=$(tr '\0' '\n' < /proc/"$pid"/cmdline | grep -A1 '^-O$' | tail -1 || true)
           [ -n "$target" ] && rm -f "$target"
           kill "$pid" || true
         fi
       done
-      rm -f "{{ manage_isos_storage_path }}"/*.part || true
+      rm -f {{ manage_isos_storage_path | quote }}/*.part || true
     executable: /bin/bash
   changed_when: false
   when:
@@ -28,11 +28,14 @@
   ansible.builtin.shell:
     cmd: |
       wget --no-verbose --show-progress --progress=dot:mega \
-        -O "{{ manage_isos_storage_path }}/{{ item }}.part" \
-        "{{ manage_isos_http_base_url }}/{{ item }}" \
-      && mv "{{ manage_isos_storage_path }}/{{ item }}.part" \
-            "{{ manage_isos_storage_path }}/{{ item }}" \
-      || { rm -f "{{ manage_isos_storage_path }}/{{ item }}.part"; exit 1; }
+        -O {{ (manage_isos_storage_path ~ '/' ~ item ~ '.part') | quote }} \
+        {{ (manage_isos_http_base_url ~ '/' ~ item) | quote }} \
+      && mv {{ (manage_isos_storage_path ~ '/' ~ item ~ '.part') | quote }} \
+            {{ (manage_isos_storage_path ~ '/' ~ item) | quote }} \
+      || {
+        rm -f {{ (manage_isos_storage_path ~ '/' ~ item ~ '.part') | quote }};
+        exit 1;
+      }
     executable: /bin/bash
   loop: "{{ manage_isos_http_files | default([]) }}"
   loop_control:

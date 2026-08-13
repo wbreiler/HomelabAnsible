@@ -75,7 +75,6 @@ proxmox-ansible/
 │   ├── sonarr/              # Managed Sonarr LXC
 │   ├── radarr/              # Managed Radarr LXC
 │   ├── gallery_dl/          # gallery-dl LXC (custom install)
-│   ├── stash/               # Stash media server LXC (custom install)
 │   ├── gatus/               # Managed Gatus LXC (uptime monitoring/status page)
 │   ├── diun/                # Managed Diun LXC (Docker image update watcher)
 │   ├── update_all/          # System updates role (nodes + LXCs)
@@ -364,7 +363,6 @@ Fourteen repository-owned roles manage a single-purpose LXC. Each is opt-in and 
 - **`sonarr`** — Sonarr TV manager. It adopts `sonarr-nash` (VMID 110, HA-managed, currently on `atlas`), pins and verifies the Sonarr 4.0.19.2979 release, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`radarr`** — Radarr movie manager. It adopts `radarr-nash` (VMID 111, HA-managed, currently on `prometheus`), pins and verifies the Radarr 6.3.0.10514 release, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`gallery_dl`** — gallery-dl on a cron schedule, NFS-mounted to the vault share. Configure `gallery_dl_profiles` (usernames to archive) and optionally `gallery_dl_cookies_file`.
-- **`stash`** — Stash media server, pinned to a release tag, NFS-mounted to the vault share.
 - **`gatus`** — Uptime monitoring/status page. See [Monitoring](#monitoring) above for details.
 - **`diun`** — Docker image update watcher. See [Monitoring](#monitoring) above for details.
 
@@ -426,7 +424,6 @@ radarr_vmid: "111"
 radarr_version: "6.3.0.10514"
 
 install_gallery_dl: true
-install_stash: true
 
 install_gatus: true
 gatus_node: "nyx"
@@ -462,7 +459,6 @@ ansible-playbook -i inventory.yml site.yml --tags forgejo -e 'install_forgejo=tr
 ansible-playbook -i inventory.yml site.yml --tags sonarr -e 'install_sonarr=true' --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --tags radarr -e 'install_radarr=true' --ask-vault-pass
 ansible-playbook site.yml --tags gallery_dl -e 'install_gallery_dl=true' --ask-vault-pass
-ansible-playbook site.yml --tags stash -e 'install_stash=true' --ask-vault-pass
 ansible-playbook site.yml --tags gatus -e 'install_gatus=true' --ask-vault-pass
 ansible-playbook site.yml --tags diun -e 'install_diun=true' --ask-vault-pass
 ```

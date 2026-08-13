@@ -186,9 +186,6 @@ install_gallery_dl: false
 #   - user1
 #   - user2
 
-install_stash: false
-# stash_node: "nyx"
-
 install_gatus: false
 # gatus_node: "nyx"
 # gatus_vmid: ""  # empty selects the next available managed-app VMID

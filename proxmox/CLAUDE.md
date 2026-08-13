@@ -62,19 +62,18 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 17. **sonarr**: Adopts the Sonarr LXC and manages a pinned release (conditional: `install_sonarr`)
 18. **radarr**: Adopts the Radarr LXC and manages a pinned release (conditional: `install_radarr`)
 19. **gallery_dl**: Installs a gallery-dl LXC on a cron schedule (conditional: `install_gallery_dl`)
-20. **stash**: Installs the Stash media server LXC, pinned to a release tag (conditional: `install_stash`)
-21. **gatus**: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain (conditional: `install_gatus`)
-22. **diun**: Creates or adopts the Diun LXC (Docker image update watcher), a pinned release binary watching a static image list via Discord (conditional: `install_diun`)
-23. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
-24. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
-25. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests (conditional: `healthcheck_reminder_enabled`)
-26. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
-27. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
-28. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
+20. **gatus**: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain (conditional: `install_gatus`)
+21. **diun**: Creates or adopts the Diun LXC (Docker image update watcher), a pinned release binary watching a static image list via Discord (conditional: `install_diun`)
+22. **update_all**: Updates Proxmox nodes and LXC containers (conditional: `run_updates`)
+23. **update_reminder**: Installs per-node Discord update reminders (conditional: `update_reminder_enabled`)
+24. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests (conditional: `healthcheck_reminder_enabled`)
+25. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets (conditional: `run_cleanup_storage`)
+26. **pbs_restore**: Restores LXC containers from PBS backups (conditional: `restore_from_pbs`)
+27. **vm_deploy**: Deploys full VMs from ISOs (conditional: `deploy_vms`)
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-29. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
+28. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`)
 
 Each role in the first play uses a boolean gate variable with `| default(false) | bool`. When adding a new role, follow this same pattern.
 
@@ -112,7 +111,7 @@ Each node's `host_vars/<nodename>.yml` can configure:
    - `host_vars/*.yml` — Contains node-specific config; sanitized
      `host_vars/*.yml.example` templates remain tracked
 
-4. **LXC Privilege**: Containers bootstrapped via `tasks/create_lxc.yml` default to unprivileged; only NFS-mounting containers (stash, gallery_dl) are created privileged (kernel NFS requires it). Override with `lxc_unprivileged`.
+4. **LXC Privilege**: Containers bootstrapped via `tasks/create_lxc.yml` default to unprivileged; the NFS-mounting `gallery_dl` container is privileged because kernel NFS requires it. Override with `lxc_unprivileged`.
 
 5. **Version Pinning**: Third-party code executed or installed by roles is pinned and checksum-verified where upstream artifacts permit it. Bump versions, revisions, and checksums together after review.
 
@@ -307,7 +306,7 @@ rm -rf /tmp/test-isos
 - Skipped by default unless `manage_isos: true`
 - Cancelling in-progress downloads and pruning unmanaged ISOs are separate default-false controls (`manage_isos_cancel_in_progress`, `manage_isos_prune_unmanaged`); leaving both false never touches pre-existing files
 
-### apt_cacher_ng, prowlarr, homebridge, spoolman, gitea_mirror, seerr, pocket_id, forgejo, sonarr, radarr, gallery_dl, stash, gatus, diun Roles
+### apt_cacher_ng, prowlarr, homebridge, spoolman, gitea_mirror, seerr, pocket_id, forgejo, sonarr, radarr, gallery_dl, gatus, diun Roles
 
 - Repository-owned single-purpose LXC roles, each bootstrapped through the shared `tasks/create_lxc.yml`
 - Each resolves the node currently hosting its container at run time via the shared `tasks/resolve_lxc_node.yml` (all CTs are HA-managed and CRS auto-rebalance can move them); `<role>_node` is only the fallback for creating a container that doesn't exist yet
@@ -322,11 +321,10 @@ rm -rf /tmp/test-isos
 - `forgejo` adopts `forgejo-nash` (VMID 103, HA-managed, currently on `prometheus` — it serves `git.wbreiler.com`, this repo's remote), pins the Forgejo 16.0.2 release binary with a checksum, refuses downgrades and skipped major versions, preserves `app.ini` and repository data, backs up binary, config, and SQLite database before upgrades with automatic rollback on failed health checks, and verifies the binary-reported version
 - `sonarr` adopts `sonarr-nash` (VMID 110, HA-managed, currently on `atlas`), pins the Sonarr 4.0.19.2979 release with a checksum, preserves `config.xml` and the SQLite databases, backs up before upgrades with automatic rollback on failed `/ping` checks, and verifies the API-reported version
 - `radarr` adopts `radarr-nash` (VMID 111, HA-managed, currently on `prometheus`), pins the Radarr 6.3.0.10514 release with a checksum, preserves `config.xml` and the SQLite databases, backs up before upgrades with automatic rollback on failed `/ping` checks, and verifies the API-reported version
-- `stash` pins third-party code (`stash_version` release tag)
-- `gallery_dl` and `stash` NFS-mount the vault share and are created privileged (kernel NFS requires it)
+- `gallery_dl` NFS-mounts the vault share and is created privileged because kernel NFS requires it
 - `gatus` creates or adopts `gatus-nash`. Gatus has no prebuilt binary releases, so the role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain (dependencies are additionally verified by Go against sum.golang.org during the build). `config.yaml` is generated: it probes every Proxmox node (TCP 8006), the PBS server (TCP 8007), and every managed app LXC that already defines a `<role>_health_url` — extend via `gatus_extra_endpoints`
 - `diun` creates or adopts `diun-nash`, a pinned, checksum-verified release binary that watches Docker images for new tags/digests and posts to Discord. Uses Diun's static `file` provider (`diun_watch_images`), not live Docker/API access to the watched host — currently seeded from a one-time read-only `docker ps` on TrueNAS (`erebus`); refresh the list by hand if erebus's containers change
-- Each skipped by default unless its `install_*` var is `true`
+- Each is skipped by default unless its `install_*` variable is `true`
 
 ### update_all Role
 

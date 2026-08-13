@@ -42,10 +42,41 @@
           - ca-certificates
           - libffi-dev
           - libpq-dev
+          - sqlite3
           - unzip
         lxc_nfs_server: ""
         lxc_nfs_export: ""
         lxc_nfs_mountpoint: ""
+
+    - name: Ensure Spoolman runtime account
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            user="$1"
+            data_dir="$2"
+            changed=0
+            if ! getent group "${user}" >/dev/null; then
+              groupadd --system "${user}"
+              changed=1
+            fi
+            if ! id -u "${user}" >/dev/null 2>&1; then
+              useradd --system --gid "${user}" --home-dir "${data_dir}" \
+                --shell /usr/sbin/nologin "${user}"
+              changed=1
+            fi
+            printf '%s\n' "${changed}"
+          - spoolman-runtime
+          - "{{ spoolman_user }}"
+          - "{{ spoolman_data_dir }}"
+      register: spoolman_runtime_account
+      changed_when: spoolman_runtime_account.stdout | trim == '1'
 
     - name: Read installed uv version
       ansible.builtin.command:
@@ -170,6 +201,7 @@
                 else
                   cp "${new_dir}/.env.example" "${new_dir}/.env"
                 fi
+                chmod 0600 "${new_dir}/.env"
                 chmod +x "${new_dir}"/scripts/*.sh
                 (
                   cd "${new_dir}"
@@ -257,6 +289,62 @@
       changed_when: true
       notify: Restart Spoolman
 
+    - name: Migrate Spoolman data from the root home
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            old_dir=/root/.local/share/spoolman
+            data_dir="$1"
+            backup_dir="$2"
+            log_dir="$3"
+            user="$4"
+            changed=0
+            was_active=0
+            mkdir -p "${data_dir}" "${backup_dir}" "${log_dir}"
+            if test -f "${old_dir}/spoolman.db" && test ! -f "${data_dir}/spoolman.db"; then
+              if systemctl is-active --quiet spoolman; then
+                systemctl stop spoolman
+                was_active=1
+                trap 'systemctl start spoolman' EXIT
+              fi
+              if command -v sqlite3 >/dev/null; then
+                test "$(sqlite3 "${old_dir}/spoolman.db" 'PRAGMA integrity_check;')" = ok
+              fi
+              cp -a "${old_dir}/." "${data_dir}/"
+              if command -v sqlite3 >/dev/null; then
+                test "$(sqlite3 "${data_dir}/spoolman.db" 'PRAGMA integrity_check;')" = ok
+              fi
+              changed=1
+            fi
+            if find "${data_dir}" \! -user "${user}" -o \! -group "${user}" |
+              grep -q .; then
+              if systemctl is-active --quiet spoolman; then
+                systemctl stop spoolman
+                if test "${was_active}" -eq 0; then
+                  was_active=1
+                  trap 'systemctl start spoolman' EXIT
+                fi
+              fi
+              chown -R "${user}:${user}" "${data_dir}"
+              changed=1
+            fi
+            printf '%s\n' "${changed}"
+          - spoolman-data
+          - "{{ spoolman_data_dir }}"
+          - "{{ spoolman_backup_dir }}"
+          - "{{ spoolman_log_dir }}"
+          - "{{ spoolman_user }}"
+      register: spoolman_data_migration
+      changed_when: spoolman_data_migration.stdout | trim == '1'
+      notify: Restart Spoolman
+
     - name: Configure Spoolman environment
       ansible.builtin.include_tasks: configure_env.yml
       loop:
@@ -264,9 +352,42 @@
           value: "{{ spoolman_bind_host }}"
         - key: SPOOLMAN_PORT
           value: "{{ spoolman_port | string }}"
+        - key: SPOOLMAN_DIR_DATA
+          value: "{{ spoolman_data_dir }}"
+        - key: SPOOLMAN_DIR_BACKUPS
+          value: "{{ spoolman_backup_dir }}"
+        - key: SPOOLMAN_DIR_LOGS
+          value: "{{ spoolman_log_dir }}"
       loop_control:
         loop_var: spoolman_env_setting
         label: "{{ spoolman_env_setting.key }}"
+
+    - name: Protect Spoolman environment file
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            env_file="$1"
+            user="$2"
+            if test "$(stat -c '%U:%G:%a' "${env_file}")" = "root:${user}:640"; then
+              printf '0\n'
+            else
+              chown "root:${user}" "${env_file}"
+              chmod 0640 "${env_file}"
+              printf '1\n'
+            fi
+          - spoolman-env-permissions
+          - "{{ spoolman_install_dir }}/.env"
+          - "{{ spoolman_user }}"
+      register: spoolman_env_permissions
+      changed_when: spoolman_env_permissions.stdout | trim == '1'
+      notify: Restart Spoolman
 
     - name: Check for legacy remote updater
       ansible.builtin.command:

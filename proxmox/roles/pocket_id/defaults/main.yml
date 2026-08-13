@@ -19,6 +19,7 @@ pocket_id_release_url: >-
 pocket_id_release_checksum: "sha256:45b39df9f6d685dee3caa379933f72bbb41428944ee8292853fb9e0b7e8e8b56"
 pocket_id_install_dir: "/opt/pocket-id"
 pocket_id_backup_dir: "/opt/pocket-id-backups"
+pocket_id_user: "pocketid"
 
 # Only used when creating the environment file from scratch on a fresh
 # install; an existing .env (including its ENCRYPTION_KEY) is preserved.

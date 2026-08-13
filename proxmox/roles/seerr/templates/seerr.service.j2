@@ -4,6 +4,8 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
+User={{ seerr_user }}
+Group={{ seerr_user }}
 EnvironmentFile={{ seerr_conf_file }}
 Environment=NODE_ENV=production
 Type=exec

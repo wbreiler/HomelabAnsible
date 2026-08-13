@@ -50,6 +50,34 @@
         lxc_nfs_export: ""
         lxc_nfs_mountpoint: ""
 
+    - name: Ensure Gitea Mirror runtime account
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            user="$1"
+            changed=0
+            if ! getent group "${user}" >/dev/null; then
+              groupadd --system "${user}"
+              changed=1
+            fi
+            if ! id -u "${user}" >/dev/null 2>&1; then
+              useradd --system --gid "${user}" --home-dir /nonexistent \
+                --shell /usr/sbin/nologin "${user}"
+              changed=1
+            fi
+            printf '%s\n' "${changed}"
+          - gitea-mirror-runtime
+          - "{{ gitea_mirror_user }}"
+      register: gitea_mirror_runtime_account
+      changed_when: gitea_mirror_runtime_account.stdout | trim == '1'
+
     - name: Read installed Bun version
       ansible.builtin.command:
         argv:
@@ -353,6 +381,41 @@
       loop_control:
         loop_var: gitea_mirror_env_setting
         label: "{{ gitea_mirror_env_setting.key }}"
+
+    - name: Configure Gitea Mirror runtime permissions
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            user="$1"
+            install_dir="$2"
+            env_file="$3"
+            changed=0
+            mkdir -p "${install_dir}/data"
+            if find "${install_dir}/data" \! -user "${user}" -o \! -group "${user}" |
+              grep -q .; then
+              chown -R "${user}:${user}" "${install_dir}/data"
+              changed=1
+            fi
+            if test "$(stat -c '%U:%G:%a' "${env_file}")" != "root:${user}:640"; then
+              chown "root:${user}" "${env_file}"
+              chmod 0640 "${env_file}"
+              changed=1
+            fi
+            printf '%s\n' "${changed}"
+          - gitea-mirror-permissions
+          - "{{ gitea_mirror_user }}"
+          - "{{ gitea_mirror_install_dir }}"
+          - "{{ gitea_mirror_env_file }}"
+      register: gitea_mirror_runtime_permissions
+      changed_when: gitea_mirror_runtime_permissions.stdout | trim == '1'
+      notify: Restart Gitea Mirror
 
     - name: Check for legacy remote updater
       ansible.builtin.command:

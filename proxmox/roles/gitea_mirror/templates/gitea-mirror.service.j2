@@ -4,6 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
+User={{ gitea_mirror_user }}
+Group={{ gitea_mirror_user }}
 WorkingDirectory={{ gitea_mirror_install_dir }}
 ExecStart=/usr/local/bin/bun dist/server/entry.mjs
 Restart=on-failure

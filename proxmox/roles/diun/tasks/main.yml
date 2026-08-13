@@ -201,7 +201,7 @@
           - --
           - bash
           - -c
-          - "install -d -m 0755 {{ diun_config_dir }} && cat > {{ diun_config_dir }}/diun.yml"
+          - "install -d -m 0755 {{ diun_config_dir }} && umask 077 && cat > {{ diun_config_dir }}/diun.yml"
         stdin: "{{ diun_main_config }}"
         stdin_add_newline: false
       when: >-
@@ -210,6 +210,22 @@
       changed_when: true
       no_log: true
       notify: Restart Diun
+
+    - name: Protect Diun configuration
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - >-
+            test "$(stat -c %a {{ diun_config_dir }}/diun.yml)" = 600 ||
+            { chmod 0600 {{ diun_config_dir }}/diun.yml; echo changed; }
+      register: diun_config_mode
+      changed_when: diun_config_mode.stdout == 'changed'
+      no_log: true
 
     - name: Render Diun service
       ansible.builtin.set_fact:

@@ -4,8 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
-Group=root
+User={{ pocket_id_user }}
+Group={{ pocket_id_user }}
 WorkingDirectory={{ pocket_id_install_dir }}
 EnvironmentFile={{ pocket_id_install_dir }}/.env
 ExecStart={{ pocket_id_install_dir }}/pocket-id

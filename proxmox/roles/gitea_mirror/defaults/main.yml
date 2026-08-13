@@ -20,6 +20,7 @@ gitea_mirror_release_checksum: "sha256:1904e38189f1701e17e339b1c3fa850970d67d1be
 gitea_mirror_install_dir: "/opt/gitea-mirror"
 gitea_mirror_env_file: "/opt/gitea-mirror.env"
 gitea_mirror_backup_dir: "/opt/gitea-mirror-backups"
+gitea_mirror_user: "gitea-mirror"
 
 gitea_mirror_bun_version: "1.3.14"
 gitea_mirror_bun_url: >-

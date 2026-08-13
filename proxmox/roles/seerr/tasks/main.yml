@@ -47,6 +47,34 @@
         lxc_nfs_export: ""
         lxc_nfs_mountpoint: ""
 
+    - name: Ensure Seerr runtime account
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            user="$1"
+            changed=0
+            if ! getent group "${user}" >/dev/null; then
+              groupadd --system "${user}"
+              changed=1
+            fi
+            if ! id -u "${user}" >/dev/null 2>&1; then
+              useradd --system --gid "${user}" --home-dir /nonexistent \
+                --shell /usr/sbin/nologin "${user}"
+              changed=1
+            fi
+            printf '%s\n' "${changed}"
+          - seerr-runtime
+          - "{{ seerr_user }}"
+      register: seerr_runtime_account
+      changed_when: seerr_runtime_account.stdout | trim == '1'
+
     - name: Read installed Node.js version
       ansible.builtin.command:
         argv:
@@ -323,6 +351,41 @@
           - "{{ seerr_port | string }}"
       when: seerr_conf_file_check.rc == 1
       changed_when: true
+      notify: Restart Seerr
+
+    - name: Configure Seerr runtime permissions
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            user="$1"
+            install_dir="$2"
+            conf_file="$3"
+            changed=0
+            mkdir -p "${install_dir}/config"
+            if find "${install_dir}/config" \! -user "${user}" -o \! -group "${user}" |
+              grep -q .; then
+              chown -R "${user}:${user}" "${install_dir}/config"
+              changed=1
+            fi
+            if test "$(stat -c '%U:%G:%a' "${conf_file}")" != "root:${user}:640"; then
+              chown "root:${user}" "${conf_file}"
+              chmod 0640 "${conf_file}"
+              changed=1
+            fi
+            printf '%s\n' "${changed}"
+          - seerr-permissions
+          - "{{ seerr_user }}"
+          - "{{ seerr_install_dir }}"
+          - "{{ seerr_conf_file }}"
+      register: seerr_runtime_permissions
+      changed_when: seerr_runtime_permissions.stdout | trim == '1'
       notify: Restart Seerr
 
     - name: Check for legacy remote updater

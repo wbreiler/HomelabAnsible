@@ -13,7 +13,9 @@
   ansible.builtin.shell:
     cmd: |
       set -o pipefail
-      pct list | awk 'NR>1 && $3=="{{ lxc_hostname }}" {print $1}'
+      pct list |
+        awk -v hostname={{ lxc_hostname | quote }} \
+          'NR > 1 && $3 == hostname { print $1 }'
     executable: /bin/bash
   register: _lxc_existing_vmid
   changed_when: false

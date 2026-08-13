@@ -92,10 +92,6 @@
       when: install_gallery_dl | default(false) | bool
       tags: ['gallery_dl', 'lxc']
 
-    - role: stash
-      when: install_stash | default(false) | bool
-      tags: ['stash', 'lxc']
-
     - role: gatus
       when: install_gatus | default(false) | bool
       tags: ['gatus', 'monitoring', 'lxc']

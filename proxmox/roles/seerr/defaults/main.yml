@@ -19,6 +19,7 @@ seerr_release_checksum: "sha256:38bb1f2c90ea648a327244352d5b4b13b19526e384655be8
 seerr_install_dir: "/opt/seerr"
 seerr_conf_file: "/etc/seerr/seerr.conf"
 seerr_backup_dir: "/opt/seerr-backups"
+seerr_user: "seerr"
 
 # pnpm is only needed at build time; the Node.js 22 runtime comes from the
 # NodeSource apt repository and is updated by update_all like any package.

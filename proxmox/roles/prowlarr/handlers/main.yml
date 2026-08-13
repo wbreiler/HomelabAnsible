@@ -1,5 +1,17 @@
 ---
-- name: Restart Prowlarr
+- name: Reload Prowlarr systemd
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - daemon-reload
+  changed_when: true
+  listen: Restart Prowlarr
+
+- name: Restart Prowlarr service
   ansible.builtin.command:
     argv:
       - pct
@@ -10,3 +22,4 @@
       - restart
       - prowlarr
   changed_when: true
+  listen: Restart Prowlarr
