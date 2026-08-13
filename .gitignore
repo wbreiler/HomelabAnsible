@@ -40,7 +40,6 @@
 /octopi/inventory.yml
 /octopi/group_vars/octopi_servers.yml
 /octopi/vault.yml
-/octopi/.vault_pass
 
 # Python
 __pycache__/

@@ -36,7 +36,7 @@ cd minecraft/ansible && \
 cd truenas && ansible-playbook playbooks/audit.yml
 
 # OctoPi
-cd octopi && ansible-playbook site.yml --ask-vault-pass
+cd octopi && ansible-playbook site.yml
 ```
 
 See each project's README for setup (copying `*.yml.example` files, vault
@@ -63,8 +63,9 @@ tracked as ordinary `.yml` because they are implementation code:
   inventory/desired-state files are deliberately sanitized (no hashes/secrets)
 - `arista/inventory.yml`, `arista/group_vars/arista.yml`, `.vault_pass`, and
   discovery artifacts — gitignored; copy the tracked examples before use
-- `octopi/inventory.yml`, `octopi/group_vars/octopi_servers.yml`, `vault.yml`, and
-  `.vault_pass` — gitignored; copy the tracked examples before use
+- `octopi/inventory.yml`, `octopi/group_vars/octopi_servers.yml`, and
+  `octopi/vault.yml` — gitignored; the vault password lives outside the repository
+  at `~/.config/ansible/vault-passwords/octopi`
 
 Before committing, run `git status` and confirm none of the above appear.
 

@@ -48,19 +48,20 @@ exact action.
 
 1. **Never commit secrets or machine-specific configuration.** Real
    `inventory.yml`, local data-bearing `group_vars/*.yml`,
-   `host_vars/*.yml`, `vault.yml`, `.vault_pass`, and
+   `host_vars/*.yml`, `vault.yml`, repo-local `.vault_pass` files, and
    `proxmox/files/gallery-dl-cookies.txt` are gitignored. Their sanitized
    templates use the `*.yml.example` suffix and remain tracked. Reusable
    Ansible implementation files—playbooks, roles, tasks, handlers, defaults,
    and requirements—remain tracked as ordinary `.yml`. Check `git status`
-   before every commit.
+   before every commit. OctoPi stores its vault password outside the repository
+   at `~/.config/ansible/vault-passwords/octopi`.
 2. **Always commit completed changes, but never push.** Create a separate,
    scoped commit for each top-level project directory changed (`proxmox/`,
    `pbs/`, `minecraft/`, `truenas/`, or `arista/`). Keep root-level policy or
    documentation changes in their own commit. The user pushes.
 3. **VMID 300 is reserved** (DiscoPanel on prometheus). New Minecraft servers
    start at 301+. Managed app LXCs live in 100–119.
-4. **LXCs are unprivileged** unless they NFS-mount (stash, gallery_dl).
+4. **LXCs are unprivileged** unless they NFS-mount. The `gallery_dl` LXC is privileged.
 5. **Pinned versions**: third-party artifacts in `proxmox/` roles are
    version-pinned and checksum-verified. Bump version + checksum together.
 6. **Secrets stay out of logs and argv**: use `no_log: true` and interactive
