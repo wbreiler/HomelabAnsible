@@ -1,0 +1,6 @@
+.idea/
+.vscode/
+*.retry
+inventory/hosts.yml
+group_vars/gaming_pc/vault.yml
+

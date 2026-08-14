@@ -1,0 +1,34 @@
+---
+gaming_pc_winget_packages:
+  - name: Steam
+    id: Valve.Steam
+    source: winget
+  - name: Discord
+    id: Discord.Discord
+    source: winget
+  - name: Google Chrome
+    id: Google.Chrome
+    source: winget
+  - name: OBS Studio
+    id: OBSProject.OBSStudio
+    source: winget
+  - name: Epic Games Launcher
+    id: EpicGames.EpicGamesLauncher
+    source: winget
+  - name: Elgato Stream Deck
+    id: Elgato.StreamDeck
+    source: winget
+  - name: Apple Music
+    id: 9PFHDD62MXS1
+    source: msstore
+  - name: iCloud for Windows
+    id: 9PKTQ5699M62
+    source: msstore
+
+gaming_pc_install_windows_updates: true
+gaming_pc_install_driver_updates: true
+gaming_pc_reboot_after_updates: true
+
+gaming_pc_smb_drive_letter: Z
+gaming_pc_smb_path: '\\10.10.20.3\clips'
+gaming_pc_smb_username: wbreiler

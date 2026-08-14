@@ -1,0 +1,7 @@
+---
+- name: Configure gaming PC
+  hosts: gaming_pc
+  gather_facts: true
+
+  roles:
+    - gaming_pc

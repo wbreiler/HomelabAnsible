@@ -1,0 +1,112 @@
+---
+- name: Validate required configuration
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == 'Windows'
+      - gaming_pc_smb_password is defined
+      - gaming_pc_smb_password | length > 0
+      - gaming_pc_smb_password != 'replace-me'
+    fail_msg: >-
+      This role requires Windows and an encrypted gaming_pc_smb_password in
+      group_vars/gaming_pc/vault.yml.
+
+- name: Check that WinGet is available
+  ansible.windows.win_command: winget.exe --version
+  register: gaming_pc_winget_version
+  changed_when: false
+
+- name: Install requested applications with WinGet
+  ansible.windows.win_powershell:
+    script: |
+      param(
+        [string]$PackageId,
+        [string]$PackageSource
+      )
+
+      $ErrorActionPreference = 'Stop'
+      $installed = & winget.exe list --id $PackageId --exact `
+        --source $PackageSource --accept-source-agreements 2>$null
+      if ($LASTEXITCODE -eq 0) {
+        $Ansible.Changed = $false
+        $Ansible.Result = "$PackageId is already installed"
+        return
+      }
+
+      if ($Ansible.CheckMode) {
+        $Ansible.Changed = $true
+        $Ansible.Result = "$PackageId would be installed"
+        return
+      }
+
+      & winget.exe install --id $PackageId --exact --source $PackageSource `
+        --silent --disable-interactivity --accept-source-agreements `
+        --accept-package-agreements
+      if ($LASTEXITCODE -ne 0) {
+        throw "WinGet failed to install $PackageId (exit code $LASTEXITCODE)"
+      }
+      $Ansible.Changed = $true
+    parameters:
+      PackageId: "{{ item.id }}"
+      PackageSource: "{{ item.source }}"
+  loop: "{{ gaming_pc_winget_packages }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Install Windows and Microsoft product updates
+  ansible.windows.win_updates:
+    category_names:
+      - CriticalUpdates
+      - SecurityUpdates
+      - UpdateRollups
+      - Updates
+    reboot: "{{ gaming_pc_reboot_after_updates }}"
+  when: gaming_pc_install_windows_updates | bool
+
+- name: Install signed hardware driver updates, including Radeon drivers
+  ansible.windows.win_updates:
+    category_names:
+      - Drivers
+    reboot: "{{ gaming_pc_reboot_after_updates }}"
+  when: gaming_pc_install_driver_updates | bool
+
+- name: Map the clips SMB share persistently
+  ansible.windows.win_powershell:
+    script: |
+      param(
+        [string]$DriveLetter,
+        [string]$RemotePath,
+        [string]$SmbUsername,
+        [securestring]$SmbPassword
+      )
+
+      $ErrorActionPreference = 'Stop'
+      $localPath = "${DriveLetter}:"
+      $mapping = Get-SmbMapping -LocalPath $localPath -ErrorAction SilentlyContinue
+
+      if ($mapping -and $mapping.RemotePath -eq $RemotePath) {
+        $Ansible.Changed = $false
+        return
+      }
+
+      if ($Ansible.CheckMode) {
+        $Ansible.Changed = $true
+        $Ansible.Result = "$localPath would be mapped to $RemotePath"
+        return
+      }
+
+      if ($mapping) {
+        Remove-SmbMapping -LocalPath $localPath -Force -UpdateProfile
+      }
+
+      New-SmbMapping -LocalPath $localPath -RemotePath $RemotePath `
+        -UserName $SmbUsername -Password $SmbPassword -Persistent $true
+      $Ansible.Changed = $true
+    parameters:
+      DriveLetter: "{{ gaming_pc_smb_drive_letter }}"
+      RemotePath: "{{ gaming_pc_smb_path }}"
+      SmbUsername: "{{ gaming_pc_smb_username }}"
+    sensitive_parameters:
+      - name: SmbPassword
+        value: "{{ gaming_pc_smb_password }}"
+        type: SecureString
+  no_log: true

@@ -1,0 +1,4 @@
+---
+# Copy to vault.yml, replace the placeholder, then encrypt the whole file with:
+#   ansible-vault encrypt group_vars/gaming_pc/vault.yml
+gaming_pc_smb_password: replace-me

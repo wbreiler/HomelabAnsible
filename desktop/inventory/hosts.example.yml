@@ -1,0 +1,12 @@
+---
+all:
+  children:
+    gaming_pc:
+      hosts:
+        gaming-pc:
+          # Replace this after the PC is online, then save as hosts.yml.
+          ansible_host: 192.0.2.10
+      vars:
+        ansible_user: Techn
+        ansible_connection: ssh
+        ansible_shell_type: powershell
