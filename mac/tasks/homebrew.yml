@@ -319,20 +319,21 @@
   environment:
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
 
-- name: Stop any user-level sudo-touchid service
-  # sudo-touchid writes /etc/pam.d/sudo_local, which requires root. Loaded as a
-  # per-user LaunchAgent (no become) it fails with exit 78 (EX_CONFIG) and
-  # never touches the PAM file. Clear that broken registration before
-  # starting it correctly below.
-  command: /opt/homebrew/bin/brew services stop sudo-touchid
-  changed_when: false
-  failed_when: false
-  environment:
-    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
-
-- name: Enable sudo-touchid service (Touch ID for sudo)
-  command: /opt/homebrew/bin/brew services start sudo-touchid
+- name: Bootstrap sudo Touch ID PAM config
+  # The sudo-touchid binary writes /etc/pam.d/sudo_local itself (via its own
+  # internal `sudo` call) rather than expecting its caller to be root, so
+  # `sudo brew services start` is the wrong way to run it: Homebrew then
+  # chowns the formula's Cellar/opt/linked paths to root, which breaks
+  # future `brew upgrade`/reinstall. Run the binary directly, once, under
+  # become instead — `creates` makes this a no-op after the first run, and
+  # again after any macOS upgrade that resets /etc/pam.d.
+  command: /opt/homebrew/opt/sudo-touchid/bin/sudo-touchid
   become: true
+  args:
+    creates: /etc/pam.d/sudo_local
+
+- name: Enable sudo-touchid login service (must run as the normal user, not root)
+  command: /opt/homebrew/bin/brew services start sudo-touchid
   register: touchid_result
   changed_when: "'Successfully started' in touchid_result.stdout"
   failed_when: false
