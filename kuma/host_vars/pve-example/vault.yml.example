@@ -1,0 +1,9 @@
+---
+# Copy to host_vars/<pve-hostname>/vault.yml (e.g. host_vars/ms-pve/vault.yml)
+# and encrypt with:
+#   ansible-vault encrypt host_vars/<pve-hostname>/vault.yml
+# Each Proxmox-hosted site gets its own dedicated PBS account -- unlike the
+# server fingerprint (top-level vault.yml), these aren't shared between
+# ms-pve and tn-pve.
+pve_backup_pbs_username: "CHANGE_ME@pbs"
+pve_backup_pbs_password: "CHANGE_ME"

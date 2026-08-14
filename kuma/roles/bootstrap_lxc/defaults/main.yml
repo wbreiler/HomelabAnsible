@@ -1,0 +1,21 @@
+---
+bootstrap_lxc_hostname: "{{ inventory_hostname }}-kuma"
+bootstrap_lxc_vmid: ""  # empty = auto-assign the next available VMID
+
+# A pinned, pveam-downloadable Debian template filename. Check available
+# versions with `pveam available --section system` on the Proxmox host and
+# bump this deliberately, matching how every other pinned artifact in this
+# homelab is handled.
+bootstrap_lxc_template: ""
+
+bootstrap_lxc_storage: "local-lvm"
+bootstrap_lxc_cores: 2
+bootstrap_lxc_memory: 2048
+bootstrap_lxc_disk: 16
+
+# DHCP, not static -- this box gets configured on the home network first,
+# then shipped and reconnected wherever it ends up. A baked-in static
+# config would break the moment it's on a different network.
+bootstrap_lxc_bridge: "vmbr0"
+
+bootstrap_lxc_ssh_public_key: "~/.ssh/id_ed25519.pub"

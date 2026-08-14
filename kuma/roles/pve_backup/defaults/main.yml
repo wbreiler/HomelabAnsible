@@ -1,0 +1,10 @@
+---
+pve_backup_pbs_server: "10.10.20.2"
+pve_backup_pbs_datastore: "MainStore"
+# One namespace per Proxmox-hosted site, nested under a shared "kuma"
+# parent namespace on PBS -- e.g. "kuma/ms", "kuma/tn". Derived from
+# inventory_hostname by default (strips a trailing "-pve"); override per
+# host only if a site's hostname doesn't follow the "<name>-pve" pattern.
+pve_backup_pbs_namespace: "kuma/{{ inventory_hostname | regex_replace('-pve$', '') }}"
+pve_backup_storage_id: "kuma-backup"
+pve_backup_schedule: "03:00"

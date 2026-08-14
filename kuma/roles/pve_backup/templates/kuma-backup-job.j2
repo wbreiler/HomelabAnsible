@@ -1,0 +1,7 @@
+vzdump: backup-kuma-{{ inventory_hostname }}
+	schedule {{ pve_backup_schedule }}
+	storage {{ pve_backup_storage_id }}
+	vmid {{ bootstrap_lxc_resolved_vmid }}
+	enabled 1
+	mode snapshot
+	notes-template {{ '{{guestname}}' }}

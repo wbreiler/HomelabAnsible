@@ -1,0 +1,24 @@
+---
+# Debian LXC template, pinned. Check available versions with
+# `pveam available --section system` on the Proxmox host and bump this
+# deliberately, matching how every other pinned artifact in this homelab
+# is handled.
+bootstrap_lxc_template: "debian-12-standard_12.7-1_amd64.tar.zst"
+bootstrap_lxc_storage: "local-lvm"
+bootstrap_lxc_bridge: "vmbr0"
+bootstrap_lxc_cores: 2
+bootstrap_lxc_memory: 2048
+bootstrap_lxc_disk: 16
+bootstrap_lxc_ssh_public_key: "~/.ssh/id_ed25519.pub"
+
+# Store the real values in vault.yml. One reusable Tailscale auth key
+# provisions every Proxmox host too, same as the Kuma sites.
+tailscale_auth_key: ""
+
+# PBS backup target (existing mnemosyne, 10.10.20.2), reached over
+# Tailscale via the existing tailscale_router subnet router. The server
+# fingerprint is shared -- store it in the top-level vault.yml. The
+# username/password are per-site (a distinct PBS account per Proxmox host)
+# -- store those in host_vars/<pve-hostname>/vault.yml instead, copied from
+# host_vars/pve-example/vault.yml.example.
+pve_backup_pbs_fingerprint: ""

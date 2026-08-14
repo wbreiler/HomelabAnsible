@@ -1,0 +1,25 @@
+---
+# One-time per site: creates the Kuma LXC on a Proxmox host, joins the
+# Proxmox host itself to Tailscale (for PBS backup reachability), and
+# schedules a backup job for the new LXC. Run this before that site's
+# kuma_hosts entry exists in inventory.yml -- see the README's
+# "Proxmox-hosted sites" section. site.yml (unchanged) configures the LXC
+# itself afterward, exactly like it configures a bare-metal site.
+- name: Bootstrap a Kuma LXC and its backup on a Proxmox host
+  hosts: pve_hosts
+  gather_facts: false
+  vars_files:
+    - vault.yml
+
+  roles:
+    - role: bootstrap_lxc
+      tags:
+        - bootstrap_lxc
+
+    - role: tailscale
+      tags:
+        - tailscale
+
+    - role: pve_backup
+      tags:
+        - pve_backup

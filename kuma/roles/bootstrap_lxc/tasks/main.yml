@@ -1,0 +1,173 @@
+---
+# One-time (per site) bootstrap: creates the LXC that will run Kuma, then
+# hands off to normal Ansible-over-SSH for everything else. After this
+# role, roles/apt_auto_update, roles/tailscale, roles/cloudflared,
+# roles/uptime_kuma, and roles/quorum_relay configure the LXC exactly like
+# they configure a bare-metal site (tn) -- they have no idea it's an LXC.
+
+- name: Validate bootstrap configuration
+  ansible.builtin.assert:
+    that:
+      - bootstrap_lxc_hostname | length > 0
+      - bootstrap_lxc_template | length > 0
+      - bootstrap_lxc_storage | length > 0
+      - bootstrap_lxc_bridge | length > 0
+    fail_msg: >-
+      Set bootstrap_lxc_hostname, bootstrap_lxc_template (a pinned
+      pveam-downloadable Debian template filename), bootstrap_lxc_storage,
+      and bootstrap_lxc_bridge for this site.
+
+- name: Verify Proxmox is reachable
+  ansible.builtin.command:
+    cmd: pveversion
+  changed_when: false
+
+- name: Find existing container by hostname
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      pct list | awk -v hostname={{ bootstrap_lxc_hostname | quote }} 'NR > 1 && $3 == hostname { print $1 }'
+    executable: /bin/bash
+  register: bootstrap_lxc_existing_vmid
+  changed_when: false
+
+- name: Get next available VMID
+  ansible.builtin.command:
+    cmd: pvesh get /cluster/nextid
+  register: bootstrap_lxc_next_vmid
+  changed_when: false
+  when: not bootstrap_lxc_vmid and not bootstrap_lxc_existing_vmid.stdout
+
+- name: Resolve VMID to use
+  ansible.builtin.set_fact:
+    bootstrap_lxc_resolved_vmid: >-
+      {{
+        bootstrap_lxc_existing_vmid.stdout if bootstrap_lxc_existing_vmid.stdout | length > 0
+        else (bootstrap_lxc_vmid if bootstrap_lxc_vmid else bootstrap_lxc_next_vmid.stdout)
+      }}
+
+- name: Check whether the pinned template is already cached
+  ansible.builtin.stat:
+    path: "/var/lib/vz/template/cache/{{ bootstrap_lxc_template }}"
+  register: bootstrap_lxc_template_cached
+
+- name: Refresh available LXC template list
+  ansible.builtin.command:
+    cmd: pveam update
+  changed_when: false
+  when: not bootstrap_lxc_template_cached.stat.exists
+
+- name: Download the pinned Debian LXC template
+  ansible.builtin.command:
+    cmd: "pveam download local {{ bootstrap_lxc_template }}"
+  when: not bootstrap_lxc_template_cached.stat.exists
+  changed_when: true
+
+- name: Create the Kuma LXC
+  ansible.builtin.command:
+    cmd: >-
+      pct create {{ bootstrap_lxc_resolved_vmid }}
+      local:vztmpl/{{ bootstrap_lxc_template }}
+      --hostname {{ bootstrap_lxc_hostname }}
+      --cores {{ bootstrap_lxc_cores }}
+      --memory {{ bootstrap_lxc_memory }}
+      --rootfs {{ bootstrap_lxc_storage }}:{{ bootstrap_lxc_disk }}
+      --net0 name=eth0,bridge={{ bootstrap_lxc_bridge }},ip=dhcp
+      --unprivileged 1
+      --features nesting=1
+  changed_when: true
+  when: not bootstrap_lxc_existing_vmid.stdout
+
+- name: Start the Kuma LXC
+  ansible.builtin.command:
+    cmd: "pct start {{ bootstrap_lxc_resolved_vmid }}"
+  register: bootstrap_lxc_start
+  changed_when: bootstrap_lxc_start.rc == 0 and 'already running' not in bootstrap_lxc_start.stderr
+  failed_when: bootstrap_lxc_start.rc not in [0, 255]
+
+- name: Wait for the container to be ready
+  ansible.builtin.command:
+    cmd: "pct exec {{ bootstrap_lxc_resolved_vmid }} -- echo ok"
+  register: bootstrap_lxc_ready
+  until: bootstrap_lxc_ready.rc == 0
+  retries: 12
+  delay: 5
+  changed_when: false
+
+# Docker-in-LXC needs the TUN device for Tailscale (and Kuma's own
+# container networking is unaffected -- this is purely for roles/tailscale
+# running inside the LXC later). Reuses the exact technique already proven
+# in proxmox/roles/tailscale_router/tasks/main.yml for the same problem.
+- name: Allow the TUN device in the container's cgroup
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ bootstrap_lxc_resolved_vmid }}.conf"
+    line: "lxc.cgroup2.devices.allow: c 10:200 rwm"
+  register: bootstrap_lxc_cgroup_conf
+
+- name: Bind-mount /dev/net/tun into the container
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ bootstrap_lxc_resolved_vmid }}.conf"
+    line: "lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file"
+  register: bootstrap_lxc_tun_conf
+
+- name: Restart the container to apply TUN device passthrough
+  ansible.builtin.command:
+    cmd: "pct reboot {{ bootstrap_lxc_resolved_vmid }}"
+  when: bootstrap_lxc_cgroup_conf.changed or bootstrap_lxc_tun_conf.changed
+  changed_when: true
+
+- name: Wait for the container after the TUN passthrough restart
+  ansible.builtin.command:
+    cmd: "pct exec {{ bootstrap_lxc_resolved_vmid }} -- echo ok"
+  register: bootstrap_lxc_ready_after_tun
+  until: bootstrap_lxc_ready_after_tun.rc == 0
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: bootstrap_lxc_cgroup_conf.changed or bootstrap_lxc_tun_conf.changed
+
+- name: Add the SSH public key to the container
+  ansible.builtin.command:
+    cmd: >-
+      pct exec {{ bootstrap_lxc_resolved_vmid }} -- bash -c
+      "mkdir -p /root/.ssh && chmod 700 /root/.ssh;
+      if grep -qF '{{ lookup('file', bootstrap_lxc_ssh_public_key) }}'
+      /root/.ssh/authorized_keys 2>/dev/null; then
+      echo unchanged; else
+      echo '{{ lookup('file', bootstrap_lxc_ssh_public_key) }}'
+      >> /root/.ssh/authorized_keys && echo changed; fi"
+  register: bootstrap_lxc_ssh_key
+  changed_when: bootstrap_lxc_ssh_key.stdout | trim == 'changed'
+
+- name: Install SSH and Python so Ansible can reach the container directly
+  ansible.builtin.command:
+    cmd: >-
+      pct exec {{ bootstrap_lxc_resolved_vmid }} --
+      bash -c "DEBIAN_FRONTEND=noninteractive apt-get update -qq &&
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -q openssh-server python3"
+  register: bootstrap_lxc_apt
+  changed_when: "'0 upgraded, 0 newly installed' not in bootstrap_lxc_apt.stdout"
+
+- name: Enable and start SSH inside the container
+  ansible.builtin.command:
+    cmd: "pct exec {{ bootstrap_lxc_resolved_vmid }} -- systemctl enable --now ssh"
+  register: bootstrap_lxc_ssh_enable
+  changed_when: "'Created symlink' in bootstrap_lxc_ssh_enable.stderr"
+
+- name: Discover the container's DHCP-assigned IP
+  ansible.builtin.command:
+    cmd: "pct exec {{ bootstrap_lxc_resolved_vmid }} -- hostname -I"
+  register: bootstrap_lxc_ip
+  until: bootstrap_lxc_ip.stdout | trim | length > 0
+  retries: 12
+  delay: 5
+  changed_when: false
+
+- name: Report the container's IP
+  ansible.builtin.debug:
+    msg: >-
+      {{ bootstrap_lxc_hostname }} (vmid {{ bootstrap_lxc_resolved_vmid }})
+      is up at {{ bootstrap_lxc_ip.stdout.split() | first }}. Add this to
+      inventory.yml's kuma_hosts entry for this site (ansible_host), copy
+      host_vars/example to host_vars/<name> if you haven't, then run
+      site.yml normally.

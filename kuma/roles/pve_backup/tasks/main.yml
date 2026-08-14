@@ -1,0 +1,64 @@
+---
+# Backs up the site's Kuma LXC to the existing PBS (mnemosyne), reached
+# over Tailscale via the already-deployed tailscale_router subnet router
+# (advertises 10.10.20.0/27 among other VLANs) -- no new subnet-router
+# infra needed, this host just needs to be a tailnet member (roles/tailscale
+# run against pve_hosts earlier in bootstrap-lxc.yml).
+
+- name: Validate PBS backup configuration
+  ansible.builtin.assert:
+    that:
+      - pve_backup_pbs_server | length > 0
+      - pve_backup_pbs_datastore | length > 0
+      - pve_backup_pbs_username | default('') | length > 0
+      - pve_backup_pbs_password | default('') | length > 0
+      - pve_backup_pbs_fingerprint | default('') | length > 0
+      - bootstrap_lxc_resolved_vmid is defined
+    fail_msg: >-
+      PBS backup needs pve_backup_pbs_username, pve_backup_pbs_password,
+      and pve_backup_pbs_fingerprint set in the vault-encrypted group
+      variables, and must run after roles/bootstrap_lxc in the same play
+      (needs bootstrap_lxc_resolved_vmid).
+  no_log: true
+
+- name: Check for an existing PBS storage target
+  ansible.builtin.command:
+    cmd: "pvesm status --storage {{ pve_backup_storage_id }}"
+  register: pve_backup_storage_check
+  changed_when: false
+  failed_when: false
+
+- name: Add the PBS storage target
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - add
+      - pbs
+      - "{{ pve_backup_storage_id }}"
+      - --server
+      - "{{ pve_backup_pbs_server }}"
+      - --datastore
+      - "{{ pve_backup_pbs_datastore }}"
+      - --namespace
+      - "{{ pve_backup_pbs_namespace }}"
+      - --username
+      - "{{ pve_backup_pbs_username }}"
+      - --password
+      - "{{ pve_backup_pbs_password }}"
+      - --fingerprint
+      - "{{ pve_backup_pbs_fingerprint }}"
+      - --content
+      - backup
+  when: pve_backup_storage_check.rc != 0
+  changed_when: true
+  no_log: true
+
+- name: Install the Kuma LXC backup job
+  ansible.builtin.blockinfile:
+    path: /etc/pve/jobs.cfg
+    marker: "# {mark} kuma backup job ({{ inventory_hostname }})"
+    block: "{{ lookup('template', 'kuma-backup-job.j2') }}"
+    create: true
+    owner: root
+    group: www-data
+    mode: "0640"
