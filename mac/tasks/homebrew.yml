@@ -26,7 +26,7 @@
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
   loop:
     - artginzburg/tap            # sudo-touchid
-    - izyumidev/xcode-discord-rpc
+    - izyuumi/xcode-discord-rpc
     - metafates/mangal
     - minacle/chntpw
     - scouzi1966/afm
@@ -39,7 +39,7 @@
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
   loop:
     - artginzburg/tap
-    - izyumidev/xcode-discord-rpc
+    - izyuumi/xcode-discord-rpc
     - metafates/mangal
     - minacle/chntpw
     - scouzi1966/afm
@@ -108,7 +108,7 @@
     - autoconf
     - m4
     - libtool
-    - pkg-config
+    - pkgconf
     - clang-format
     - llvm
 
@@ -202,7 +202,6 @@
     - mangal
     - mailsy
     - ccusage
-    - gemini-cli
     - sudo-touchid
     - afm
     - merve
@@ -231,11 +230,15 @@
   loop:
     # Browsers
     - google-chrome
+    - google-chrome@canary
+    - orion
+    - zen
 
     # Communication
     - discord
     - signal
     - whatsapp
+    - slack
 
     # Dev tools
     - visual-studio-code
@@ -243,6 +246,11 @@
     - iterm2
     - cyberduck
     - db-browser-for-sqlite
+    - orbstack
+    - temurin@21
+    - codex
+    - codexbar
+    - zed
 
     # Terminals & system
     - rustdesk
@@ -252,16 +260,21 @@
     - obs
     - handbrake-app
     - spotify
+    - iina
+    - music-presence
 
     # Productivity
     - obsidian
     - imageoptim
     - protonvpn
 
-    # Gaming
+    # Gaming / 3D printing / emulation
     - curseforge
     - modrinth
     - prusaslicer
+    - bambu-studio
+    - cemu
+    - utm
 
     # Utilities
     - 1password
@@ -274,6 +287,10 @@
     - android-platform-tools
     - rar
     - timemachinestatus
+    - tailscale-app
+    - citrix-workspace
+    - macusb
+    - vrampro
 
     # Fonts
     - font-hack-nerd-font
@@ -282,6 +299,7 @@
     # Other
     - claude
     - claude-code@latest
+    - antigravity-cli
 
   ignore_errors: true  # some casks may be unavailable or already installed via App Store
 
