@@ -25,7 +25,7 @@ The playbook runs entirely on `localhost` (`connection: local`, no inventory fil
 | `tasks/homebrew.yml` | `homebrew` | Taps → formulae → casks in that order; uses `ignore_errors: true` for custom-tap packages that may move |
 | `tasks/mas.yml` | `mas` | Requires App Store sign-in; large apps (Logic Pro, FCP) only install if previously purchased |
 | `tasks/shell.yml` | `shell` | Installs Oh My Zsh unattended, copies `files/zshrc` and `files/zprofile`; zsh-syntax-highlighting sourced directly from Homebrew in zshrc |
-| `tasks/git.yml` | `git` | Sets global git config including GPG signing key |
+| `tasks/git.yml` | `git` | Sets global git user name/email and installs git-lfs hooks; no commit signing configured |
 | `tasks/ssh.yml` | `ssh` | Copies `files/ssh_config`; private keys are NOT managed here |
 | `tasks/vscode.yml` | `vscode` | Copies `files/vscode_settings.json`, installs extensions via `code --install-extension` |
 | `tasks/hosts.yml` | `hosts` | Adds homelab IPs via `blockinfile`; requires `become: true` |
@@ -36,7 +36,8 @@ The playbook runs entirely on `localhost` (`connection: local`, no inventory fil
 
 `files/` holds dotfiles and config that are copied verbatim:
 - `zshrc` / `zprofile` — shell config with Oh My Zsh, pyenv, aliases
-- `ssh_config` — includes OrbStack config at top (required to be first), 1Password agent for all hosts
+- `ssh_config` — per-VLAN `Host` blocks (10.10.10/20/30/40.x) with `ControlMaster` connection
+  reuse, plus the 1Password SSH agent for all hosts
 - `vscode_settings.json` — full VS Code settings
 
 ### Dependencies
