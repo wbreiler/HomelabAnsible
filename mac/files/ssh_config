@@ -1,0 +1,16 @@
+Host 192.168.1.26
+	HostName 192.168.1.26
+	User root
+
+Host nas.wbreiler.com
+	HostName nas.wbreiler.com
+	User root
+	Port 2747
+
+Host storage-nash
+	HostName 192.168.1.201
+	Port 2747
+
+# Use 1Password SSH agent for all hosts
+Host *
+  IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"

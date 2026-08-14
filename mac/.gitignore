@@ -1,0 +1,18 @@
+# Ansible
+*.retry
+.ansible/
+
+# Secrets / local overrides
+*.pem
+*.key
+*.p12
+*.pfx
+vault_password
+.vault_pass
+
+# macOS
+.DS_Store
+
+# Local overrides (machine-specific tweaks that shouldn't be shared)
+*.log
+local.yml

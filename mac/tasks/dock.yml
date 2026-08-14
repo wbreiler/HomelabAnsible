@@ -1,0 +1,75 @@
+---
+# Configures the Dock using dockutil (installed via Homebrew)
+# and macOS defaults for size/autohide settings.
+
+- name: Set Dock tile size to 61
+  community.general.osx_defaults:
+    domain: com.apple.dock
+    key: tilesize
+    type: integer
+    value: 61
+
+- name: Enable Dock autohide
+  community.general.osx_defaults:
+    domain: com.apple.dock
+    key: autohide
+    type: bool
+    value: true
+
+- name: Disable show recent apps in Dock
+  community.general.osx_defaults:
+    domain: com.apple.dock
+    key: show-recents
+    type: bool
+    value: false
+
+- name: Enable App Exposé gesture
+  community.general.osx_defaults:
+    domain: com.apple.dock
+    key: showAppExposeGestureEnabled
+    type: bool
+    value: true
+
+- name: Set bottom-right hot corner to Quick Note (14)
+  community.general.osx_defaults:
+    domain: com.apple.dock
+    key: wvous-br-corner
+    type: integer
+    value: 14
+
+- name: Remove all existing Dock items
+  command: /opt/homebrew/bin/dockutil --remove all --no-restart
+  changed_when: true
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+
+- name: Add Dock apps in order
+  command: >
+    /opt/homebrew/bin/dockutil --add "{{ item.path }}" --no-restart
+  loop:
+    - { path: "/Applications/Google Chrome.app" }
+    - { path: "/System/Applications/Messages.app" }
+    - { path: "/Applications/Discord.app" }
+    - { path: "/System/Applications/Music.app" }
+    - { path: "/Applications/iTerm.app" }
+    - { path: "/Applications/Claude.app" }
+  changed_when: true
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+
+- name: Add Downloads folder to Dock (fan/list view)
+  command: >
+    /opt/homebrew/bin/dockutil
+    --add "{{ home_dir }}/Downloads"
+    --view list
+    --display folder
+    --sort dateadded
+    --no-restart
+  changed_when: true
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+
+- name: Restart Dock to apply changes
+  command: killall Dock
+  changed_when: true
+  failed_when: false

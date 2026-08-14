@@ -1,0 +1,12 @@
+---
+# ansible-lint config for personal Mac setup playbook
+# Suppress style-only rules that don't affect correctness
+warn_list:
+  - fqcn
+  - fqcn[action-core]
+  - no-changed-when
+  - ignore-errors
+  - risky-file-permissions
+  - risky-shell-pipe
+  - name[casing]
+  - yaml[line-length]

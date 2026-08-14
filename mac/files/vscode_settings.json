@@ -1,0 +1,122 @@
+{
+  "editor.minimap.enabled": false,
+  "vscode-neovim.neovimExecutablePaths.darwin": "/opt/homebrew/bin/nvim",
+  "editor.renderWhitespace": "all",
+  "workbench.editorAssociations": {
+    "*.ipynb": "jupyter.notebook.ipynb"
+  },
+  "rpc.buttonActiveLabel": "Open Repository",
+  "rpc.appName": "Visual Studio Code",
+  "editor.inlineSuggest.enabled": true,
+  "git.autofetch": true,
+  "rpc.checkIdle": false,
+  "security.workspace.trust.untrustedFiles": "prompt",
+  "C_Cpp.updateChannel": "Insiders",
+  "liveshare.presence": true,
+  "python.pythonPath": "/opt/homebrew/bin/python3",
+  "git.enableSmartCommit": true,
+  "github.copilot.enable": {
+    "*": false,
+    "plaintext": true,
+    "markdown": true,
+    "scminput": false,
+    "yaml": false,
+    "dockercompose": true
+  },
+  "liveServer.settings.donotShowInfoMsg": true,
+  "remote.SSH.remotePlatform": {
+    "10.0.0.43": "macOS",
+    "10.0.0.189": "linux",
+    "192.168.1.67": "linux",
+    "10.0.0.13": "linux",
+    "10.0.0.215": "linux",
+    "10.0.0.93": "linux",
+    "10.0.0.196": "linux",
+    "storage-nash": "linux"
+  },
+  "liveshare.allowInvites": "contacts",
+  "terminal.external.windowsExec": "C:\\msys64\\mingw64.exe",
+  "editor.accessibilitySupport": "off",
+  "explorer.confirmDragAndDrop": false,
+  "workbench.startupEditor": "none",
+  "terminal.integrated.env.osx": {
+    "FIG_NEW_SESSION": "1"
+  },
+  "editor.cursorStyle": "underline",
+  "editor.cursorBlinking": "smooth",
+  "bracket-pair-colorizer-2.depreciation-notice": false,
+  "editor.fontFamily": "Google Sans Code",
+  "zigLanguageClient.path": "/Users/wbreiler/Developer/zls/bin/zls",
+  "go.toolsManagement.autoUpdate": true,
+  "editor.fontLigatures": true,
+  "git.confirmSync": false,
+  "[dockercompose]": {
+    "editor.defaultFormatter": "ms-azuretools.vscode-containers"
+  },
+  "editor.largeFileOptimizations": false,
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "cSpell.userWords": [
+    "Authelia",
+    "duplicati",
+    "gethomepage",
+    "gitea",
+    "htdocs",
+    "letsencrypt",
+    "LPDDR",
+    "Octo",
+    "Ubiquiti",
+    "wbreiler"
+  ],
+  "files.autoSave": "afterDelay",
+  "redhat.telemetry.enabled": true,
+  "editor.tabSize": 2,
+  "workbench.settings.applyToAllProfiles": [
+    "editor.tabSize"
+  ],
+  "workbench.iconTheme": "bearded-icons",
+  "vs-kubernetes": {
+    "vscode-kubernetes.kubectl-path-mac": "/Users/wbreiler/.vs-kubernetes/tools/kubectl/kubectl",
+    "vscode-kubernetes.minikube-path-mac": "/Users/wbreiler/.vs-kubernetes/tools/minikube/darwin-arm64/minikube",
+    "vscode-kubernetes.helm-path-mac": "/Users/wbreiler/.vs-kubernetes/tools/helm/darwin-arm64/helm",
+    "vs-kubernetes.minikube-show-information-expiration": "2024-11-13T02:15:39.933Z"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "DavidAnson.vscode-markdownlint"
+  },
+  "vscord.app.name": "Visual Studio Code",
+  "explorer.confirmDelete": false,
+  "terminal.integrated.fontFamily": "monospace",
+  "[javascript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "vscode.html-language-features"
+  },
+  "liveServer.settings.donotVerifyTags": true,
+  "editor.tabCompletion": "on",
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "editor.guides.bracketPairs": true,
+  "github.copilot.editor.enableAutoCompletions": false,
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "git.ignoreMissingGitWarning": true,
+  "github.copilot.nextEditSuggestions.enabled": true,
+  "geminicodeassist.inlineSuggestions.enableAuto": true,
+  "diffEditor.codeLens": true,
+  "ansible.lightspeed.enabled": false,
+  "ansible.lightspeed.suggestions.enabled": false,
+  "geminicodeassist.project": "fresh-aloe-w5j0x",
+  "[github-actions-workflow]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "workbench.tree.indent": 20,
+  "workbench.colorTheme": "Bearded Theme Arc",
+  "claudeCode.preferredLocation": "panel",
+  "chat.disableAIFeatures": true
+}

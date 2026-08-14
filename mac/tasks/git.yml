@@ -1,0 +1,42 @@
+---
+- name: Configure git user name
+  community.general.git_config:
+    name: user.name
+    value: "Will Breiler"
+    scope: global
+
+- name: Configure git user email
+  community.general.git_config:
+    name: user.email
+    value: "will.breiler@gmail.com"
+    scope: global
+
+- name: Configure git GPG signing key
+  community.general.git_config:
+    name: user.signingkey
+    value: "AE24C097743FF4BB"
+    scope: global
+
+- name: Enable GPG commit signing
+  community.general.git_config:
+    name: commit.gpgsign
+    value: "true"
+    scope: global
+
+- name: Set GPG format
+  community.general.git_config:
+    name: gpg.format
+    value: openpgp
+    scope: global
+
+- name: Set GPG program to pinentry-mac
+  community.general.git_config:
+    name: gpg.program
+    value: gpg
+    scope: global
+
+- name: Install git-lfs hooks
+  command: /opt/homebrew/bin/git-lfs install
+  changed_when: false
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"

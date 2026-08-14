@@ -1,0 +1,448 @@
+---
+# macOS System Defaults
+# Many of these require a logout/reboot to fully take effect.
+# Finder and Dock are restarted at the end.
+
+# ============================================================
+# Global / NSGlobalDomain
+# ============================================================
+
+- name: Enable Dark Mode (with auto-switch)
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: AppleInterfaceStyleSwitchesAutomatically
+    type: bool
+    value: true
+
+- name: Set Dark interface style
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: AppleInterfaceStyle
+    type: string
+    value: Dark
+
+- name: Show all file extensions in Finder
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: AppleShowAllExtensions
+    type: bool
+    value: true
+
+- name: Disable swipe navigation with scroll
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: AppleEnableSwipeNavigateWithScrolls
+    type: bool
+    value: false
+
+- name: Set mouse scaling to 1
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: com.apple.mouse.scaling
+    type: float
+    value: 1.0
+
+- name: Set trackpad scaling to 0.5
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: com.apple.trackpad.scaling
+    type: float
+    value: 0.5
+
+- name: Set scroll wheel scaling
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: com.apple.scrollwheel.scaling
+    type: float
+    value: 0.3125
+
+- name: Set alert sound to Tink
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: com.apple.sound.beep.sound
+    type: string
+    value: /System/Library/Sounds/Tink.aiff
+
+- name: Disable sound feedback on volume change
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: com.apple.sound.beep.feedback
+    type: integer
+    value: 0
+
+- name: Disable visual flash on alerts
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: com.apple.sound.beep.flash
+    type: integer
+    value: 0
+
+- name: Enable Force Click on trackpad
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: com.apple.trackpad.forceClick
+    type: bool
+    value: true
+
+- name: Enable spring loading with delay 0.5s
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: com.apple.springing.enabled
+    type: bool
+    value: true
+
+- name: Set spring loading delay
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: com.apple.springing.delay
+    type: float
+    value: 0.5
+
+- name: Set language to en-US
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: AppleLanguages
+    type: array
+    value:
+      - en-US
+
+- name: Set locale to en_US
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: AppleLocale
+    type: string
+    value: en_US
+
+- name: Reduce desktop tinting
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: AppleReduceDesktopTinting
+    type: bool
+    value: true
+
+- name: Enable key repeat (accessibility)
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: KeyRepeatEnabled
+    type: bool
+    value: true
+
+- name: Set menu bar style (2 = always visible)
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: userMenuExtraStyle
+    type: integer
+    value: 2
+
+# ============================================================
+# Finder
+# ============================================================
+
+- name: Show status bar in Finder
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: ShowStatusBar
+    type: bool
+    value: true
+
+- name: Hide path bar in Finder
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: ShowPathbar
+    type: bool
+    value: false
+
+- name: Show sidebar in Finder
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: ShowSidebar
+    type: bool
+    value: true
+
+- name: Set default Finder view to icon view
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: FXPreferredViewStyle
+    type: string
+    value: icnv
+
+- name: Show external drives on desktop
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: ShowExternalHardDrivesOnDesktop
+    type: bool
+    value: true
+
+- name: Hide internal drives on desktop
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: ShowHardDrivesOnDesktop
+    type: bool
+    value: false
+
+- name: Show removable media on desktop
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: ShowRemovableMediaOnDesktop
+    type: bool
+    value: true
+
+- name: Disable iCloud Desktop sync
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: FXICloudDriveDesktop
+    type: bool
+    value: false
+
+- name: Disable iCloud Documents sync
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: FXICloudDriveDocuments
+    type: bool
+    value: false
+
+- name: Set new Finder window to Desktop
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: NewWindowTarget
+    type: string
+    value: PfDe
+
+- name: Set Finder new window path to Desktop
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: NewWindowTargetPath
+    type: string
+    value: "file:///Users/wbreiler/Desktop/"
+
+- name: Set Finder preferred group by Date Created
+  community.general.osx_defaults:
+    domain: com.apple.finder
+    key: FXPreferredGroupBy
+    type: string
+    value: "Date Created"
+
+# ============================================================
+# Menu Bar Clock
+# ============================================================
+
+- name: Show AM/PM in menu bar clock
+  community.general.osx_defaults:
+    domain: com.apple.menuextra.clock
+    key: ShowAMPM
+    type: bool
+    value: true
+
+- name: Show day of week in menu bar clock
+  community.general.osx_defaults:
+    domain: com.apple.menuextra.clock
+    key: ShowDayOfWeek
+    type: bool
+    value: true
+
+- name: Hide date in menu bar clock
+  community.general.osx_defaults:
+    domain: com.apple.menuextra.clock
+    key: ShowDate
+    type: integer
+    value: 0
+
+# ============================================================
+# Trackpad
+# ============================================================
+
+- name: Disable tap-to-click
+  community.general.osx_defaults:
+    domain: com.apple.AppleMultitouchTrackpad
+    key: Clicking
+    type: integer
+    value: 0
+
+- name: Enable right-click on trackpad
+  community.general.osx_defaults:
+    domain: com.apple.AppleMultitouchTrackpad
+    key: TrackpadRightClick
+    type: bool
+    value: true
+
+- name: Enable horizontal scroll on trackpad
+  community.general.osx_defaults:
+    domain: com.apple.AppleMultitouchTrackpad
+    key: TrackpadHorizScroll
+    type: integer
+    value: 1
+
+- name: Enable momentum scroll on trackpad
+  community.general.osx_defaults:
+    domain: com.apple.AppleMultitouchTrackpad
+    key: TrackpadMomentumScroll
+    type: bool
+    value: true
+
+- name: Enable pinch gesture on trackpad
+  community.general.osx_defaults:
+    domain: com.apple.AppleMultitouchTrackpad
+    key: TrackpadPinch
+    type: bool
+    value: true
+
+- name: Enable rotate gesture on trackpad
+  community.general.osx_defaults:
+    domain: com.apple.AppleMultitouchTrackpad
+    key: TrackpadRotate
+    type: bool
+    value: true
+
+- name: Disable three-finger drag
+  community.general.osx_defaults:
+    domain: com.apple.AppleMultitouchTrackpad
+    key: TrackpadThreeFingerDrag
+    type: bool
+    value: false
+
+- name: Enable two-finger swipe from right edge (Notification Center)
+  community.general.osx_defaults:
+    domain: com.apple.AppleMultitouchTrackpad
+    key: TrackpadTwoFingerFromRightEdgeSwipeGesture
+    type: integer
+    value: 3
+
+# ============================================================
+# Screenshots
+# ============================================================
+
+- name: Set screenshot save location to iCloud Screenshots folder
+  community.general.osx_defaults:
+    domain: com.apple.screencapture
+    key: location
+    type: string
+    value: "~/Library/Mobile Documents/com~apple~CloudDocs/Screenshots"
+
+- name: Set screenshot format to PNG
+  community.general.osx_defaults:
+    domain: com.apple.screencapture
+    key: type
+    type: string
+    value: png
+
+- name: Disable screenshot shadow
+  community.general.osx_defaults:
+    domain: com.apple.screencapture
+    key: disable-shadow
+    type: bool
+    value: true
+
+# ============================================================
+# Power Management
+# ============================================================
+
+- name: Set display sleep to 20 minutes
+  command: pmset -a displaysleep 20
+  become: true
+  changed_when: true
+
+- name: Set system sleep to 1 minute
+  command: pmset -a sleep 1
+  become: true
+  changed_when: true
+
+- name: Enable Power Nap
+  command: pmset -a powernap 1
+  become: true
+  changed_when: true
+
+- name: Enable Wake on LAN
+  command: pmset -a womp 1
+  become: true
+  changed_when: true
+
+- name: Set disk sleep to 10 minutes
+  command: pmset -a disksleep 10
+  become: true
+  changed_when: true
+
+# ============================================================
+# Accessibility
+# ============================================================
+
+- name: Disable reduce motion
+  community.general.osx_defaults:
+    domain: com.apple.Accessibility
+    key: ReduceMotionEnabled
+    type: bool
+    value: false
+
+- name: Disable differentiate without color
+  community.general.osx_defaults:
+    domain: com.apple.Accessibility
+    key: DifferentiateWithoutColor
+    type: integer
+    value: 0
+
+# ============================================================
+# Hostname
+# ============================================================
+
+- name: Set computer name
+  command: scutil --set ComputerName "Will's MacBook Pro"
+  become: true
+  changed_when: true
+
+- name: Set local hostname
+  command: scutil --set LocalHostName "Wills-MacBook-Pro"
+  become: true
+  changed_when: true
+
+# ============================================================
+# Miscellaneous
+# ============================================================
+
+- name: Expand save panel by default
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: NSNavPanelExpandedStateForSaveMode
+    type: bool
+    value: true
+
+- name: Disable automatic capitalization
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: NSAutomaticCapitalizationEnabled
+    type: bool
+    value: false
+
+- name: Disable automatic period substitution
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: NSAutomaticPeriodSubstitutionEnabled
+    type: bool
+    value: false
+
+- name: Disable autocorrect
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: NSAutomaticSpellingCorrectionEnabled
+    type: bool
+    value: false
+
+- name: Enable sudo with Touch ID
+  community.general.osx_defaults:
+    domain: com.apple.security.authorization
+    key: SudoTouchIdEnabled
+    type: bool
+    value: true
+  ignore_errors: true
+
+# ============================================================
+# Restart affected services
+# ============================================================
+
+- name: Restart Finder
+  command: killall Finder
+  changed_when: true
+  failed_when: false
+
+- name: Restart SystemUIServer (menu bar)
+  command: killall SystemUIServer
+  changed_when: true
+  failed_when: false

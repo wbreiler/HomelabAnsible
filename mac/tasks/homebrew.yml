@@ -1,0 +1,301 @@
+---
+- name: Check if Homebrew is installed
+  stat:
+    path: /opt/homebrew/bin/brew
+  register: brew_stat
+
+- name: Install Homebrew
+  shell: >
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  environment:
+    NONINTERACTIVE: "1"
+  when: not brew_stat.stat.exists
+
+- name: Update Homebrew
+  community.general.homebrew:
+    update_homebrew: true
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+
+# --- Taps ---
+- name: Add Homebrew taps
+  community.general.homebrew_tap:
+    name: "{{ item }}"
+    state: present
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+  loop:
+    - artginzburg/tap            # sudo-touchid
+    - izyumidev/xcode-discord-rpc
+    - metafates/mangal
+    - minacle/chntpw
+    - scouzi1966/afm
+    - teamookla/speedtest
+
+# --- Trust third-party taps (required by Homebrew 4.5+) ---
+- name: Trust Homebrew taps
+  command: /opt/homebrew/bin/brew trust "{{ item }}"
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+  loop:
+    - artginzburg/tap
+    - izyumidev/xcode-discord-rpc
+    - metafates/mangal
+    - minacle/chntpw
+    - scouzi1966/afm
+    - teamookla/speedtest
+  register: trust_result
+  changed_when: trust_result.rc == 0
+  failed_when: false
+
+# --- Formulae ---
+- name: Install Homebrew formulae
+  community.general.homebrew:
+    name: "{{ item }}"
+    state: present
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+  loop:
+    # System & shell utilities
+    - coreutils
+    - curl
+    - wget
+    - rsync
+    - tree
+    - watch
+    - bat
+    - fzf
+    - jq
+    - pv
+    - unar
+    - p7zip
+    - unxip
+    - mkcert
+    - xdelta
+    - wimlib
+    - usbutils
+    - dtc
+    - squashfs
+
+    # System monitoring
+    - btop
+    - bmon
+    - ifstat
+    - ncdu
+    - macmon
+    - asitop
+    - nvtop
+    - iperf3
+    - ipmitool
+    - smartmontools
+    - net-snmp
+    - nmap
+    - wireshark
+
+    # Terminal fun/info
+    - fastfetch
+    - fortune
+    - cowsay
+    - c2048
+    - thefuck
+
+    # Development - core
+    - git
+    - git-lfs
+    - gh
+    - cmake
+    - ninja
+    - autoconf
+    - m4
+    - libtool
+    - pkg-config
+    - clang-format
+    - llvm
+
+    # Development - languages & runtimes
+    - pyenv
+    - pipx
+    - uv
+    - node
+    - bun
+    - deno
+    - go
+    - rust
+    - ruby
+    - php
+    - openjdk
+    - lua
+    - emacs
+
+    # Development - containers & cloud
+    - docker
+    - docker-buildx
+    - docker-completion
+    - kubernetes-cli
+    - doctl
+    - awscli
+
+    # Development - build & packaging
+    - mint
+    - fastlane
+    - composer
+
+    # Multimedia
+    - ffmpeg
+    - handbrake
+    - yt-dlp
+    - gallery-dl
+    - imagemagick
+    - mpv
+    - flac
+    - lame
+    - opus
+    - speex
+    - libvorbis
+    - x264
+    - x265
+    - svt-av1
+    - aom
+    - dav1d
+    - libvmaf
+    - libplacebo
+    - vapoursynth
+    - rubberband
+    - libsamplerate
+    - libsndfile
+    - mpg123
+
+    # Networking & VPN
+    - tailscale
+    - wireguard-go
+    - wireguard-tools
+    - mole
+    - wakeonlan
+    - wifi-password
+    - speedtest
+    - domain-check
+    - aria2
+    - socat
+
+    # Security & crypto
+    - gnupg
+    - pinentry-mac
+    - openssl@3
+    - argon2
+    - libsodium
+
+    # Terminal tools & editors
+    - neovim
+    - weechat
+    - stormy
+    - terminal-notifier
+    - tree-sitter
+
+    # Miscellaneous dev tools
+    - lnav
+    - mas
+    - xcodes
+    - xcode-discord-rpc
+    - ipatool
+    - chntpw
+    - container-compose
+    - mangal
+    - mailsy
+    - ccusage
+    - gemini-cli
+    - sudo-touchid
+    - afm
+    - merve
+    - ata
+
+    # Disk & filesystem
+    - qemu
+    - libslirp
+    - vde
+
+    # Data processing
+    - sqlite
+    - libpq
+    - libmaxminddb
+
+  ignore_errors: true  # some tapped formulae may be unavailable
+
+# --- Casks ---
+- name: Install Homebrew casks
+  community.general.homebrew_cask:
+    name: "{{ item }}"
+    state: present
+    greedy: false
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+  loop:
+    # Browsers
+    - google-chrome
+
+    # Communication
+    - discord
+    - signal
+    - whatsapp
+
+    # Dev tools
+    - visual-studio-code
+    - markedit
+    - iterm2
+    - cyberduck
+    - db-browser-for-sqlite
+
+    # Terminals & system
+    - rustdesk
+
+    # Media
+    - vlc
+    - obs
+    - handbrake-app
+    - spotify
+
+    # Productivity
+    - obsidian
+    - imageoptim
+    - protonvpn
+
+    # Gaming
+    - curseforge
+    - modrinth
+    - prusaslicer
+
+    # Utilities
+    - 1password
+    - coconutbattery
+    - istat-menus
+    - istatistica-core
+    - mx-power-gadget
+    - raspberry-pi-imager
+    - balenaetcher
+    - android-platform-tools
+    - rar
+    - timemachinestatus
+
+    # Fonts
+    - font-hack-nerd-font
+    - font-monocraft
+
+    # Other
+    - claude
+    - claude-code@latest
+
+  ignore_errors: true  # some casks may be unavailable or already installed via App Store
+
+- name: Install dockutil (for dock management)
+  community.general.homebrew:
+    name: dockutil
+    state: present
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+
+- name: Enable sudo-touchid service (Touch ID for sudo)
+  command: /opt/homebrew/bin/brew services start sudo-touchid
+  register: touchid_result
+  changed_when: "'Successfully started' in touchid_result.stdout"
+  failed_when: false
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"

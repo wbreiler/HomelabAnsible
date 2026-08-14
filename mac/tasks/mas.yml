@@ -1,0 +1,49 @@
+---
+# Mac App Store apps
+# Requires: mas CLI (installed via Homebrew) and user signed into App Store
+#
+# NOTE: The Apple "Creator Studio" collection (Logic Pro, Final Cut Pro,
+#       MainStage, Motion, Compressor, Pixelmator Pro, Photomator) uses the
+#       new free MAS listings below, not the legacy paid IDs.
+
+- name: Install MAS apps
+  community.general.mas:
+    id: "{{ item.id }}"
+    state: present
+  become: true  # mas 7+ requires root to install apps
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+  loop:
+    # Apple Office Suite
+    - { id: 361285480,  name: "Keynote (latest)" }
+    - { id: 361304891,  name: "Numbers (latest)" }
+    - { id: 361309726,  name: "Pages (latest)" }
+
+    # Apple Creator Studio collection (large downloads)
+    - { id: 1615087040, name: "Logic Pro" }
+    - { id: 1631624924, name: "Final Cut Pro" }
+    - { id: 6746637089, name: "MainStage" }
+    - { id: 6746637149, name: "Motion" }
+    - { id: 6746516157, name: "Compressor" }
+
+    # Apple Creative
+    - { id: 6746662575, name: "Pixelmator Pro" }
+    - { id: 1444636541, name: "Photomator" }
+
+    # Apple Developer & Utilities
+    - { id: 640199958,  name: "Developer" }
+    - { id: 899247664,  name: "TestFlight" }
+    - { id: 1037126344, name: "Apple Configurator" }
+    - { id: 1450874784, name: "Transporter" }
+
+    # Utilities
+    - { id: 425264550,  name: "Blackmagic Disk Speed Test" }
+    - { id: 1168254295, name: "AmorphousDiskMark" }
+    - { id: 1363637349, name: "Unread" }
+    - { id: 1451685025, name: "WireGuard" }
+    - { id: 1569813296, name: "1Password for Safari" }
+    - { id: 1573461917, name: "SponsorBlock for Safari" }
+    - { id: 1662217862, name: "Wipr 2" }
+    - { id: 6443975850, name: "SenPlayer" }
+    - { id: 6477373179, name: "CANStudio" }
+    - { id: 1136220934, name: "Infuse" }

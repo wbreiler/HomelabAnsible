@@ -1,0 +1,31 @@
+---
+- name: Ensure ~/.ssh directory exists
+  file:
+    path: "{{ home_dir }}/.ssh"
+    state: directory
+    mode: "0700"
+
+- name: Copy SSH config
+  copy:
+    src: files/ssh_config
+    dest: "{{ home_dir }}/.ssh/config"
+    mode: "0600"
+    backup: true
+
+- name: Ensure ~/.config/1Password/ssh directory exists
+  file:
+    path: "{{ home_dir }}/.config/1Password/ssh"
+    state: directory
+    mode: "0700"
+
+- name: Copy 1Password SSH agent config
+  copy:
+    src: files/1password-agent.toml
+    dest: "{{ home_dir }}/.config/1Password/ssh/agent.toml"
+    mode: "0600"
+
+# NOTE: Private SSH keys are NOT managed by this playbook.
+# Add them manually or restore from 1Password / backup:
+#   - PiKeys (stored at ~/.ssh/PiKeys)
+# The 1Password SSH agent (configured in ~/.ssh/config) will handle
+# authentication for most hosts once you're signed into 1Password.

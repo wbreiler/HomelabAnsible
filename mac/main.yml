@@ -1,0 +1,65 @@
+---
+# Mac Setup Playbook
+# Run: make run   (requires sudo for /etc/hosts)
+# Selective: make run-tags TAGS=homebrew,defaults
+#
+# Manual steps required before running:
+#   1. Sign into the App Store (needed for MAS tasks)
+#   2. Install Xcode CLT: xcode-select --install
+#   3. Import GPG private key: gpg --import <your-key.asc>
+#   4. Install LM Studio manually from https://lmstudio.ai
+#
+# Apps that need manual license activation after install:
+#   Parallels Desktop, CrossOver
+
+- name: macOS Fresh Setup
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: false
+
+  vars:
+    home_dir: "{{ ansible_facts.env.HOME }}"
+    username: "{{ ansible_facts.env.USER }}"
+    homebrew_prefix: /opt/homebrew
+
+  tasks:
+    - name: Xcode Command Line Tools
+      import_tasks: tasks/xcode_clt.yml
+      tags: [xcode]
+
+    - name: Homebrew taps, formulae, and casks
+      import_tasks: tasks/homebrew.yml
+      tags: [homebrew]
+
+    - name: Mac App Store apps
+      import_tasks: tasks/mas.yml
+      tags: [mas]
+
+    - name: Shell (Oh My Zsh, zshrc, zprofile)
+      import_tasks: tasks/shell.yml
+      tags: [shell]
+
+    - name: Git configuration
+      import_tasks: tasks/git.yml
+      tags: [git]
+
+    - name: SSH configuration
+      import_tasks: tasks/ssh.yml
+      tags: [ssh]
+
+    - name: VS Code extensions and settings
+      import_tasks: tasks/vscode.yml
+      tags: [vscode]
+
+    - name: /etc/hosts entries
+      import_tasks: tasks/hosts.yml
+      tags: [hosts]
+
+    - name: Dock configuration
+      import_tasks: tasks/dock.yml
+      tags: [dock]
+
+    - name: macOS system defaults
+      import_tasks: tasks/macos_defaults.yml
+      tags: [defaults, macos]

@@ -1,0 +1,80 @@
+---
+- name: Check if Oh My Zsh is installed
+  stat:
+    path: "{{ home_dir }}/.oh-my-zsh"
+  register: omz_stat
+
+- name: Install Oh My Zsh (unattended)
+  shell: >
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+  when: not omz_stat.stat.exists
+  environment:
+    HOME: "{{ home_dir }}"
+
+- name: Copy .zshrc
+  copy:
+    src: files/zshrc
+    dest: "{{ home_dir }}/.zshrc"
+    backup: true
+
+- name: Copy .zprofile
+  copy:
+    src: files/zprofile
+    dest: "{{ home_dir }}/.zprofile"
+    backup: true
+
+- name: Install zsh-syntax-highlighting
+  community.general.homebrew:
+    name: zsh-syntax-highlighting
+    state: present
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+
+- name: Install pyenv Python 3.14.0
+  command: >
+    /opt/homebrew/bin/pyenv install 3.14.0
+  args:
+    creates: "{{ home_dir }}/.pyenv/versions/3.14.0"
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+    PYENV_ROOT: "{{ home_dir }}/.pyenv"
+  ignore_errors: true
+
+- name: Set pyenv global Python version
+  command: /opt/homebrew/bin/pyenv global 3.14.0
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+    PYENV_ROOT: "{{ home_dir }}/.pyenv"
+  register: pyenv_global
+  changed_when: pyenv_global.rc == 0 and 'already' not in pyenv_global.stdout
+  ignore_errors: true
+
+- name: Install global pip packages
+  pip:
+    name: "{{ item }}"
+    state: present
+    executable: "{{ home_dir }}/.pyenv/versions/3.14.0/bin/pip3"
+  loop:
+    - beautifulsoup4
+    - numpy
+    - pillow
+    - proxmoxer
+    - mcp
+  ignore_errors: true
+
+- name: Install global npm packages
+  npm:
+    name: "{{ item }}"
+    global: true
+    executable: /opt/homebrew/bin/npm
+  loop:
+    - wrangler
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+  ignore_errors: true
+
+- name: Set zsh as default shell
+  user:
+    name: "{{ username }}"
+    shell: /bin/zsh
+  become: true
