@@ -12,7 +12,7 @@
 
 - name: Install VS Code extensions
   command: >
-    /usr/local/bin/code --install-extension {{ item }} --force
+    code --install-extension {{ item }} --force
   loop:
     - alexcvzz.vscode-sqlite
     - anthropic.claude-code
@@ -20,6 +20,7 @@
     - beardedbear.beardedicons
     - beardedbear.beardedtheme
     - clutchengineering.obdb-tooling
+    - cyberbookas.system-syntax
     - davidanson.vscode-markdownlint
     - github.copilot-chat
     - google.gemini-cli-vscode-ide-companion
