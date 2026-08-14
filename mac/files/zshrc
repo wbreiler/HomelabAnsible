@@ -187,3 +187,20 @@ export PATH="/Users/wbreiler/.antigravity/antigravity/bin:$PATH"
 
 # zsh-syntax-highlighting (Homebrew; must be sourced last)
 source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+
+# Added by Antigravity CLI installer
+export PATH="/Users/wbreiler/.local/bin:$PATH"
+
+# Claude Code routed through the local CLIProxyAPI Codex connection.
+_cliproxyapi_token() {
+    sed -n '/^api-keys:/,/^[^[:space:]]/s/^  - "\(.*\)"/\1/p' /opt/homebrew/etc/cliproxyapi.conf | sed -n '1p'
+}
+
+alias claudex='ANTHROPIC_BASE_URL=http://127.0.0.1:8317 \
+ANTHROPIC_AUTH_TOKEN="$(_cliproxyapi_token)" \
+CLAUDE_CODE_SUBAGENT_MODEL=gpt-5.6-sol \
+CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1 \
+CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY=3 \
+CLAUDE_CODE_MAX_CONTEXT_TOKENS=1050000 \
+ENABLE_TOOL_SEARCH=false \
+claude --model gpt-5.6-sol'
