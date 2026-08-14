@@ -283,15 +283,15 @@
   community.general.osx_defaults:
     domain: com.apple.AppleMultitouchTrackpad
     key: TrackpadPinch
-    type: bool
-    value: true
+    type: integer
+    value: 1
 
 - name: Enable rotate gesture on trackpad
   community.general.osx_defaults:
     domain: com.apple.AppleMultitouchTrackpad
     key: TrackpadRotate
-    type: bool
-    value: true
+    type: integer
+    value: 1
 
 - name: Disable three-finger drag
   community.general.osx_defaults:
@@ -369,8 +369,8 @@
   community.general.osx_defaults:
     domain: com.apple.Accessibility
     key: ReduceMotionEnabled
-    type: bool
-    value: false
+    type: integer
+    value: 0
 
 - name: Disable differentiate without color
   community.general.osx_defaults:
