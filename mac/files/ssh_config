@@ -1,16 +1,56 @@
-Host 192.168.1.26
-	HostName 192.168.1.26
-	User root
+# Storage VLAN
+Host 10.10.20.2
+	IdentityFile ~/.ssh/cluster.pub
+	IdentitiesOnly yes
+  ControlMaster auto
+  ControlPath ~/.ssh/sockets/%r@%h:%p
+  ControlPersist 24h
 
-Host nas.wbreiler.com
-	HostName nas.wbreiler.com
-	User root
-	Port 2747
+Host 10.10.10.7
+	IdentityFile ~/.ssh/erebus.pub
+  IdentitiesOnly yes
+  Port 2747
+  ControlMaster auto
+  ControlPath ~/.ssh/sockets/%r@%h:%p
+  ControlPersist 24h
 
-Host storage-nash
-	HostName 192.168.1.201
-	Port 2747
+# Proxmox Hosts
+Host 10.10.30.*
+	IdentityFile ~/.ssh/cluster.pub
+  IdentitiesOnly yes
+  ControlMaster auto
+  ControlPath ~/.ssh/sockets/%r@%h:%p
+  ControlPersist 24h
 
-# Use 1Password SSH agent for all hosts
+# Proxmox guests
+Host 10.10.40.*
+  IdentityFile ~/.ssh/lxc.pub
+  IdentitiesOnly yes
+  ControlMaster auto
+  ControlPath ~/.ssh/sockets/%r@%h:%p
+  ControlPersist 24h
+
+# OctoPrint
+Host 10.10.70.50
+  IdentityFile ~/.ssh/arachne.pub
+	IdentitiesOnly yes
+
+# Monitoring VPS
+Host 10.213.47.3
+  User root
+  IdentityFile ~/.ssh/monitoring-atl.pub
+  IdentitiesOnly yes
+
+# GitHub
+Host github.com
+  User git
+  IdentityFile ~/.ssh/github.pub
+  IdentitiesOnly yes
+
+# Password Only
+Host 192.168.1.222
+  PreferredAuthentications password
+  PubkeyAuthentication no
+
 Host *
   IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
