@@ -32,8 +32,8 @@ On the Ansible controller:
 
 ```bash
 ansible-galaxy collection install -r requirements.yml
-cp inventory/hosts.example.yml inventory/hosts.yml
-cp group_vars/gaming_pc/vault.example.yml group_vars/gaming_pc/vault.yml
+cp inventory/hosts.yml.example inventory/hosts.yml
+cp group_vars/gaming_pc/vault.yml.example group_vars/gaming_pc/vault.yml
 ```
 
 Replace `192.0.2.10` in `inventory/hosts.yml` with the PC's IP. Put the SMB
