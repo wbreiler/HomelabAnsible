@@ -98,6 +98,9 @@
     - cowsay
     - c2048
     - thefuck
+    - cpufetch
+    - hyfetch
+    - screenfetch
 
     # Development - core
     - git
@@ -111,6 +114,8 @@
     - pkgconf
     - clang-format
     - llvm
+    - ansible
+    - ansible-lint
 
     # Development - languages & runtimes
     - pyenv
@@ -126,6 +131,7 @@
     - openjdk
     - lua
     - emacs
+    - python@3.13
 
     # Development - containers & cloud
     - docker
@@ -206,6 +212,9 @@
     - afm
     - merve
     - ata
+    - cliproxyapi
+    - dylibbundler
+    - wxwidgets
 
     # Disk & filesystem
     - qemu
