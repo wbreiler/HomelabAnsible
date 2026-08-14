@@ -319,8 +319,20 @@
   environment:
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
 
+- name: Stop any user-level sudo-touchid service
+  # sudo-touchid writes /etc/pam.d/sudo_local, which requires root. Loaded as a
+  # per-user LaunchAgent (no become) it fails with exit 78 (EX_CONFIG) and
+  # never touches the PAM file. Clear that broken registration before
+  # starting it correctly below.
+  command: /opt/homebrew/bin/brew services stop sudo-touchid
+  changed_when: false
+  failed_when: false
+  environment:
+    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+
 - name: Enable sudo-touchid service (Touch ID for sudo)
   command: /opt/homebrew/bin/brew services start sudo-touchid
+  become: true
   register: touchid_result
   changed_when: "'Successfully started' in touchid_result.stdout"
   failed_when: false
