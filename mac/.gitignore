@@ -13,6 +13,9 @@ vault_password
 # macOS
 .DS_Store
 
+# Claude Code local settings
+.claude/
+
 # Local overrides (machine-specific tweaks that shouldn't be shared)
 *.log
 local.yml
