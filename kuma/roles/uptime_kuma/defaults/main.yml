@@ -1,0 +1,68 @@
+---
+uptime_kuma_version: "1.23.16"
+uptime_kuma_port: 3001
+uptime_kuma_data_dir: /opt/uptime-kuma/data
+uptime_kuma_configure_dir: /opt/uptime-kuma-configure
+
+# Grants the container the Docker socket so it can monitor other local
+# containers' status. Off by default: this is root-equivalent host access.
+uptime_kuma_monitor_docker_containers: false
+
+uptime_kuma_admin_username: admin
+
+# Two Discord notification providers, same webhook/thread, different
+# urgency: uptime_kuma_notification_name includes the mention/ping below;
+# uptime_kuma_info_notification_name doesn't. Which one a given monitor
+# uses is controlled per-monitor by its own `critical` field (default
+# true -- see uptime_kuma_shared_monitors/uptime_kuma_monitors below).
+# Leave the webhook URL blank to skip notification setup entirely.
+uptime_kuma_notification_name: "Discord"
+uptime_kuma_info_notification_name: "Discord (Info)"
+uptime_kuma_discord_webhook_url: ""
+# Optional: prefixes uptime_kuma_notification_name's alerts with a
+# mention/ping (e.g. "<@123...>"). Never applied to the Info tier.
+uptime_kuma_discord_prefix_message: ""
+# Optional: post to a specific existing Discord thread instead of the
+# channel directly. Leave blank to send to the channel. Applies to both
+# notification tiers.
+uptime_kuma_discord_thread_id: ""
+
+# Each item: {name}. Kuma has no nested groups, so this is a flat list.
+uptime_kuma_groups: []
+
+# Same shape as uptime_kuma_groups/uptime_kuma_monitors below (including
+# the optional per-monitor `critical` field), but meant for group_vars so
+# every Mini PC gets an identical copy -- redundant checking of the same
+# shared infrastructure from every site. Only uptime_kuma_is_primary_notifier's
+# host actually gets paged for these; see the README's "Multiple sites, one
+# notification per event" section.
+uptime_kuma_shared_groups: []
+uptime_kuma_shared_monitors: []
+
+# Exactly one Mini PC should set this true. Its copies of
+# uptime_kuma_shared_monitors get the notification attached; every other
+# site's copies are silent (dashboard-only) so a real outage only pages
+# once. Host-specific uptime_kuma_monitors and peer watchdog monitors always
+# notify regardless of this flag -- they're not duplicated across sites.
+uptime_kuma_is_primary_notifier: false
+
+# Each item needs at least `name` and `type` ("http", "port", "ping",
+# "keyword", "dns", "docker", ...), plus whatever fields that Kuma monitor
+# type requires (e.g. `url` for http, `hostname`+`port` for port/ping). Set
+# `group` to a name from uptime_kuma_groups to nest it. Field names match
+# Kuma's own monitor fields (see the Kuma UI / uptime_kuma_api docs). Put
+# only things unique to this site here -- shared infra belongs in
+# uptime_kuma_shared_monitors instead. Optional `critical: false` routes a
+# monitor to uptime_kuma_info_notification_name (no mention) instead of
+# uptime_kuma_notification_name -- default is true (critical) on both this
+# and uptime_kuma_shared_monitors.
+uptime_kuma_monitors: []
+
+# Sibling Mini PCs (in another uptime_kuma_hosts group member) that this
+# instance should watch over Tailscale, so two sites can catch each other
+# going dark instead of duplicating every monitor on both. Each item:
+# {name, tailscale_ip}. The role turns each into a retried "<name> (peer)"
+# monitor in an auto-created "Peers" group.
+uptime_kuma_peers: []
+uptime_kuma_peer_retries: 3
+uptime_kuma_peer_retry_interval: 60

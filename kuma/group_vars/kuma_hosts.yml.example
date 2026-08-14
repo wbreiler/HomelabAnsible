@@ -1,0 +1,51 @@
+---
+# Shared across every Mini PC in the kuma_hosts group. Anything
+# location-specific (monitors, groups, peers, the Cloudflare Tunnel token)
+# lives in host_vars/<hostname>.yml and host_vars/<hostname>/vault.yml
+# instead — see the README.
+
+apt_auto_update_reboot: false
+apt_auto_update_reboot_time: "03:30"
+
+# Store the real value in vault.yml. One reusable Tailscale auth key
+# provisions every Mini PC.
+tailscale_auth_key: ""
+
+uptime_kuma_version: "1.23.16"
+uptime_kuma_port: 3001
+uptime_kuma_admin_username: admin
+# The admin password lives in vault.yml as uptime_kuma_admin_password,
+# shared by every instance so one login works everywhere.
+
+# Set true to let Kuma monitor local Docker containers. Grants the
+# container the host's Docker socket (root-equivalent access).
+uptime_kuma_monitor_docker_containers: false
+
+# Two Discord notification tiers, same webhook/thread: uptime_kuma_notification_name
+# includes the mention/ping below, uptime_kuma_info_notification_name doesn't.
+# Each monitor picks its tier with an optional `critical: false` (default
+# true). Leave the webhook blank to skip notification setup entirely.
+uptime_kuma_notification_name: "Discord"
+uptime_kuma_info_notification_name: "Discord (Info)"
+uptime_kuma_discord_webhook_url: ""
+# Optional: prefixes uptime_kuma_notification_name's alerts with a
+# mention/ping (e.g. "<@123...>"). Never applied to the Info tier.
+uptime_kuma_discord_prefix_message: ""
+# Optional: post to a specific existing Discord thread instead of the
+# channel directly. Leave blank to send to the channel. Applies to both tiers.
+uptime_kuma_discord_thread_id: ""
+
+# Deployed identically to every Mini PC -- each site checks the same shared
+# infra independently (redundant against one site's local flakiness), but
+# only the host with uptime_kuma_is_primary_notifier: true actually pages
+# for these. See host_vars/example/vars.yml.example and the README.
+uptime_kuma_shared_groups:
+  - name: "Shared Infra"
+
+uptime_kuma_shared_monitors:
+  - name: "Example shared service"
+    type: http
+    url: "https://shared.example.internal"
+    group: "Shared Infra"
+    interval: 60
+    # critical: false  # uncomment to route to the Info tier instead

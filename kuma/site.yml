@@ -1,0 +1,28 @@
+---
+- name: Configure Uptime Kuma hosts
+  hosts: kuma_hosts
+  gather_facts: true
+  become: true
+  vars_files:
+    - vault.yml
+
+  roles:
+    - role: apt_auto_update
+      tags:
+        - apt_auto_update
+
+    - role: tailscale
+      tags:
+        - tailscale
+
+    - role: cloudflared
+      tags:
+        - cloudflared
+
+    - role: quorum_relay
+      tags:
+        - quorum_relay
+
+    - role: uptime_kuma
+      tags:
+        - uptime_kuma

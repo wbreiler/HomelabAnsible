@@ -1,0 +1,6 @@
+---
+# Encrypt the copied file with:
+#   ansible-vault encrypt host_vars/<hostname>/vault.yml
+# Each Mini PC gets its own Cloudflare Tunnel, so this token is per-host
+# (unlike the shared secrets in the top-level vault.yml).
+cloudflared_tunnel_token: "CHANGE_ME"

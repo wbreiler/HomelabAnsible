@@ -1,0 +1,49 @@
+---
+# Copy this directory to host_vars/<hostname>/ for each Mini PC in
+# inventory.yml (see the README's "Adding a Mini PC" section).
+
+# A short label for this site, used in group/monitor names below.
+uptime_kuma_location: "CHANGE_ME"
+
+# Exactly one Mini PC across the whole fleet should set this true -- that's
+# the one that pages for group_vars/kuma_hosts.yml's
+# uptime_kuma_shared_monitors. Leave false here for every other site.
+uptime_kuma_is_primary_notifier: false
+
+uptime_kuma_groups:
+  - name: "CHANGE_ME Homelab"
+
+# type is one of Kuma's own monitor types: http, port, ping, keyword, dns,
+# docker, ... Fields beyond name/type/group match that type's Kuma fields
+# (e.g. url for http; hostname+port for port/ping). Only put things here
+# that this specific site should monitor -- shared infra that every site
+# checks belongs in group_vars/kuma_hosts.yml's uptime_kuma_shared_monitors
+# instead, not duplicated here.
+uptime_kuma_monitors:
+  - name: "Example local service"
+    type: http
+    url: "https://example.internal"
+    group: "CHANGE_ME Homelab"
+    interval: 60
+    # critical: false  # uncomment to page without a mention (Discord Info tier)
+
+# Sibling Mini PCs this instance should watch over Tailscale. The role adds
+# a "<name> (peer)" monitor per entry with notifications on, so each site
+# finds out when another goes dark. `location` must match that peer's own
+# uptime_kuma_location exactly -- it's how quorum votes get matched up
+# below. `is_primary: true` on exactly one peer entry (or
+# uptime_kuma_is_primary_notifier: true on that peer's own host) marks
+# which site the quorum relay pages through.
+uptime_kuma_peers: []
+# uptime_kuma_peers:
+#   - name: "TX Mini PC"
+#     location: "TX"
+#     tailscale_ip: "100.x.x.x"
+#     is_primary: false
+
+# Off by default. Flip true on every site once all 3 quorum sites exist and
+# every site's uptime_kuma_peers lists the other two: shared monitors then
+# only page once a majority of sites agree, instead of one static primary
+# deciding alone. See the README's "Three or more sites" section and
+# kuma/HANDOFF.md.
+uptime_kuma_quorum_relay_enabled: false

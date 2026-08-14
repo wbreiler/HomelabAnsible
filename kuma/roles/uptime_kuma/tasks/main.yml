@@ -1,0 +1,167 @@
+---
+- name: Validate Uptime Kuma configuration
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - uptime_kuma_admin_username | length > 0
+      - uptime_kuma_admin_password | default('') | length >= 8
+      - "'CHANGE_ME' not in uptime_kuma_admin_password | default('')"
+      - >-
+        uptime_kuma_discord_webhook_url | length == 0 or
+        uptime_kuma_discord_webhook_url is
+        match('^https://([a-z]+\.)?discord(app)?\.com/api/webhooks/')
+    fail_msg: >-
+      Uptime Kuma requires a pinned x.y.z version, a unique admin password of
+      at least 8 characters, and (if set) a Discord HTTPS webhook.
+    quiet: true
+  no_log: true
+
+- name: Install Docker and the configuration client's build dependencies
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - python3-docker
+      - python3-venv
+      - python3-pip
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Create Uptime Kuma data directory
+  ansible.builtin.file:
+    path: "{{ uptime_kuma_data_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy Uptime Kuma container
+  community.docker.docker_container:
+    name: uptime-kuma
+    image: "louislam/uptime-kuma:{{ uptime_kuma_version }}"
+    pull: true
+    state: started
+    restart_policy: unless-stopped
+    ports:
+      - "{{ uptime_kuma_port }}:3001"
+    volumes: >-
+      {{
+        [uptime_kuma_data_dir ~ ':/app/data'] +
+        (['/var/run/docker.sock:/var/run/docker.sock:ro'] if uptime_kuma_monitor_docker_containers else [])
+      }}
+
+- name: Wait for Uptime Kuma to answer
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ uptime_kuma_port }}"
+    status_code:
+      - 200
+      - 301
+      - 302
+  register: uptime_kuma_health
+  until: uptime_kuma_health is success
+  retries: 30
+  delay: 2
+
+- name: Install the Uptime Kuma configuration client
+  ansible.builtin.pip:
+    name: "uptime_kuma_api>=1.0.0,<2.0.0"
+    virtualenv: "{{ uptime_kuma_configure_dir }}/venv"
+    virtualenv_command: python3 -m venv
+
+- name: Install the configuration script
+  ansible.builtin.copy:
+    src: configure.py
+    dest: "{{ uptime_kuma_configure_dir }}/configure.py"
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Reset accumulated peer monitors
+  ansible.builtin.set_fact:
+    uptime_kuma_peer_monitors: []
+
+- name: Build a watchdog monitor per sibling Mini PC
+  ansible.builtin.set_fact:
+    uptime_kuma_peer_monitors: >-
+      {{
+        uptime_kuma_peer_monitors + [{
+          'name': item.name ~ ' (peer)',
+          'type': 'http',
+          'url': 'http://' ~ item.tailscale_ip ~ ':' ~ uptime_kuma_port,
+          'group': 'Peers',
+          'interval': 60,
+          'retries': uptime_kuma_peer_retries,
+          'retryInterval': uptime_kuma_peer_retry_interval
+        }]
+      }}
+  loop: "{{ uptime_kuma_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Reset resolved shared monitors
+  ansible.builtin.set_fact:
+    uptime_kuma_shared_monitors_resolved: []
+
+- name: Resolve each shared monitor's notification tier
+  ansible.builtin.set_fact:
+    uptime_kuma_shared_monitors_resolved: >-
+      {{
+        uptime_kuma_shared_monitors_resolved + [
+          item | combine({'notify': (
+            'Quorum Relay' if uptime_kuma_quorum_relay_enabled
+            else (
+              (uptime_kuma_notification_name if item.critical | default(true) else uptime_kuma_info_notification_name)
+              if uptime_kuma_is_primary_notifier else false
+            )
+          )})
+        ]
+      }}
+  loop: "{{ uptime_kuma_shared_monitors }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Reset resolved site-specific monitors
+  ansible.builtin.set_fact:
+    uptime_kuma_monitors_resolved: []
+
+- name: Resolve each site-specific monitor's notification tier
+  ansible.builtin.set_fact:
+    uptime_kuma_monitors_resolved: >-
+      {{
+        uptime_kuma_monitors_resolved + [
+          item | combine({'notify': (
+            uptime_kuma_notification_name if item.critical | default(true) else uptime_kuma_info_notification_name
+          )})
+        ]
+      }}
+  loop: "{{ uptime_kuma_monitors }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Render desired configuration state
+  ansible.builtin.template:
+    src: desired_state.json.j2
+    dest: "{{ uptime_kuma_configure_dir }}/desired_state.json"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Reconcile Uptime Kuma admin user, notification, groups, and monitors
+  ansible.builtin.command:
+    argv:
+      - "{{ uptime_kuma_configure_dir }}/venv/bin/python3"
+      - "{{ uptime_kuma_configure_dir }}/configure.py"
+      - --url
+      - "http://127.0.0.1:{{ uptime_kuma_port }}"
+      - --state
+      - "{{ uptime_kuma_configure_dir }}/desired_state.json"
+  register: uptime_kuma_reconcile
+  changed_when: (uptime_kuma_reconcile.stdout | from_json).changed
+  no_log: true

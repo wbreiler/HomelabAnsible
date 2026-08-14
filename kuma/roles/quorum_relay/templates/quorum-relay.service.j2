@@ -1,0 +1,17 @@
+[Unit]
+Description=Uptime Kuma quorum relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 {{ uptime_kuma_quorum_relay_dir }}/quorum_relay.py {{ uptime_kuma_quorum_relay_dir }}/config.json
+Restart=on-failure
+RestartSec=5
+User=root
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths={{ uptime_kuma_quorum_relay_dir }}
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,0 @@
----
-- name: Restart OctoPrint
-  ansible.builtin.service:
-    name: "{{ octoprint_service }}"
-    state: restarted

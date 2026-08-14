@@ -1,0 +1,32 @@
+---
+all:
+  children:
+    # Proxmox hypervisors for any x86 Mini PC site -- separate from
+    # kuma_hosts below since it's a different machine than the LXC Kuma
+    # runs in. Bootstrap with bootstrap-lxc.yml before that site's
+    # kuma_hosts entry exists. See the README's "Proxmox-hosted sites"
+    # section. Not needed for ARM (e.g. a Raspberry Pi) sites -- those run
+    # bare metal, straight into kuma_hosts.
+    pve_hosts:
+      hosts:
+        ms-pve:
+          ansible_host: 10.0.0.10
+      vars:
+        ansible_user: root
+
+    kuma_hosts:
+      hosts:
+        ms:
+          ansible_host: 10.0.0.50
+        # Uncomment once each additional site is deployed. ms/tx: the
+        # LXC's IP (assigned by bootstrap-lxc.yml), not the pve_hosts entry
+        # above. Also copy host_vars/example (as a directory) to
+        # host_vars/<hostname> -- see the README's "Adding a Mini PC"
+        # section.
+        # tx:
+        #   ansible_host: 10.0.1.50
+        # third:
+        #   ansible_host: 10.0.2.50
+      vars:
+        ansible_user: CHANGE_ME
+        ansible_python_interpreter: /usr/bin/python3

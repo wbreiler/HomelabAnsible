@@ -1,0 +1,69 @@
+{% set relay_active = uptime_kuma_quorum_relay_enabled %}
+{{
+  {
+    "admin_username": uptime_kuma_admin_username,
+    "admin_password": uptime_kuma_admin_password,
+    "notifications": (
+      [
+        {
+          "name": uptime_kuma_notification_name,
+          "type": "discord",
+          "isDefault": true,
+          "config": {
+            "discordWebhookUrl": uptime_kuma_discord_webhook_url,
+            "discordPrefixMessage": uptime_kuma_discord_prefix_message,
+            "discordChannelType": (
+              "postToThread" if uptime_kuma_discord_thread_id | length > 0 else "channel"
+            ),
+            "threadId": uptime_kuma_discord_thread_id,
+            "disableUrl": false,
+            "discordSuppressNotifications": false,
+            "discordMessageFormat": "normal",
+            "applyExisting": true
+          }
+        },
+        {
+          "name": uptime_kuma_info_notification_name,
+          "type": "discord",
+          "isDefault": false,
+          "config": {
+            "discordWebhookUrl": uptime_kuma_discord_webhook_url,
+            "discordPrefixMessage": "",
+            "discordChannelType": (
+              "postToThread" if uptime_kuma_discord_thread_id | length > 0 else "channel"
+            ),
+            "threadId": uptime_kuma_discord_thread_id,
+            "disableUrl": false,
+            "discordSuppressNotifications": false,
+            "discordMessageFormat": "normal",
+            "applyExisting": true
+          }
+        }
+      ] if uptime_kuma_discord_webhook_url | length > 0 else []
+    ) + (
+      [
+        {
+          "name": "Quorum Relay",
+          "type": "webhook",
+          "isDefault": false,
+          "config": {
+            "webhookURL": "http://127.0.0.1:" ~ uptime_kuma_quorum_relay_port ~ "/notify",
+            "webhookContentType": "json"
+          }
+        }
+      ] if relay_active else []
+    ),
+    "groups": uptime_kuma_groups + uptime_kuma_shared_groups + (
+      [{"name": "Peers"}] if uptime_kuma_peers | length > 0 else []
+    ),
+    "monitors": (
+      uptime_kuma_shared_monitors_resolved
+    ) + (
+      uptime_kuma_monitors_resolved
+    ) + (
+      uptime_kuma_peer_monitors
+      | map('combine', {'notify': uptime_kuma_notification_name})
+      | list
+    )
+  } | to_nice_json
+}}

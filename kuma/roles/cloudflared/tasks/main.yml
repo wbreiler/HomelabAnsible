@@ -1,0 +1,94 @@
+---
+- name: Validate Cloudflare Tunnel configuration
+  ansible.builtin.assert:
+    that:
+      - cloudflared_tunnel_token | length > 0
+    fail_msg: >-
+      Set cloudflared_tunnel_token (the token from the Cloudflare Zero Trust
+      tunnel dashboard) in the vault-encrypted group variables.
+    quiet: true
+  no_log: true
+
+- name: Download Cloudflare GPG key
+  ansible.builtin.get_url:
+    url: https://pkg.cloudflare.com/cloudflare-main.gpg
+    dest: /usr/share/keyrings/cloudflare-main.gpg
+    mode: "0644"
+
+- name: Install deb822 repository dependency
+  ansible.builtin.apt:
+    name: python3-debian
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Add Cloudflare repository
+  ansible.builtin.deb822_repository:
+    name: cloudflared
+    types:
+      - deb
+    uris:
+      - https://pkg.cloudflare.com/cloudflared
+    suites:
+      - "{{ ansible_distribution_release }}"
+    components:
+      - main
+    signed_by: /usr/share/keyrings/cloudflare-main.gpg
+    state: present
+
+- name: Update apt cache for cloudflared
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install cloudflared
+  ansible.builtin.apt:
+    name: cloudflared
+    state: present
+
+- name: Read installed tunnel token marker
+  ansible.builtin.slurp:
+    path: /etc/cloudflared/.token-hash
+  register: cloudflared_token_marker
+  failed_when: false
+  no_log: true
+
+# cloudflared has no "update the running token" command, so a token change
+# is applied by reinstalling the service with the new token.
+- name: Reinstall the tunnel when the token changes
+  no_log: true
+  when: >-
+    cloudflared_token_marker.content is not defined or
+    (cloudflared_token_marker.content | b64decode) != (cloudflared_tunnel_token | hash('sha256'))
+  block:
+    - name: Remove the previous tunnel service
+      ansible.builtin.command:
+        argv:
+          - cloudflared
+          - service
+          - uninstall
+      register: cloudflared_uninstall
+      changed_when: cloudflared_uninstall.rc == 0
+      failed_when: false
+
+    - name: Install the tunnel service with the current token
+      ansible.builtin.command:
+        argv:
+          - cloudflared
+          - service
+          - install
+          - "{{ cloudflared_tunnel_token }}"
+      changed_when: true
+
+    - name: Record the installed tunnel token
+      ansible.builtin.copy:
+        content: "{{ cloudflared_tunnel_token | hash('sha256') }}"
+        dest: /etc/cloudflared/.token-hash
+        owner: root
+        group: root
+        mode: "0600"
+
+- name: Ensure the tunnel service is enabled and running
+  ansible.builtin.systemd_service:
+    name: cloudflared
+    state: started
+    enabled: true

@@ -1,0 +1,11 @@
+// Managed by Ansible (apt_auto_update role). Kept separate from the
+// distro-shipped 50unattended-upgrades so package upgrades don't silently
+// overwrite this policy.
+Unattended-Upgrade::Origins-Pattern {
+{% for origin in apt_auto_update_origins %}
+    "{{ origin }}";
+{% endfor %}
+};
+Unattended-Upgrade::Remove-Unused-Dependencies "{{ apt_auto_update_remove_unused | lower }}";
+Unattended-Upgrade::Automatic-Reboot "{{ apt_auto_update_reboot | lower }}";
+Unattended-Upgrade::Automatic-Reboot-Time "{{ apt_auto_update_reboot_time }}";

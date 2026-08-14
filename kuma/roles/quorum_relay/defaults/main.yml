@@ -1,0 +1,17 @@
+---
+# Named uptime_kuma_* (not quorum_relay_*) because the uptime_kuma role's
+# templates read these directly too, to wire monitors' notifications to
+# this relay -- one shared source of truth instead of two copies to keep in
+# sync.
+# Off until all 3 quorum sites exist -- see kuma/HANDOFF.md.
+uptime_kuma_quorum_relay_enabled: false  # noqa: var-naming[no-role-prefix]
+uptime_kuma_quorum_relay_port: 3002  # noqa: var-naming[no-role-prefix]
+uptime_kuma_quorum_relay_dir: /opt/uptime-kuma-quorum-relay  # noqa: var-naming[no-role-prefix]
+
+# Majority of known sites must agree before paging -- no split-brain risk,
+# needs 3+ sites (2 sites can only tie).
+
+# How long a site's vote counts before it's treated as stale/abstaining.
+# Should comfortably exceed the shared monitors' check interval so a normal
+# check cycle doesn't age a vote out mid-count.
+uptime_kuma_quorum_relay_staleness_seconds: 600  # noqa: var-naming[no-role-prefix]

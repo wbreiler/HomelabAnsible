@@ -1,0 +1,34 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install unattended-upgrades
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+
+- name: Configure automatic upgrade policy
+  ansible.builtin.template:
+    src: 51-homelab-auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/51-homelab-auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "apt-config -c %s dump"
+
+- name: Enable periodic apt updates
+  ansible.builtin.template:
+    src: 20auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "apt-config -c %s dump"
+
+- name: Enable and start unattended-upgrades
+  ansible.builtin.systemd_service:
+    name: unattended-upgrades
+    state: started
+    enabled: true

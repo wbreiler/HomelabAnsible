@@ -1,0 +1,120 @@
+---
+- name: Validate quorum relay configuration
+  when: uptime_kuma_quorum_relay_enabled
+  block:
+    - name: Require a site location and at least one peer
+      ansible.builtin.assert:
+        that:
+          - uptime_kuma_location | default('') | length > 0
+          - uptime_kuma_peers | length > 0
+          - uptime_kuma_peers | map(attribute='location', default='') | select('length', 'ge', 1) | list | length == uptime_kuma_peers | length
+          - uptime_kuma_peers | map(attribute='tailscale_ip', default='') | select('length', 'ge', 1) | list | length == uptime_kuma_peers | length
+        fail_msg: >-
+          Quorum relay needs uptime_kuma_location set and every
+          uptime_kuma_peers entry to have both location and tailscale_ip --
+          location must match that peer's own uptime_kuma_location.
+
+    - name: Require at least 2 peers
+      ansible.builtin.assert:
+        that: uptime_kuma_peers | length >= 2
+        fail_msg: >-
+          Quorum voting needs 3+ total sites (this one + 2 peers) for
+          majority voting to mean anything -- 2 sites can only tie.
+
+    - name: Require exactly one primary among this site and its peers
+      ansible.builtin.assert:
+        that: >-
+          (uptime_kuma_peers | selectattr('is_primary', 'defined') | selectattr('is_primary') | list | length)
+          + (1 if uptime_kuma_is_primary_notifier else 0) == 1
+        fail_msg: >-
+          Exactly one quorum site must be the primary: either this host has
+          uptime_kuma_is_primary_notifier: true, or exactly one entry in
+          uptime_kuma_peers has is_primary: true -- not both, not neither.
+
+    - name: Require a Discord webhook on the primary
+      ansible.builtin.assert:
+        that: uptime_kuma_discord_webhook_url | length > 0
+        fail_msg: "The quorum primary needs uptime_kuma_discord_webhook_url set."
+      when: uptime_kuma_is_primary_notifier
+      no_log: true
+
+- name: Deploy quorum relay
+  when: uptime_kuma_quorum_relay_enabled
+  block:
+    - name: Create quorum relay directory
+      ansible.builtin.file:
+        path: "{{ uptime_kuma_quorum_relay_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Install quorum relay script
+      ansible.builtin.copy:
+        src: quorum_relay.py
+        dest: "{{ uptime_kuma_quorum_relay_dir }}/quorum_relay.py"
+        owner: root
+        group: root
+        mode: "0700"
+      notify: Restart quorum relay
+
+    - name: Render quorum relay configuration
+      ansible.builtin.template:
+        src: config.json.j2
+        dest: "{{ uptime_kuma_quorum_relay_dir }}/config.json"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+      notify: Restart quorum relay
+
+    - name: Install quorum relay service
+      ansible.builtin.template:
+        src: quorum-relay.service.j2
+        dest: /etc/systemd/system/quorum-relay.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart quorum relay
+
+    - name: Enable and start quorum relay
+      ansible.builtin.systemd_service:
+        name: quorum-relay
+        daemon_reload: true
+        state: started
+        enabled: true
+
+    - name: Apply quorum relay changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify quorum relay is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - --quiet
+          - quorum-relay
+      changed_when: false
+
+- name: Remove quorum relay when disabled
+  when: not uptime_kuma_quorum_relay_enabled
+  block:
+    - name: Check for an existing quorum relay service
+      ansible.builtin.stat:
+        path: /etc/systemd/system/quorum-relay.service
+      register: quorum_relay_unit
+
+    - name: Stop and remove the quorum relay service
+      when: quorum_relay_unit.stat.exists
+      block:
+        - name: Stop and disable quorum relay
+          ansible.builtin.systemd_service:
+            name: quorum-relay
+            state: stopped
+            enabled: false
+
+        - name: Remove quorum relay service file
+          ansible.builtin.file:
+            path: /etc/systemd/system/quorum-relay.service
+            state: absent
+          notify: Reload systemd after removing quorum relay

@@ -1,0 +1,10 @@
+---
+- name: Restart quorum relay
+  ansible.builtin.systemd_service:
+    name: quorum-relay
+    daemon_reload: true
+    state: restarted
+
+- name: Reload systemd after removing quorum relay
+  ansible.builtin.systemd_service:
+    daemon_reload: true

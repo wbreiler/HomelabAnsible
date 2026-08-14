@@ -1,0 +1,20 @@
+{{
+  {
+    "site_name": uptime_kuma_location,
+    "port": uptime_kuma_quorum_relay_port,
+    "is_primary": uptime_kuma_is_primary_notifier,
+    "primary_url": (
+      "http://127.0.0.1:" ~ uptime_kuma_quorum_relay_port
+      if uptime_kuma_is_primary_notifier
+      else "http://" ~ (
+        uptime_kuma_peers | selectattr('is_primary', 'defined') | selectattr('is_primary')
+        | map(attribute='tailscale_ip') | first | default('')
+      ) ~ ":" ~ uptime_kuma_quorum_relay_port
+    ),
+    "known_sites": [uptime_kuma_location] + (uptime_kuma_peers | map(attribute='location') | list),
+    "staleness_seconds": uptime_kuma_quorum_relay_staleness_seconds,
+    "discord_webhook_url": (
+      uptime_kuma_discord_webhook_url if uptime_kuma_is_primary_notifier else ""
+    )
+  } | to_nice_json
+}}

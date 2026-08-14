@@ -1,0 +1,16 @@
+---
+apt_auto_update_reboot: false
+apt_auto_update_reboot_time: "03:30"
+apt_auto_update_remove_unused: true
+
+# Covers Debian, Ubuntu, and Raspberry Pi OS -- hardware for a given site
+# is whatever's on hand (Mini PC or Raspberry Pi) at deploy time. Extra,
+# non-matching patterns are harmless on whichever ones aren't installed.
+apt_auto_update_origins:
+  - "origin=Debian,codename=${distro_codename},label=Debian-Security"
+  - "origin=Debian,codename=${distro_codename}-security,label=Debian-Security"
+  - "origin=Debian,codename=${distro_codename},label=Debian"
+  - "origin=Ubuntu,codename=${distro_codename},label=Ubuntu-Security"
+  - "origin=Ubuntu,codename=${distro_codename}-security,label=Ubuntu"
+  - "origin=Raspbian,codename=${distro_codename},label=Raspbian"
+  - "origin=Raspberry Pi Foundation,codename=${distro_codename},label=Raspberry Pi Foundation"

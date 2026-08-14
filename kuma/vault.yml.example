@@ -1,0 +1,15 @@
+---
+# Encrypt the copied file with:
+#   ansible-vault encrypt vault.yml
+# Secrets shared by every site/host. The Cloudflare Tunnel token is
+# per-Kuma-host instead -- see host_vars/example/vault.yml.example. PBS
+# credentials are per-Proxmox-host instead -- see
+# host_vars/pve-example/vault.yml.example.
+uptime_kuma_admin_password: CHANGE_ME_USE_A_LONG_UNIQUE_PASSWORD
+tailscale_auth_key: "tskey-auth-CHANGE_ME"
+uptime_kuma_discord_webhook_url: "https://discord.com/api/webhooks/CHANGE_ME"
+
+# PBS's own TLS cert fingerprint -- a property of the server, not a
+# per-account credential, so it's shared across both Proxmox-hosted sites
+# unlike the username/password below.
+pve_backup_pbs_fingerprint: "CHANGE_ME"
