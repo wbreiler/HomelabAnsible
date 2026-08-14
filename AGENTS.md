@@ -57,11 +57,11 @@ exact action.
    templates use the `*.yml.example` suffix and remain tracked. Reusable
    Ansible implementation files—playbooks, roles, tasks, handlers, defaults,
    and requirements—remain tracked as ordinary `.yml`. Check `git status`
-   before every commit. OctoPi stores its vault password outside the repository
-   at `~/.config/ansible/vault-passwords/octopi`.
+   before every commit. `kuma/` stores its vault password outside the repository
+   at `~/.config/ansible/vault-passwords/kuma`.
 2. **Always commit completed changes, but never push.** Create a separate,
    scoped commit for each top-level project directory changed (`proxmox/`,
-   `pbs/`, `minecraft/`, `truenas/`, `arista/`, `octopi/`, `desktop/`, or
+   `pbs/`, `minecraft/`, `truenas/`, `arista/`, `kuma/`, `desktop/`, or
    `mac/`). Keep root-level policy or documentation changes in their own
    commit. The user pushes.
 3. **VMID 300 is reserved** (DiscoPanel on prometheus). New Minecraft servers

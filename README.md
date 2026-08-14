@@ -13,7 +13,7 @@ and Minecraft server LXCs.
 | [`minecraft/`](minecraft/) | Minecraft server LXC provisioning via the Proxmox API + nightly Modrinth/CurseForge modpack update script | [README](minecraft/README.md) |
 | [`truenas/`](truenas/) | TrueNAS host `erebus`: full desired-state config (users, datasets, shares, services, apps) via middleware APIs, with read-only discovery and audit playbooks | [README](truenas/README.md) |
 | [`arista/`](arista/) | Core switch (Arista DCS-7050SX-64): incremental, explicitly scoped desired-state management | [README](arista/README.md) |
-| [`octopi/`](octopi/) | OctoPi appliance: printer profile, OctoPrint users, plugins, and plugin settings | [README](octopi/README.md) |
+| [`kuma/`](kuma/) | Uptime Kuma on one or more Mini PCs (multi-site, cross-monitored over Tailscale): Docker deploy, monitors/groups/notifications, Cloudflare Tunnel, apt auto-update | [README](kuma/README.md) |
 | [`desktop/`](desktop/) | Windows 11 gaming PC (`gaming-pc`) over Windows OpenSSH: apps, updates, SMB mapping | [README](desktop/README.md) |
 | [`mac/`](mac/) | macOS fresh-install provisioning: Homebrew, Mac App Store apps, dotfiles, system defaults | [README](mac/README.md) |
 
@@ -37,8 +37,8 @@ cd minecraft/ansible && \
 # TrueNAS (audit first; convergence is site.yml)
 cd truenas && ansible-playbook playbooks/audit.yml
 
-# OctoPi
-cd octopi && ansible-playbook site.yml
+# Uptime Kuma Mini PC(s)
+cd kuma && ansible-playbook site.yml
 
 # Gaming PC
 cd desktop && ansible-playbook site.yml --ask-pass --ask-vault-pass
@@ -71,9 +71,10 @@ tracked as ordinary `.yml` because they are implementation code:
   inventory/desired-state files are deliberately sanitized (no hashes/secrets)
 - `arista/inventory.yml`, `arista/group_vars/arista.yml`, `.vault_pass`, and
   discovery artifacts — gitignored; copy the tracked examples before use
-- `octopi/inventory.yml`, `octopi/group_vars/octopi_servers.yml`, and
-  `octopi/vault.yml` — gitignored; the vault password lives outside the repository
-  at `~/.config/ansible/vault-passwords/octopi`
+- `kuma/inventory.yml`, `kuma/group_vars/kuma_hosts.yml`, `kuma/vault.yml`,
+  and each `kuma/host_vars/<hostname>/{vars,vault}.yml` — gitignored; the
+  vault password lives outside the repository at
+  `~/.config/ansible/vault-passwords/kuma`
 - `desktop/inventory/hosts.yml` and `desktop/group_vars/gaming_pc/vault.yml` —
   gitignored; copy their tracked `*.yml.example` files first, then
   `ansible-vault encrypt` the vault file

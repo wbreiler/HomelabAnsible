@@ -37,9 +37,12 @@
 /arista/group_vars/arista.yml
 /arista/.vault_pass
 
-/octopi/inventory.yml
-/octopi/group_vars/octopi_servers.yml
-/octopi/vault.yml
+/kuma/inventory.yml
+/kuma/group_vars/kuma_hosts.yml
+/kuma/group_vars/pve_hosts.yml
+/kuma/vault.yml
+/kuma/host_vars/*/vars.yml
+/kuma/host_vars/*/vault.yml
 
 /desktop/inventory/hosts.yml
 /desktop/group_vars/gaming_pc/vault.yml
