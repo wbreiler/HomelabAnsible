@@ -14,6 +14,8 @@ and Minecraft server LXCs.
 | [`truenas/`](truenas/) | TrueNAS host `erebus`: full desired-state config (users, datasets, shares, services, apps) via middleware APIs, with read-only discovery and audit playbooks | [README](truenas/README.md) |
 | [`arista/`](arista/) | Core switch (Arista DCS-7050SX-64): incremental, explicitly scoped desired-state management | [README](arista/README.md) |
 | [`octopi/`](octopi/) | OctoPi appliance: printer profile, OctoPrint users, plugins, and plugin settings | [README](octopi/README.md) |
+| [`desktop/`](desktop/) | Windows 11 gaming PC (`gaming-pc`) over Windows OpenSSH: apps, updates, SMB mapping | [README](desktop/README.md) |
+| [`mac/`](mac/) | macOS fresh-install provisioning: Homebrew, Mac App Store apps, dotfiles, system defaults | [README](mac/README.md) |
 
 Each project is self-contained: it has its own `ansible.cfg`, inventory, and
 vault, and is run from inside its own directory. There is no shared root
@@ -37,6 +39,12 @@ cd truenas && ansible-playbook playbooks/audit.yml
 
 # OctoPi
 cd octopi && ansible-playbook site.yml
+
+# Gaming PC
+cd desktop && ansible-playbook site.yml --ask-pass --ask-vault-pass
+
+# Mac
+cd mac && make run
 ```
 
 See each project's README for setup (copying `*.yml.example` files, vault
@@ -66,6 +74,11 @@ tracked as ordinary `.yml` because they are implementation code:
 - `octopi/inventory.yml`, `octopi/group_vars/octopi_servers.yml`, and
   `octopi/vault.yml` — gitignored; the vault password lives outside the repository
   at `~/.config/ansible/vault-passwords/octopi`
+- `desktop/inventory/hosts.yml` and `desktop/group_vars/gaming_pc/vault.yml` —
+  gitignored; copy their tracked `*.yml.example` files first, then
+  `ansible-vault encrypt` the vault file
+- `mac/` has no vault: it manages only a local macOS user account, and
+  `mac/.claude/` (local Claude Code settings) is gitignored
 
 Before committing, run `git status` and confirm none of the above appear.
 

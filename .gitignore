@@ -41,6 +41,11 @@
 /octopi/group_vars/octopi_servers.yml
 /octopi/vault.yml
 
+/desktop/inventory/hosts.yml
+/desktop/group_vars/gaming_pc/vault.yml
+
+/mac/.claude/
+
 # Python
 __pycache__/
 *.pyc

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for AI agents working in this monorepo. It merges three formerly
+Guidance for AI agents working in this monorepo. It merges several formerly
 separate repos; each subdirectory is a self-contained Ansible project run from
 inside its own directory.
 
@@ -28,6 +28,10 @@ inside its own directory.
   cluster at once. Config changes require explicit user approval; management
   access is in-band (Vlan1 SVI), so never touch Vlan1, Et1 (uplink), or the
   admin account without a confirmed out-of-band path.
+- `desktop/` — Windows 11 gaming PC (`gaming-pc`) over Windows OpenSSH
+  (`desktop/README.md`).
+- `mac/` — macOS fresh-install provisioning, runs on `localhost` only, no
+  inventory (`mac/CLAUDE.md`).
 
 Always `cd` into the project directory before running ansible — each has its
 own `ansible.cfg` (inventory, SSH key, become settings) that only applies from
@@ -57,8 +61,9 @@ exact action.
    at `~/.config/ansible/vault-passwords/octopi`.
 2. **Always commit completed changes, but never push.** Create a separate,
    scoped commit for each top-level project directory changed (`proxmox/`,
-   `pbs/`, `minecraft/`, `truenas/`, or `arista/`). Keep root-level policy or
-   documentation changes in their own commit. The user pushes.
+   `pbs/`, `minecraft/`, `truenas/`, `arista/`, `octopi/`, `desktop/`, or
+   `mac/`). Keep root-level policy or documentation changes in their own
+   commit. The user pushes.
 3. **VMID 300 is reserved** (DiscoPanel on prometheus). New Minecraft servers
    start at 301+. Managed app LXCs live in 100–119.
 4. **LXCs are unprivileged** unless they NFS-mount. The `gallery_dl` LXC is privileged.
