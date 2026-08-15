@@ -10,7 +10,7 @@ apt_auto_update_reboot_time: "03:30"
 # provisions every Mini PC.
 tailscale_auth_key: ""
 
-uptime_kuma_version: "1.23.16"
+uptime_kuma_version: "2"
 uptime_kuma_port: 3001
 uptime_kuma_admin_username: admin
 # The admin password lives in vault.yml as uptime_kuma_admin_password,

@@ -2,7 +2,7 @@
 - name: Validate Uptime Kuma configuration
   ansible.builtin.assert:
     that:
-      - uptime_kuma_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - uptime_kuma_version == '2' or uptime_kuma_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
       - uptime_kuma_admin_username | length > 0
       - uptime_kuma_admin_password | default('') | length >= 8
       - "'CHANGE_ME' not in uptime_kuma_admin_password | default('')"
@@ -11,18 +11,19 @@
         uptime_kuma_discord_webhook_url is
         match('^https://([a-z]+\.)?discord(app)?\.com/api/webhooks/')
     fail_msg: >-
-      Uptime Kuma requires a pinned x.y.z version, a unique admin password of
-      at least 8 characters, and (if set) a Discord HTTPS webhook.
+      Uptime Kuma requires the rolling v2 tag or a pinned x.y.z version, a
+      unique admin password of at least 8 characters, and (if set) a Discord
+      HTTPS webhook.
     quiet: true
   no_log: true
 
-- name: Install Docker and the configuration client's build dependencies
+- name: Install Docker and optional configuration client dependencies
   ansible.builtin.apt:
-    name:
-      - docker.io
-      - python3-docker
-      - python3-venv
-      - python3-pip
+    name: >-
+      {{
+        ['docker.io', 'python3-docker']
+        + (['python3-venv', 'python3-pip'] if uptime_kuma_api_reconciliation_enabled else [])
+      }}
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -73,6 +74,7 @@
     name: "uptime_kuma_api>=1.0.0,<2.0.0"
     virtualenv: "{{ uptime_kuma_configure_dir }}/venv"
     virtualenv_command: python3 -m venv
+  when: uptime_kuma_api_reconciliation_enabled
 
 - name: Install the configuration script
   ansible.builtin.copy:
@@ -81,6 +83,7 @@
     owner: root
     group: root
     mode: "0700"
+  when: uptime_kuma_api_reconciliation_enabled
 
 - name: Reset accumulated peer monitors
   ansible.builtin.set_fact:
@@ -151,6 +154,7 @@
     owner: root
     group: root
     mode: "0600"
+  when: uptime_kuma_api_reconciliation_enabled
   no_log: true
 
 - name: Reconcile Uptime Kuma admin user, notification, groups, and monitors
@@ -169,4 +173,5 @@
       | default('{"changed": false}', true)
       | from_json
     ).changed
+  when: uptime_kuma_api_reconciliation_enabled
   no_log: true

@@ -305,23 +305,24 @@ entirely — no providers get created either way.
 
 ## Docker image updates
 
-`uptime_kuma_version` is a pinned image tag, not `latest` — Ansible won't
-silently move it out from under a working deployment. To find out when a
-newer Uptime Kuma image is published, add it to `diun_watch_images` in
+`uptime_kuma_version` defaults to the official rolling v2 image tag, `2`.
+This follows current Uptime Kuma v2 releases without using Docker's deprecated
+`latest` tag. To track image updates, add it to `diun_watch_images` in
 `proxmox/group_vars/proxmox_cluster.yml` (the central Diun instance polls
 image registries directly, so it doesn't matter that these hosts run outside
 Proxmox):
 
 ```yaml
 diun_watch_images:
-  - name: "louislam/uptime-kuma:{{ current pinned version }}"
+  - name: "louislam/uptime-kuma:2"
     watch_repo: true
     sort_tags: "semver"
 ```
 
-Diun posts to Discord when a newer tag appears. Bump
-`uptime_kuma_version` in `group_vars/kuma_hosts.yml` and rerun
-`ansible-playbook site.yml` to pick it up on every Mini PC at once.
+The third-party `uptime_kuma_api` client used by the original role does not
+support Kuma 2, so automatic admin, notification, group, and monitor
+reconciliation is disabled by default. Complete initial configuration in the
+Kuma v2 UI.
 
 ## Monitoring Docker containers
 

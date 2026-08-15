@@ -1,8 +1,12 @@
 ---
-uptime_kuma_version: "1.23.16"
+uptime_kuma_version: "2"
 uptime_kuma_port: 3001
 uptime_kuma_data_dir: /opt/uptime-kuma/data
 uptime_kuma_configure_dir: /opt/uptime-kuma-configure
+
+# The third-party uptime_kuma_api client currently supports Kuma 1.x only.
+# Leave its desired-state reconciliation disabled for the rolling v2 image.
+uptime_kuma_api_reconciliation_enabled: false
 
 # Grants the container the Docker socket so it can monitor other local
 # containers' status. Off by default: this is root-equivalent host access.
