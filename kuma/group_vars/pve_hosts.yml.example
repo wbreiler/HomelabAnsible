@@ -9,7 +9,7 @@ bootstrap_lxc_bridge: "vmbr0"
 bootstrap_lxc_cores: 2
 bootstrap_lxc_memory: 2048
 bootstrap_lxc_disk: 16
-bootstrap_lxc_ssh_public_key: "~/.ssh/id_ed25519.pub"
+bootstrap_lxc_ssh_public_key: "~/.ssh/lxc.pub"
 
 # Store the real values in vault.yml. One reusable Tailscale auth key
 # provisions every Proxmox host too, same as the Kuma sites.

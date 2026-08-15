@@ -13,6 +13,8 @@ all:
           ansible_host: 10.0.0.10
       vars:
         ansible_user: root
+        # Whatever key is already trusted to reach the Proxmox host itself.
+        ansible_ssh_private_key_file: ~/.ssh/cluster.pub
 
     kuma_hosts:
       hosts:
@@ -25,8 +27,15 @@ all:
         # section.
         # tx:
         #   ansible_host: 10.0.1.50
+        # A bare-metal (non-LXC) site, e.g. a Raspberry Pi, overrides the
+        # group's lxc.pub default below with whatever key it actually trusts:
         # third:
         #   ansible_host: 10.0.2.50
+        #   ansible_ssh_private_key_file: ~/.ssh/cluster.pub
       vars:
         ansible_user: CHANGE_ME
         ansible_python_interpreter: /usr/bin/python3
+        # Default for this group: an LXC site is seeded with lxc.pub by
+        # bootstrap-lxc.yml (bootstrap_lxc_ssh_public_key). A bare-metal
+        # site overrides this per-host above.
+        ansible_ssh_private_key_file: ~/.ssh/lxc.pub
