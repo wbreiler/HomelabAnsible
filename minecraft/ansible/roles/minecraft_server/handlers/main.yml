@@ -4,3 +4,8 @@
 - name: Reload systemd
   ansible.builtin.systemd_service:
     daemon_reload: true
+
+- name: Restart Minecraft service
+  ansible.builtin.systemd_service:
+    name: "minecraft@{{ instance_name }}.service"
+    state: restarted

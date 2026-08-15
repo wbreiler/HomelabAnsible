@@ -550,7 +550,89 @@
   when: (ops | default([]) | length) > 0
 
 ###############################################################################
-# 11. Deploy systemd minecraft@.service template
+# 11. Optional BlueMap installation and configuration
+###############################################################################
+
+- name: Validate BlueMap resource-download acceptance
+  ansible.builtin.assert:
+    that:
+      - bluemap_accept_download | default(false) | bool
+    fail_msg: >-
+      BlueMap requires bluemap_accept_download: true to acknowledge its Mojang
+      client-resource download terms.
+  when: bluemap_enabled | default(false) | bool
+
+- name: Install checksum-verified BlueMap jar
+  ansible.builtin.get_url:
+    url: "{{ minecraft_server_bluemap_jar_url }}"
+    dest: "/opt/minecraft/mods/bluemap-{{ minecraft_server_bluemap_version }}.jar"
+    checksum: "sha512:{{ minecraft_server_bluemap_jar_sha512 }}"
+    owner: minecraft
+    group: minecraft
+    mode: "0644"
+  when: bluemap_enabled | default(false) | bool
+  notify: Restart Minecraft service
+
+- name: Find superseded BlueMap jars
+  ansible.builtin.find:
+    paths: /opt/minecraft/mods
+    patterns: "bluemap-*.jar"
+    file_type: file
+  register: minecraft_server_bluemap_existing_jars
+  when: bluemap_enabled | default(false) | bool
+
+- name: Remove superseded BlueMap jars
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ minecraft_server_bluemap_existing_jars.files | default([]) }}"
+  when:
+    - bluemap_enabled | default(false) | bool
+    - >-
+      item.path != '/opt/minecraft/mods/bluemap-'
+      ~ minecraft_server_bluemap_version ~ '.jar'
+  notify: Restart Minecraft service
+
+- name: Create BlueMap configuration directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: minecraft
+    group: minecraft
+    mode: "0755"
+  loop:
+    - /opt/minecraft/config/bluemap
+    - /opt/minecraft/config/bluemap/maps
+  when: bluemap_enabled | default(false) | bool
+
+- name: Deploy managed BlueMap configuration
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: minecraft
+    group: minecraft
+    mode: "0644"
+  loop:
+    - src: bluemap-core.conf.j2
+      dest: /opt/minecraft/config/bluemap/core.conf
+    - src: bluemap-webapp.conf.j2
+      dest: /opt/minecraft/config/bluemap/webapp.conf
+    - src: bluemap-webserver.conf.j2
+      dest: /opt/minecraft/config/bluemap/webserver.conf
+    - src: bluemap-default-map.conf.j2
+      dest: /opt/minecraft/config/bluemap/maps/default.conf
+  when: bluemap_enabled | default(false) | bool
+  notify: Restart Minecraft service
+
+- name: Remove duplicate generated Overworld map
+  ansible.builtin.file:
+    path: /opt/minecraft/config/bluemap/maps/world.conf
+    state: absent
+  when: bluemap_enabled | default(false) | bool
+  notify: Restart Minecraft service
+
+###############################################################################
+# 12. Deploy systemd minecraft@.service template
 ###############################################################################
 
 - name: Deploy minecraft@.service systemd template unit
