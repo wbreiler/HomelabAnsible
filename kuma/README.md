@@ -167,7 +167,7 @@ plain rules, plus quorum voting once there are 3+ sites:
    Put anything every site should check in `group_vars/kuma_hosts.yml`'s
    `uptime_kuma_shared_monitors` — every site gets an identical copy. Set
    `uptime_kuma_is_primary_notifier: true` on exactly one host (currently
-   `ms`, in `host_vars/ms/vars.yml`); every other site gets `false`. Only the
+   `tx`, in `host_vars/tx/vars.yml`); every other site gets `false`. Only the
    primary's copies of those monitors carry the Discord notification — every
    other site's copies still run and still show on that site's own
    dashboard, they just don't page. One real outage → one Discord message,
@@ -180,7 +180,7 @@ plain rules, plus quorum voting once there are 3+ sites:
    on each site to point at every other site's Tailscale IP:
 
    ```yaml
-   # host_vars/ms/vars.yml
+   # host_vars/tx/vars.yml
    uptime_kuma_peers:
      - name: "TN Mini PC (Greenbrier)"
        location: "TN"           # must match that peer's own uptime_kuma_location
@@ -192,11 +192,11 @@ plain rules, plus quorum voting once there are 3+ sites:
    that sibling's Kuma port over the private Tailscale link, not the public
    internet) with `uptime_kuma_peer_retries` retries before it alerts
    (default 3, one minute apart) so a momentary Tailscale reconnect doesn't
-   page anyone. This is what tells you if `ms` (the primary notifier) drops
-   off the network entirely — the other sites notice `ms` is unreachable and
-   page about *that*. You'll get "MS Mini PC is down" instead of the
+   page anyone. This is what tells you if `tx` (the primary notifier) drops
+   off the network entirely — the other sites notice `tx` is unreachable and
+   page about *that*. You'll get "TX Pi is down" instead of the
    specific service alert, which is enough to know to go look. It doesn't by
-   itself make another site start paging on `ms`'s behalf — that's what
+   itself make another site start paging on `tx`'s behalf — that's what
    quorum voting (below) is for, once there are 3+ sites to vote with.
 
 ## Three or more sites: quorum instead of static primary
@@ -272,14 +272,14 @@ uptime_kuma_shared_monitors:
     group: "Shared Infra"
     interval: 60
 
-# host_vars/ms/vars.yml -- only MS checks this, MS always pages
+# host_vars/tx/vars.yml -- only TX checks this, TX always pages
 uptime_kuma_groups:
-  - name: "MS Homelab"
+  - name: "TX Homelab"
 uptime_kuma_monitors:
-  - name: "MS site router"
+  - name: "TX site router"
     type: ping
     hostname: "10.0.0.1"
-    group: "MS Homelab"
+    group: "TX Homelab"
     interval: 60
 ```
 
