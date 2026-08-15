@@ -11,15 +11,7 @@
           "isDefault": true,
           "config": {
             "discordWebhookUrl": uptime_kuma_discord_webhook_url,
-            "discordPrefixMessage": uptime_kuma_discord_prefix_message,
-            "discordChannelType": (
-              "postToThread" if uptime_kuma_discord_thread_id | length > 0 else "channel"
-            ),
-            "threadId": uptime_kuma_discord_thread_id,
-            "disableUrl": false,
-            "discordSuppressNotifications": false,
-            "discordMessageFormat": "normal",
-            "applyExisting": true
+            "discordPrefixMessage": uptime_kuma_discord_prefix_message
           }
         },
         {
@@ -28,15 +20,7 @@
           "isDefault": false,
           "config": {
             "discordWebhookUrl": uptime_kuma_discord_webhook_url,
-            "discordPrefixMessage": "",
-            "discordChannelType": (
-              "postToThread" if uptime_kuma_discord_thread_id | length > 0 else "channel"
-            ),
-            "threadId": uptime_kuma_discord_thread_id,
-            "disableUrl": false,
-            "discordSuppressNotifications": false,
-            "discordMessageFormat": "normal",
-            "applyExisting": true
+            "discordPrefixMessage": ""
           }
         }
       ] if uptime_kuma_discord_webhook_url | length > 0 else []

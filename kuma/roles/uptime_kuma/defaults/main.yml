@@ -22,11 +22,6 @@ uptime_kuma_discord_webhook_url: ""
 # Optional: prefixes uptime_kuma_notification_name's alerts with a
 # mention/ping (e.g. "<@123...>"). Never applied to the Info tier.
 uptime_kuma_discord_prefix_message: ""
-# Optional: post to a specific existing Discord thread instead of the
-# channel directly. Leave blank to send to the channel. Applies to both
-# notification tiers.
-uptime_kuma_discord_thread_id: ""
-
 # Each item: {name}. Kuma has no nested groups, so this is a flat list.
 uptime_kuma_groups: []
 
