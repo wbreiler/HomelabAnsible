@@ -64,8 +64,9 @@ exact action.
    `pbs/`, `minecraft/`, `truenas/`, `arista/`, `kuma/`, `desktop/`, or
    `mac/`). Keep root-level policy or documentation changes in their own
    commit. The user pushes.
-3. **VMID 300 is reserved** (DiscoPanel on prometheus). New Minecraft servers
-   start at 301+. Managed app LXCs live in 100–119.
+3. **VMID 300 is reserved** (DiscoPanel on prometheus). Allocate new Minecraft
+   servers the next unused sequential VMID in the 100 range after checking live
+   cluster state; do not jump to 301+.
 4. **LXCs are unprivileged** unless they NFS-mount. The `gallery_dl` LXC is privileged.
 5. **Pinned versions**: third-party artifacts in `proxmox/` roles are
    version-pinned and checksum-verified. Bump version + checksum together.
