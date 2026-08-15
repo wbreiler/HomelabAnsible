@@ -1,9 +1,9 @@
 ---
 # One-time (per site) bootstrap: creates the LXC that will run Kuma, then
 # hands off to normal Ansible-over-SSH for everything else. After this
-# role, roles/apt_auto_update, roles/tailscale, roles/cloudflared,
-# roles/uptime_kuma, and roles/quorum_relay configure the LXC exactly like
-# they configure a bare-metal site (tn) -- they have no idea it's an LXC.
+# role, roles/apt_auto_update, roles/tailscale, roles/uptime_kuma, and
+# roles/quorum_relay configure the LXC exactly like
+# they configure the bare-metal TX site -- they have no idea it's an LXC.
 
 - name: Validate bootstrap configuration
   ansible.builtin.assert:

@@ -1,8 +1,7 @@
 ---
-# Shared across every Mini PC in the kuma_hosts group. Anything
-# location-specific (monitors, groups, peers, the Cloudflare Tunnel token)
-# lives in host_vars/<hostname>.yml and host_vars/<hostname>/vault.yml
-# instead — see the README.
+# Shared across every host in the kuma_hosts group. Location-specific
+# monitors, groups, and peers live in host_vars/<hostname>/vars.yml instead —
+# see the README.
 
 apt_auto_update_reboot: false
 apt_auto_update_reboot_time: "03:30"

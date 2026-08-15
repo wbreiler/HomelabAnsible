@@ -1,9 +1,8 @@
 ---
 # Encrypt the copied file with:
 #   ansible-vault encrypt vault.yml
-# Secrets shared by every site/host. The Cloudflare Tunnel token is
-# per-Kuma-host instead -- see host_vars/example/vault.yml.example. PBS
-# credentials are per-Proxmox-host instead -- see
+# Secrets shared by every Kuma site/host. PBS credentials are
+# per-Proxmox-host instead -- see
 # host_vars/pve-example/vault.yml.example.
 uptime_kuma_admin_password: CHANGE_ME_USE_A_LONG_UNIQUE_PASSWORD
 tailscale_auth_key: "tskey-auth-CHANGE_ME"

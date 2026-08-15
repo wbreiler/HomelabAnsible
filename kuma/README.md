@@ -3,9 +3,9 @@
 Configures a Debian/Ubuntu host — a Mini PC or a Raspberry Pi, whatever's on
 hand when a new site gets deployed — to run
 [Uptime Kuma](https://github.com/louislam/uptime-kuma) in Docker, reachable
-over both Tailscale and a Cloudflare Tunnel, kept up to date via
-`unattended-upgrades`, and provisioned with an admin user, monitors, monitor
-groups, and a Discord notification through Kuma's (unofficial) API.
+over Tailscale, kept up to date via `unattended-upgrades`, and provisioned
+with an admin user, monitors, monitor groups, and a Discord notification
+through Kuma's (unofficial) API.
 Designed to run on more than one host at different physical locations at
 once — see below. "Mini PC" throughout this doc just means "one of these
 hosts"; the roles don't care which architecture it's running on.
@@ -13,9 +13,6 @@ hosts"; the roles don't care which architecture it's running on.
 - `apt_auto_update` — `apt update` now, plus `unattended-upgrades` for the OS
   going forward.
 - `tailscale` — installs and authenticates Tailscale.
-- `cloudflared` — installs `cloudflared` and registers it as a system
-  service pointed at a Cloudflare Tunnel, so Kuma's status page is reachable
-  without a port-forward.
 - `quorum_relay` — off by default; a small local relay service that lets 3+
   sites vote on shared-monitor outages instead of one static site always
   deciding. See "Three or more sites: quorum instead of static primary"
@@ -71,19 +68,17 @@ ansible-playbook site.yml
 
 ## Adding a Mini PC
 
-Every site in `inventory.yml`'s `kuma_hosts` group needs its own
-`host_vars/<hostname>/` directory (not just a `.yml` file — that's how the
-per-host secret sits next to the per-host vars):
+Every site in `inventory.yml`'s `kuma_hosts` group needs its own variables
+file:
 
 ```bash
-cp -r host_vars/example host_vars/<hostname>
-ansible-vault encrypt host_vars/<hostname>/vault.yml
+mkdir -p host_vars/<hostname>
+cp host_vars/example/vars.yml.example host_vars/<hostname>/vars.yml
 ```
 
 Then add the host to `inventory.yml` and edit `host_vars/<hostname>/vars.yml`
-(location label, groups, monitors, peers) and `host_vars/<hostname>/vault.yml`
-(that site's Cloudflare Tunnel token). `group_vars/kuma_hosts.yml` and the
-top-level `vault.yml` hold everything shared across every site (Kuma
+(location label, groups, monitors, peers). `group_vars/kuma_hosts.yml` and
+the top-level `vault.yml` hold everything shared across every site (Kuma
 version, admin credentials, Tailscale key, Discord webhook).
 
 `ansible_host` for an x86 Mini PC site (`ms`, `tn`) is the *LXC's* IP, not
@@ -134,7 +129,7 @@ two phases:
    It prints the LXC's DHCP-assigned IP at the end — put that in
    `inventory.yml`'s `kuma_hosts` entry for the site, then run `site.yml`
    normally against it (still on the home network at this point) to bring
-   up Tailscale/Cloudflare/Kuma/quorum inside the LXC and confirm everything
+   up Tailscale/Kuma/quorum inside the LXC and confirm everything
    works before it ships.
 
 2. **After shipping.** Once the Mini PC is reconnected at its real location,
