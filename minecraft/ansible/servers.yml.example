@@ -5,7 +5,7 @@ servers:
   - hostname: example-minecraft
     # Current guest address used by site.yml for existing-server reconciliation.
     ansible_host: 192.0.2.31
-    vmid: 301
+    vmid: 124
     node: node1
     # Optional Proxmox HA placement. The first node has the highest priority;
     # equal lower priorities allow either fallback node. auto_rebalance=false

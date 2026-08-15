@@ -21,7 +21,9 @@ These components are not coupled at the code level — they share conventions (p
 ## Key constraints
 
 - **Minecraft server LXCs are unprivileged** with `nesting=1` (set by playbook automatically).
-- **VMID 300 is reserved** (DiscoPanel on Prometheus). New servers start at 301+.
+- **VMID 300 is reserved** (DiscoPanel on Prometheus). Allocate the next unused
+  sequential VMID in the 100 range after checking live cluster state; do not
+  jump to 301+.
 - The CurseForge API key starts with `$2a$10$` — always store/echo it in **single quotes** to prevent bash variable expansion mangling it.
 
 ## Shell scripts (`set -euo pipefail` conventions)

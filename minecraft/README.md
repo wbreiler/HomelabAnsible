@@ -71,7 +71,9 @@ Edit `servers.yml`. Each entry creates one LXC and configures it:
 | `discord_webhook_url` | References a vault variable |
 | `xmx` / `xms` | JVM heap max / initial (e.g. `"6G"`, `"2G"`) |
 
-> **VMID 300 is reserved** — DiscoPanel on Prometheus. Start new VMIDs at 301+.
+> **VMID 300 is reserved** — DiscoPanel on Prometheus. Check live cluster state
+> and allocate the next unused sequential VMID in the 100 range; do not jump to
+> 301+.
 
 ### Step 4 — Run the playbook
 
