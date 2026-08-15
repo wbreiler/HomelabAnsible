@@ -20,13 +20,15 @@ all:
       hosts:
         ms:
           ansible_host: 10.0.0.50
-        # Uncomment once each additional site is deployed. ms/tx: the
-        # LXC's IP (assigned by bootstrap-lxc.yml), not the pve_hosts entry
-        # above. Also copy host_vars/example (as a directory) to
-        # host_vars/<hostname> -- see the README's "Adding a Mini PC"
+        # Uncomment once each additional site is deployed. For an x86 site,
+        # use the LXC's IP (assigned by bootstrap-lxc.yml), not the
+        # pve_hosts entry above. Also copy host_vars/example (as a directory)
+        # to host_vars/<hostname> -- see the README's "Adding a Mini PC"
         # section.
+        # Bare-metal Pi 4 at the TX site; system hostname uptime-tx.
         # tx:
         #   ansible_host: 10.0.1.50
+        #   ansible_ssh_private_key_file: ~/.ssh/cluster.pub
         # A bare-metal (non-LXC) site, e.g. a Raspberry Pi, overrides the
         # group's lxc.pub default below with whatever key it actually trusts:
         # third:

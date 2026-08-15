@@ -91,9 +91,11 @@ the Proxmox host's — see "Proxmox-hosted sites" below, that's a separate,
 earlier step. For a bare-metal site (`tx`, the Pi), it's just the device's
 own IP.
 
-This is a greenfield deployment — no site is live yet. `ms`/`tx`/`tn` are
-all planned, hardware not yet racked. Fill in `inventory.yml` and
-`host_vars/<hostname>/` for each as it comes online.
+The `tx` Pi is online at `10.10.70.50` with system hostname `uptime-tx` and
+Ansible inventory alias `tx`. Its Kuma application configuration still needs
+`host_vars/tx/` before running `site.yml`. The `ms` and `tn` sites remain
+planned; fill in `inventory.yml` and `host_vars/<hostname>/` as each comes
+online.
 
 ## Proxmox-hosted sites (ms, tn)
 
