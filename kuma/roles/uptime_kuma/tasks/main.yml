@@ -163,5 +163,10 @@
       - --state
       - "{{ uptime_kuma_configure_dir }}/desired_state.json"
   register: uptime_kuma_reconcile
-  changed_when: (uptime_kuma_reconcile.stdout | from_json).changed
+  changed_when: >-
+    (
+      uptime_kuma_reconcile.stdout
+      | default('{"changed": false}', true)
+      | from_json
+    ).changed
   no_log: true

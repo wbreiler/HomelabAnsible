@@ -32,26 +32,27 @@ def ensure_notifications(api, notifications_desired, changed):
     ids = {}
     existing_list = api.get_notifications()
     for notif in notifications_desired:
+        config = notif.get("config", {})
         existing = find_by_name(existing_list, notif["name"])
         if existing is None:
             result = api.add_notification(
                 name=notif["name"],
                 type=notif["type"],
-                config=notif["config"],
                 isDefault=notif.get("isDefault", False),
+                **config,
             )
             ids[notif["name"]] = result["id"]
             changed.append("notification {} created".format(notif["name"]))
             existing_list = api.get_notifications()
         else:
             ids[notif["name"]] = existing["id"]
-            if existing.get("config") != notif["config"]:
+            if any(existing.get(key) != value for key, value in config.items()):
                 api.edit_notification(
                     existing["id"],
                     name=notif["name"],
                     type=notif["type"],
-                    config=notif["config"],
                     isDefault=notif.get("isDefault", False),
+                    **config,
                 )
                 changed.append("notification {} updated".format(notif["name"]))
     return ids

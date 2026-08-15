@@ -134,7 +134,7 @@ class EnsureNotificationsTests(unittest.TestCase):
         )
 
         api.add_notification.assert_called_once_with(
-            name="Discord", type="discord", config={"a": 1}, isDefault=True
+            name="Discord", type="discord", a=1, isDefault=True
         )
         self.assertEqual(ids, {"Discord": 42})
         self.assertEqual(changed, ["notification Discord created"])
@@ -142,7 +142,7 @@ class EnsureNotificationsTests(unittest.TestCase):
     def test_reuses_existing_notification_id(self):
         api = mock.MagicMock()
         api.get_notifications.return_value = [
-            {"id": 9, "name": "Discord", "config": {"a": 1}}
+            {"id": 9, "name": "Discord", "type": "discord", "a": 1}
         ]
         changed = []
 
@@ -156,6 +156,25 @@ class EnsureNotificationsTests(unittest.TestCase):
         api.edit_notification.assert_not_called()
         self.assertEqual(ids, {"Discord": 9})
         self.assertEqual(changed, [])
+
+    def test_updates_changed_notification_with_flat_provider_options(self):
+        api = mock.MagicMock()
+        api.get_notifications.return_value = [
+            {"id": 9, "name": "Discord", "type": "discord", "a": 1}
+        ]
+        changed = []
+
+        ids = configure.ensure_notifications(
+            api,
+            [{"name": "Discord", "type": "discord", "config": {"a": 2}, "isDefault": True}],
+            changed,
+        )
+
+        api.edit_notification.assert_called_once_with(
+            9, name="Discord", type="discord", a=2, isDefault=True
+        )
+        self.assertEqual(ids, {"Discord": 9})
+        self.assertEqual(changed, ["notification Discord updated"])
 
 
 if __name__ == "__main__":
