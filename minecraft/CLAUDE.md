@@ -136,6 +136,7 @@ this table by hand when ports change):
 | homestead-nash | homestead.mc.wbreiler.com | 25569 |
 | atm10-nash | atm10.mc.wbreiler.com | 6767 (legacy, inherited from the pre-migration DiscoPanel setup) |
 | bettermc-nash | bmc.mc.wbreiler.com | 25567 |
+| hewwo-pwincess | pwincess.mc.wbreiler.com | 25568 |
 
 ## Modpack update script (`update-modpack.sh`)
 
