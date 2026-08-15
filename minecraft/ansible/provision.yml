@@ -15,6 +15,11 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    # Homebrew may expose a newer system Python without proxmoxer while the
+    # dependency is present beside Ansible itself. Keep this override scoped to
+    # the localhost/API play so guests still use their own Python interpreter.
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   vars_files:
     - vault.yml
 
