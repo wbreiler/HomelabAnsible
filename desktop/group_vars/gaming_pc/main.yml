@@ -1,6 +1,6 @@
 ---
-# Keep application installation locked until this list has been reviewed.
-gaming_pc_install_approved_applications: false
+# Application list reviewed and approved.
+gaming_pc_install_approved_applications: true
 
 gaming_pc_winget_packages:
   - name: 7-Zip
