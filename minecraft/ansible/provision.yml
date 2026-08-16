@@ -200,6 +200,8 @@
         bluemap_enabled: "{{ item.bluemap_enabled | default(false) }}"
         bluemap_accept_download: "{{ item.bluemap_accept_download | default(false) }}"
         bluemap_web_port: "{{ item.bluemap_web_port | default(8100) }}"
+        bluemap_idle_update_enabled: "{{ item.bluemap_idle_update_enabled | default(false) }}"
+        bluemap_idle_update_map: "{{ item.bluemap_idle_update_map | default('default') }}"
         dh_pregen_enabled: "{{ item.dh_pregen_enabled | default(false) }}"
         dh_pregen_dimension: "{{ item.dh_pregen_dimension | default('overworld') }}"
         dh_pregen_center_x: "{{ item.dh_pregen_center_x | default(0) }}"

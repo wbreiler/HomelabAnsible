@@ -24,7 +24,12 @@ server-port={{ sp.server_port }}
 {% if sp.level_seed | default('') != '' %}
 level-seed={{ sp.level_seed }}
 {% endif %}
-{% if (sp.enable_rcon | default(false)) or (dh_pregen_enabled | default(false) | bool) %}
+{% set rcon_required =
+  (sp.enable_rcon | default(false))
+  or (dh_pregen_enabled | default(false) | bool)
+  or (bluemap_idle_update_enabled | default(false) | bool)
+%}
+{% if rcon_required %}
 enable-rcon=true
 rcon.port={{ sp.rcon_port | default(25575) }}
 broadcast-rcon-to-ops=false

@@ -29,6 +29,10 @@ servers:
     mc_version: "1.21.1"
     loader: ""
     instance_name: example
+    # Queue a BlueMap update at midnight/noon. Rendering is stopped while any
+    # player is online and resumed when the server becomes empty.
+    bluemap_idle_update_enabled: false
+    bluemap_idle_update_map: default
     # Optional Distant Horizons LOD pre-generation. A cron-launched controller
     # pauses within about five seconds when a player joins and resumes when the
     # server is empty. Its RCON password is generated on the LXC and never

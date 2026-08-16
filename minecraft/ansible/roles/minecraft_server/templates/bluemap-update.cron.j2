@@ -1,0 +1,4 @@
+## Managed by Ansible
+# Queue the requested map update every 12 hours and enforce idle-only rendering.
+0 */12 * * * root /usr/local/sbin/minecraft-bluemap-update --schedule >> /var/log/minecraft-bluemap-update.log 2>&1
+* * * * * root /usr/local/sbin/minecraft-bluemap-update --watch >> /var/log/minecraft-bluemap-update.log 2>&1

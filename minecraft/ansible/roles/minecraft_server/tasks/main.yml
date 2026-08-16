@@ -526,7 +526,9 @@
   ansible.builtin.stat:
     path: /etc/minecraft/rcon.password
   register: minecraft_server_rcon_password_file
-  when: dh_pregen_enabled | default(false) | bool
+  when: >-
+    (dh_pregen_enabled | default(false) | bool)
+    or (bluemap_idle_update_enabled | default(false) | bool)
 
 - name: Generate RCON password
   ansible.builtin.command:
@@ -539,7 +541,9 @@
   changed_when: true
   no_log: true
   when:
-    - dh_pregen_enabled | default(false) | bool
+    - >-
+      (dh_pregen_enabled | default(false) | bool)
+      or (bluemap_idle_update_enabled | default(false) | bool)
     - not minecraft_server_rcon_password_file.stat.exists
     - not ansible_check_mode
 
@@ -552,7 +556,9 @@
     mode: "0600"
   no_log: true
   when:
-    - dh_pregen_enabled | default(false) | bool
+    - >-
+      (dh_pregen_enabled | default(false) | bool)
+      or (bluemap_idle_update_enabled | default(false) | bool)
     - not minecraft_server_rcon_password_file.stat.exists
     - not ansible_check_mode
 
@@ -562,7 +568,9 @@
   register: minecraft_server_rcon_password_slurp
   no_log: true
   when:
-    - dh_pregen_enabled | default(false) | bool
+    - >-
+      (dh_pregen_enabled | default(false) | bool)
+      or (bluemap_idle_update_enabled | default(false) | bool)
     - minecraft_server_rcon_password_file.stat.exists or not ansible_check_mode
 
 - name: Set RCON password for server configuration
@@ -571,7 +579,9 @@
       {{ minecraft_server_rcon_password_slurp.content | b64decode | trim }}
   no_log: true
   when:
-    - dh_pregen_enabled | default(false) | bool
+    - >-
+      (dh_pregen_enabled | default(false) | bool)
+      or (bluemap_idle_update_enabled | default(false) | bool)
     - minecraft_server_rcon_password_file.stat.exists or not ansible_check_mode
 
 - name: Read current RCON server properties
@@ -586,6 +596,7 @@
       {{
         (minecraft_server_current_properties.content | b64decode).splitlines()
         | select('match', '^(enable-rcon|rcon\.port|broadcast-rcon-to-ops|rcon\.password)=')
+        | sort
         | list
       }}
     minecraft_server_desired_rcon_properties: >-
@@ -598,10 +609,11 @@
             minecraft_server_rcon_password
             | default((server_properties | default({})).rcon_password | default(''))
           ),
-        ]
+        ] | sort
         if
           ((server_properties | default({})).enable_rcon | default(false) | bool)
           or (dh_pregen_enabled | default(false) | bool)
+          or (bluemap_idle_update_enabled | default(false) | bool)
         else []
       }}
   no_log: true
@@ -653,6 +665,15 @@
       BlueMap requires bluemap_accept_download: true to acknowledge its Mojang
       client-resource download terms.
   when: bluemap_enabled | default(false) | bool
+
+- name: Validate idle BlueMap update configuration
+  ansible.builtin.assert:
+    that:
+      - bluemap_enabled | default(false) | bool
+      - bluemap_idle_update_map | default('default') | length > 0
+    fail_msg: >-
+      Idle BlueMap updates require BlueMap to be enabled and a non-empty map ID.
+  when: bluemap_idle_update_enabled | default(false) | bool
 
 - name: Install checksum-verified BlueMap jar
   ansible.builtin.get_url:
@@ -843,7 +864,51 @@
   when: not (dh_pregen_enabled | default(false) | bool)
 
 ###############################################################################
-# 17. Enable and start update timer
+# 17. Manage idle-only BlueMap updates
+###############################################################################
+
+- name: Create BlueMap idle update controller state directory
+  ansible.builtin.file:
+    path: /var/lib/minecraft-bluemap-update
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: bluemap_idle_update_enabled | default(false) | bool
+
+- name: Deploy BlueMap idle update controller
+  ansible.builtin.template:
+    src: bluemap-update-controller.py.j2
+    dest: /usr/local/sbin/minecraft-bluemap-update
+    owner: root
+    group: root
+    mode: "0755"
+  when: bluemap_idle_update_enabled | default(false) | bool
+
+- name: Deploy BlueMap idle update cron jobs
+  ansible.builtin.template:
+    src: bluemap-update.cron.j2
+    dest: /etc/cron.d/minecraft-bluemap-update
+    owner: root
+    group: root
+    mode: "0644"
+  when: bluemap_idle_update_enabled | default(false) | bool
+
+- name: Enable cron for BlueMap idle update controller
+  ansible.builtin.systemd_service:
+    name: cron.service
+    enabled: true
+    state: started
+  when: bluemap_idle_update_enabled | default(false) | bool
+
+- name: Remove BlueMap idle update cron jobs when disabled
+  ansible.builtin.file:
+    path: /etc/cron.d/minecraft-bluemap-update
+    state: absent
+  when: not (bluemap_idle_update_enabled | default(false) | bool)
+
+###############################################################################
+# 18. Enable and start update timer
 ###############################################################################
 
 - name: Enable and start minecraft-update.timer
