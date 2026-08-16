@@ -11,13 +11,24 @@ Configures a Windows 11 gaming PC named `gaming-pc` over WinRM.
 - Persistent, all-user `Z:` mapping to `\\10.10.20.3\clips` as SMB user
   `wbreiler`
 
+Application installation is locked by default. Set
+`gaming_pc_install_approved_applications: true` only after reviewing
+`gaming_pc_winget_packages` in `group_vars/gaming_pc/main.yml`.
+
 GPU drivers are installed from the Windows Update driver catalog. This is the
 hardware-matched, signed route; the role intentionally does not download a
 vendor-specific web installer that will become stale.
 
-Apple Music, Discord, and iCloud for Windows remain interactive `Techn`-profile
-installs. Installing them through WinRM would attach them to the local
-`ansible` account instead of the desktop user.
+Apple Music, Discord, iCloud for Windows, and GPU companion suites remain
+interactive `Techn`-profile installs. Installing them through WinRM would
+attach user-scoped packages to the local `ansible` account instead of the
+desktop user. Install the matching AMD Radeon Software, Intel Graphics
+Software, or NVIDIA App only after Windows detects that vendor's GPU.
+
+The playbook's signed-driver update is vendor-neutral. Windows Update matches
+the installed hardware and can therefore pull AMD, Intel, or NVIDIA display
+drivers without changing the playbook. The full vendor companion application
+is not treated as the driver source and is not silently installed.
 
 ## Planned replacement hardware
 

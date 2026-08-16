@@ -1,4 +1,7 @@
 ---
+# Keep application installation locked until this list has been reviewed.
+gaming_pc_install_approved_applications: false
+
 gaming_pc_winget_packages:
   - name: 7-Zip
     id: 7zip.7zip
@@ -79,9 +82,18 @@ gaming_pc_winget_packages:
 # These packages belong to the interactive Techn profile. Installing them over
 # WinRM would put them in the local ansible account instead.
 gaming_pc_interactive_user_packages:
-  - Apple Music
-  - Discord
-  - iCloud for Windows
+  - name: Apple Music
+    applies_to: all
+  - name: Discord
+    applies_to: all
+  - name: iCloud for Windows
+    applies_to: all
+  - name: AMD Radeon Software
+    applies_to: AMD GPU
+  - name: Intel Graphics Software
+    applies_to: Intel GPU
+  - name: NVIDIA App
+    applies_to: NVIDIA GPU
 
 gaming_pc_install_windows_updates: true
 gaming_pc_install_driver_updates: true
