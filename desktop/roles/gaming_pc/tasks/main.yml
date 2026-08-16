@@ -10,10 +10,55 @@
       This role requires Windows and an encrypted gaming_pc_smb_password in
       group_vars/gaming_pc/vault.yml.
 
-- name: Check that WinGet is available
-  ansible.windows.win_command: winget.exe --version
-  register: gaming_pc_winget_version
-  changed_when: false
+- name: Register the existing WinGet package for the automation account
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = 'Stop'
+      $packageName = 'Microsoft.DesktopAppInstaller'
+      $currentPackage = Get-AppxPackage -Name $packageName
+
+      if ($currentPackage) {
+        $Ansible.Changed = $false
+        return
+      }
+
+      $systemPackage = Get-AppxPackage -AllUsers -Name $packageName |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+      if (-not $systemPackage) {
+        throw 'Microsoft App Installer is not installed on this PC'
+      }
+
+      if ($Ansible.CheckMode) {
+        $Ansible.Changed = $true
+        return
+      }
+
+      $manifest = Join-Path $systemPackage.InstallLocation 'AppxManifest.xml'
+      Add-AppxPackage -Register $manifest -DisableDevelopmentMode
+      $Ansible.Changed = $true
+
+- name: Verify WinGet for the automation account
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = 'Stop'
+      $package = Get-AppxPackage -Name Microsoft.DesktopAppInstaller |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+      if (-not $package) {
+        if ($Ansible.CheckMode) {
+          $Ansible.Changed = $false
+          return
+        }
+        throw 'Microsoft App Installer is not registered for this account'
+      }
+
+      $winget = Join-Path $package.InstallLocation 'winget.exe'
+      & $winget --version
+      if ($LASTEXITCODE -ne 0) {
+        throw "WinGet version check failed (exit code $LASTEXITCODE)"
+      }
+      $Ansible.Changed = $false
 
 - name: Install requested applications with WinGet
   ansible.windows.win_powershell:
@@ -24,7 +69,20 @@
       )
 
       $ErrorActionPreference = 'Stop'
-      $installed = & winget.exe list --id $PackageId --exact `
+      $package = Get-AppxPackage -Name Microsoft.DesktopAppInstaller |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+      if (-not $package) {
+        if ($Ansible.CheckMode) {
+          $Ansible.Changed = $true
+          $Ansible.Result = "$PackageId would be installed"
+          return
+        }
+        throw 'Microsoft App Installer is not registered for this account'
+      }
+      $winget = Join-Path $package.InstallLocation 'winget.exe'
+
+      $installed = & $winget list --id $PackageId --exact `
         --source $PackageSource --accept-source-agreements 2>$null
       if ($LASTEXITCODE -eq 0) {
         $Ansible.Changed = $false
@@ -38,9 +96,9 @@
         return
       }
 
-      & winget.exe install --id $PackageId --exact --source $PackageSource `
+      & $winget install --id $PackageId --exact --source $PackageSource `
         --silent --disable-interactivity --accept-source-agreements `
-        --accept-package-agreements
+        --accept-package-agreements --scope machine
       if ($LASTEXITCODE -ne 0) {
         throw "WinGet failed to install $PackageId (exit code $LASTEXITCODE)"
       }
@@ -52,6 +110,23 @@
   loop_control:
     label: "{{ item.name }}"
 
+- name: Enable required Windows optional features
+  ansible.windows.win_optional_feature:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ gaming_pc_windows_optional_features }}"
+  register: gaming_pc_optional_feature_results
+
+- name: Reboot after enabling Windows optional features
+  ansible.windows.win_reboot:
+  when:
+    - gaming_pc_reboot_after_updates | bool
+    - >-
+      gaming_pc_optional_feature_results.results |
+      selectattr('reboot_required', 'defined') |
+      selectattr('reboot_required') |
+      list | length > 0
+
 - name: Install Windows and Microsoft product updates
   ansible.windows.win_updates:
     category_names:
@@ -62,14 +137,14 @@
     reboot: "{{ gaming_pc_reboot_after_updates }}"
   when: gaming_pc_install_windows_updates | bool
 
-- name: Install signed hardware driver updates, including Radeon drivers
+- name: Install signed hardware driver updates, including NVIDIA drivers
   ansible.windows.win_updates:
     category_names:
       - Drivers
     reboot: "{{ gaming_pc_reboot_after_updates }}"
   when: gaming_pc_install_driver_updates | bool
 
-- name: Map the clips SMB share persistently
+- name: Map the clips SMB share globally and persistently
   ansible.windows.win_powershell:
     script: |
       param(
@@ -81,7 +156,8 @@
 
       $ErrorActionPreference = 'Stop'
       $localPath = "${DriveLetter}:"
-      $mapping = Get-SmbMapping -LocalPath $localPath -ErrorAction SilentlyContinue
+      $mapping = Get-SmbGlobalMapping -LocalPath $localPath `
+        -ErrorAction SilentlyContinue
 
       if ($mapping -and $mapping.RemotePath -eq $RemotePath) {
         $Ansible.Changed = $false
@@ -95,11 +171,12 @@
       }
 
       if ($mapping) {
-        Remove-SmbMapping -LocalPath $localPath -Force -UpdateProfile
+        Remove-SmbGlobalMapping -LocalPath $localPath -Force
       }
 
-      New-SmbMapping -LocalPath $localPath -RemotePath $RemotePath `
-        -UserName $SmbUsername -Password $SmbPassword -Persistent $true
+      $credential = [pscredential]::new($SmbUsername, $SmbPassword)
+      New-SmbGlobalMapping -LocalPath $localPath -RemotePath $RemotePath `
+        -Credential $credential -Persistent $true
       $Ansible.Changed = $true
     parameters:
       DriveLetter: "{{ gaming_pc_smb_drive_letter }}"

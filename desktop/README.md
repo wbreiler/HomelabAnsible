@@ -4,14 +4,20 @@ Configures a Windows 11 gaming PC named `gaming-pc` over WinRM.
 
 ## Managed state
 
-- Steam, Discord, Chrome, OBS Studio, Epic Games Launcher, Apple Music,
-  iCloud for Windows, and Elgato Stream Deck
+- Machine-wide gaming, media, browser, streaming, remote-access, 3D-printing,
+  hardware-monitoring, and development applications discovered on `KRATOS`
+- Windows Subsystem for Linux and its Virtual Machine Platform dependency
 - Windows, Microsoft product, and signed hardware-driver updates
-- Persistent `Z:` mapping to `\\10.10.20.3\clips` as SMB user `wbreiler`
+- Persistent, all-user `Z:` mapping to `\\10.10.20.3\clips` as SMB user
+  `wbreiler`
 
-The Radeon driver is installed from the Windows Update driver catalog. This is
+The NVIDIA driver is installed from the Windows Update driver catalog. This is
 the hardware-matched, signed route; the role intentionally does not download a
-version-specific AMD web installer that will become stale.
+version-specific NVIDIA web installer that will become stale.
+
+Apple Music, Discord, iCloud for Windows, and NVIDIA App remain interactive
+`Techn`-profile installs. Installing them through WinRM would attach them to the
+local `ansible` account instead of the desktop user.
 
 ## 1. Bootstrap the PC once
 
@@ -61,7 +67,6 @@ ansible-playbook site.yml --ask-vault-pass --check --diff
 ansible-playbook site.yml --ask-vault-pass
 ```
 
-WinGet's Microsoft Store packages can require Store availability and may need a
-first interactive launch to complete account sign-in. The SMB mapping belongs
-to `Techn`; sign out and back in if Explorer does not show it immediately after
-the first run.
+The role registers the PC's existing Microsoft App Installer package for the
+automation account before invoking WinGet. It uses a global SMB mapping so
+`Z:` is also visible in the interactive `Techn` session.

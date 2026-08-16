@@ -1,33 +1,95 @@
 ---
 gaming_pc_winget_packages:
-  - name: Steam
-    id: Valve.Steam
+  - name: 7-Zip
+    id: 7zip.7zip
     source: winget
-  - name: Discord
-    id: Discord.Discord
+  - name: Adobe Creative Cloud
+    id: Adobe.CreativeCloud
     source: winget
-  - name: Google Chrome
-    id: Google.Chrome
+  - name: Audacity
+    id: Audacity.Audacity
     source: winget
-  - name: OBS Studio
-    id: OBSProject.OBSStudio
+  - name: Bambu Studio
+    id: Bambulab.Bambustudio
     source: winget
-  - name: Epic Games Launcher
-    id: EpicGames.EpicGamesLauncher
+  - name: Battle.net
+    id: Blizzard.BattleNet
+    source: winget
+  - name: CrystalDiskInfo
+    id: CrystalDewWorld.CrystalDiskInfo
+    source: winget
+  - name: EA app
+    id: ElectronicArts.EADesktop
     source: winget
   - name: Elgato Stream Deck
     id: Elgato.StreamDeck
     source: winget
-  - name: Apple Music
-    id: 9PFHDD62MXS1
-    source: msstore
-  - name: iCloud for Windows
-    id: 9PKTQ5699M62
-    source: msstore
+  - name: Epic Games Launcher
+    id: EpicGames.EpicGamesLauncher
+    source: winget
+  - name: Google Chrome
+    id: Google.Chrome
+    source: winget
+  - name: HandBrake
+    id: HandBrake.HandBrake
+    source: winget
+  - name: Logitech G HUB
+    id: Logitech.GHUB
+    source: winget
+  - name: Mozilla Firefox
+    id: Mozilla.Firefox
+    source: winget
+  - name: Node.js LTS
+    id: OpenJS.NodeJS.LTS
+    source: winget
+  - name: OBS Studio
+    id: OBSProject.OBSStudio
+    source: winget
+  - name: Parsec
+    id: Parsec.Parsec
+    source: winget
+  - name: Plex
+    id: Plex.Plex
+    source: winget
+  - name: Proton VPN
+    id: Proton.ProtonVPN
+    source: winget
+  - name: PrusaSlicer
+    id: Prusa3D.PrusaSlicer
+    source: winget
+  - name: Steam
+    id: Valve.Steam
+    source: winget
+  - name: TightVNC
+    id: GlavSoft.TightVNC
+    source: winget
+  - name: Ubisoft Connect
+    id: Ubisoft.Connect
+    source: winget
+  - name: VLC media player
+    id: VideoLAN.VLC
+    source: winget
+  - name: Windows Subsystem for Linux
+    id: Microsoft.WSL
+    source: winget
+  - name: WizTree
+    id: AntibodySoftware.WizTree
+    source: winget
+
+# These packages belong to the interactive Techn profile. Installing them over
+# WinRM would put them in the local ansible account instead.
+gaming_pc_interactive_user_packages:
+  - Apple Music
+  - Discord
+  - iCloud for Windows
+  - NVIDIA App
 
 gaming_pc_install_windows_updates: true
 gaming_pc_install_driver_updates: true
 gaming_pc_reboot_after_updates: true
+
+gaming_pc_windows_optional_features:
+  - VirtualMachinePlatform
 
 gaming_pc_smb_drive_letter: Z
 gaming_pc_smb_path: '\\10.10.20.3\clips'
