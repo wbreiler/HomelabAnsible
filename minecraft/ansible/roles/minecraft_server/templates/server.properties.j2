@@ -24,8 +24,9 @@ server-port={{ sp.server_port }}
 {% if sp.level_seed | default('') != '' %}
 level-seed={{ sp.level_seed }}
 {% endif %}
-{% if sp.enable_rcon | default(false) %}
+{% if (sp.enable_rcon | default(false)) or (dh_pregen_enabled | default(false) | bool) %}
 enable-rcon=true
 rcon.port={{ sp.rcon_port | default(25575) }}
-rcon.password={{ sp.rcon_password | default('') }}
+broadcast-rcon-to-ops=false
+rcon.password={{ minecraft_server_rcon_password | default(sp.rcon_password | default('')) }}
 {% endif %}

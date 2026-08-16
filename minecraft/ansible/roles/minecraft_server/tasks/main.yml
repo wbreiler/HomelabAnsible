@@ -35,7 +35,7 @@
 
 - name: Install utility packages
   ansible.builtin.apt:
-    name: [curl, jq, unzip, rsync]
+    name: [cron, curl, jq, openssl, unzip, rsync]
     state: present
 
 - name: Set timezone to US/Central
@@ -522,13 +522,105 @@
     group: minecraft
     mode: "0644"
 
+- name: Check for an existing RCON password
+  ansible.builtin.stat:
+    path: /etc/minecraft/rcon.password
+  register: minecraft_server_rcon_password_file
+  when: dh_pregen_enabled | default(false) | bool
+
+- name: Generate RCON password
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/openssl
+      - rand
+      - -hex
+      - "32"
+  register: minecraft_server_generated_rcon_password
+  changed_when: true
+  no_log: true
+  when:
+    - dh_pregen_enabled | default(false) | bool
+    - not minecraft_server_rcon_password_file.stat.exists
+    - not ansible_check_mode
+
+- name: Store generated RCON password
+  ansible.builtin.copy:
+    content: "{{ minecraft_server_generated_rcon_password.stdout }}\n"
+    dest: /etc/minecraft/rcon.password
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when:
+    - dh_pregen_enabled | default(false) | bool
+    - not minecraft_server_rcon_password_file.stat.exists
+    - not ansible_check_mode
+
+- name: Read RCON password
+  ansible.builtin.slurp:
+    src: /etc/minecraft/rcon.password
+  register: minecraft_server_rcon_password_slurp
+  no_log: true
+  when:
+    - dh_pregen_enabled | default(false) | bool
+    - minecraft_server_rcon_password_file.stat.exists or not ansible_check_mode
+
+- name: Set RCON password for server configuration
+  ansible.builtin.set_fact:
+    minecraft_server_rcon_password: >-
+      {{ minecraft_server_rcon_password_slurp.content | b64decode | trim }}
+  no_log: true
+  when:
+    - dh_pregen_enabled | default(false) | bool
+    - minecraft_server_rcon_password_file.stat.exists or not ansible_check_mode
+
+- name: Read current RCON server properties
+  ansible.builtin.slurp:
+    src: /opt/minecraft/server.properties
+  register: minecraft_server_current_properties
+  no_log: true
+
+- name: Compute current and desired RCON properties
+  ansible.builtin.set_fact:
+    minecraft_server_current_rcon_properties: >-
+      {{
+        (minecraft_server_current_properties.content | b64decode).splitlines()
+        | select('match', '^(enable-rcon|rcon\.port|broadcast-rcon-to-ops|rcon\.password)=')
+        | list
+      }}
+    minecraft_server_desired_rcon_properties: >-
+      {{
+        [
+          'enable-rcon=true',
+          'rcon.port=' ~ ((server_properties | default({})).rcon_port | default(25575) | string),
+          'broadcast-rcon-to-ops=false',
+          'rcon.password=' ~ (
+            minecraft_server_rcon_password
+            | default((server_properties | default({})).rcon_password | default(''))
+          ),
+        ]
+        if
+          ((server_properties | default({})).enable_rcon | default(false) | bool)
+          or (dh_pregen_enabled | default(false) | bool)
+        else []
+      }}
+  no_log: true
+
 - name: Deploy server.properties
   ansible.builtin.template:
     src: server.properties.j2
     dest: /opt/minecraft/server.properties
     owner: minecraft
     group: minecraft
-    mode: "0644"
+    mode: "0640"
+
+- name: Request restart when RCON settings change
+  ansible.builtin.command: /bin/true
+  changed_when: >-
+    minecraft_server_current_rcon_properties
+    != minecraft_server_desired_rcon_properties
+  no_log: true
+  notify: Restart Minecraft service
 
 - name: Look up Mojang UUIDs for ops players
   ansible.builtin.uri:
@@ -707,7 +799,51 @@
     daemon_reload: false
 
 ###############################################################################
-# 16. Enable and start update timer
+# 16. Manage Distant Horizons pre-generation controller
+###############################################################################
+
+- name: Create Distant Horizons pregen controller state directory
+  ansible.builtin.file:
+    path: /var/lib/minecraft-dh-pregen
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: dh_pregen_enabled | default(false) | bool
+
+- name: Deploy Distant Horizons pregen controller
+  ansible.builtin.template:
+    src: dh-pregen-controller.py.j2
+    dest: /usr/local/sbin/minecraft-dh-pregen
+    owner: root
+    group: root
+    mode: "0755"
+  when: dh_pregen_enabled | default(false) | bool
+
+- name: Deploy Distant Horizons pregen cron job
+  ansible.builtin.template:
+    src: dh-pregen.cron.j2
+    dest: /etc/cron.d/minecraft-dh-pregen
+    owner: root
+    group: root
+    mode: "0644"
+  when: dh_pregen_enabled | default(false) | bool
+
+- name: Enable cron for Distant Horizons pregen controller
+  ansible.builtin.systemd_service:
+    name: cron.service
+    enabled: true
+    state: started
+  when: dh_pregen_enabled | default(false) | bool
+
+- name: Remove Distant Horizons pregen cron job when disabled
+  ansible.builtin.file:
+    path: /etc/cron.d/minecraft-dh-pregen
+    state: absent
+  when: not (dh_pregen_enabled | default(false) | bool)
+
+###############################################################################
+# 17. Enable and start update timer
 ###############################################################################
 
 - name: Enable and start minecraft-update.timer

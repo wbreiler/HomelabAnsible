@@ -1,0 +1,3 @@
+# Managed by Ansible. The controller holds a lock and watches for 55 seconds,
+# so the once-per-minute cron cadence provides roughly five-second join checks.
+* * * * * root /usr/local/sbin/minecraft-dh-pregen --watch >> /var/log/minecraft-dh-pregen.log 2>&1

@@ -29,6 +29,15 @@ servers:
     mc_version: "1.21.1"
     loader: ""
     instance_name: example
+    # Optional Distant Horizons LOD pre-generation. A cron-launched controller
+    # pauses within about five seconds when a player joins and resumes when the
+    # server is empty. Its RCON password is generated on the LXC and never
+    # stored in this inventory.
+    dh_pregen_enabled: false
+    dh_pregen_dimension: overworld
+    dh_pregen_center_x: 0
+    dh_pregen_center_z: 0
+    dh_pregen_radius: 500
     # Standalone Modrinth mods layered on top of the pack (e.g. an add-on the
     # pack author doesn't bundle). Resolved to each mod's latest release for
     # this server's mc_version/loader; works with either pack_source.

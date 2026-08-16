@@ -1,0 +1,202 @@
+#!/usr/bin/python3
+"""Pause Distant Horizons pregen while players are online."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import socket
+import struct
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+PASSWORD_FILE = Path("/etc/minecraft/rcon.password")
+STATE_DIR = Path("/var/lib/minecraft-dh-pregen")
+STATE_FILE = STATE_DIR / "state.json"
+LOCK_FILE = STATE_DIR / "controller.lock"
+MINECRAFT_LOG = Path("/opt/minecraft/logs/latest.log")
+RCON_HOST = "127.0.0.1"
+RCON_PORT = {{ (server_properties | default({})).rcon_port | default(25575) }}
+PREGEN_COMMAND = "dh pregen start {{ dh_pregen_dimension | default('overworld') }} {{ dh_pregen_center_x | default(0) }} {{ dh_pregen_center_z | default(0) }} {{ dh_pregen_radius | default(500) }}"
+PLAYER_RE = re.compile(r"There are (\d+) of a max of \d+ players online")
+COMPLETE_RE = re.compile(r"Pregen is complete")
+
+
+def log(message: str) -> None:
+    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    print(f"{stamp} {message}", flush=True)
+
+
+class Rcon:
+    def __init__(self, password: str) -> None:
+        self.password = password
+        self.sock: socket.socket | None = None
+        self.request_id = 1701
+
+    def __enter__(self) -> "Rcon":
+        self.sock = socket.create_connection((RCON_HOST, RCON_PORT), timeout=5)
+        self.sock.settimeout(5)
+        response_id, _, _ = self._exchange(3, self.password)
+        if response_id == -1:
+            raise RuntimeError("RCON authentication failed")
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        if self.sock is not None:
+            self.sock.close()
+
+    def _recv_exact(self, size: int) -> bytes:
+        assert self.sock is not None
+        chunks = bytearray()
+        while len(chunks) < size:
+            chunk = self.sock.recv(size - len(chunks))
+            if not chunk:
+                raise ConnectionError("RCON connection closed")
+            chunks.extend(chunk)
+        return bytes(chunks)
+
+    def _exchange(self, packet_type: int, payload: str) -> tuple[int, int, str]:
+        assert self.sock is not None
+        encoded = payload.encode("utf-8")
+        packet = struct.pack("<ii", self.request_id, packet_type) + encoded + b"\0\0"
+        self.sock.sendall(struct.pack("<i", len(packet)) + packet)
+        length = struct.unpack("<i", self._recv_exact(4))[0]
+        response = self._recv_exact(length)
+        response_id, response_type = struct.unpack("<ii", response[:8])
+        text = response[8:-2].decode("utf-8", errors="replace")
+        return response_id, response_type, text
+
+    def command(self, command: str) -> str:
+        _, _, response = self._exchange(2, command)
+        return response
+
+
+def load_state() -> dict[str, object]:
+    try:
+        state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        if state.get("job") == PREGEN_COMMAND:
+            return state
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    try:
+        current = MINECRAFT_LOG.stat()
+        return {
+            "phase": "pending",
+            "job": PREGEN_COMMAND,
+            "log_inode": current.st_ino,
+            "log_offset": current.st_size,
+        }
+    except FileNotFoundError:
+        return {
+            "phase": "pending",
+            "job": PREGEN_COMMAND,
+            "log_inode": 0,
+            "log_offset": 0,
+        }
+
+
+def save_state(state: dict[str, object]) -> None:
+    state["job"] = PREGEN_COMMAND
+    temporary = STATE_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state, sort_keys=True) + "\n", encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    temporary.replace(STATE_FILE)
+
+
+def read_new_console(state: dict[str, object]) -> str:
+    try:
+        stat = MINECRAFT_LOG.stat()
+        offset = int(state.get("log_offset", 0))
+        if int(state.get("log_inode", 0)) != stat.st_ino or offset > stat.st_size:
+            offset = 0
+        with MINECRAFT_LOG.open("r", encoding="utf-8", errors="replace") as stream:
+            stream.seek(offset)
+            content = stream.read()
+            state["log_offset"] = stream.tell()
+        state["log_inode"] = stat.st_ino
+        return content
+    except FileNotFoundError:
+        return ""
+
+
+def player_count(response: str) -> int:
+    match = PLAYER_RE.search(response)
+    if not match:
+        raise RuntimeError(f"Unexpected list response: {response!r}")
+    return int(match.group(1))
+
+
+def reconcile(password: str, state: dict[str, object]) -> None:
+    console = read_new_console(state)
+    if COMPLETE_RE.search(console):
+        if state.get("phase") != "complete":
+            log("Distant Horizons pregen completed")
+        state["phase"] = "complete"
+
+    with Rcon(password) as rcon:
+        players = player_count(rcon.command("list"))
+        status = rcon.command("dh pregen status")
+        running = "Pregen is not running" not in status
+
+        if players > 0:
+            if running:
+                rcon.command("dh pregen stop")
+                log(f"Paused Distant Horizons pregen because {players} player(s) are online")
+            state["phase"] = "paused"
+        elif state.get("phase") != "complete":
+            if not running:
+                response = rcon.command(PREGEN_COMMAND)
+                if "Starting pregen" not in response:
+                    raise RuntimeError(f"Unexpected pregen start response: {response!r}")
+                current = MINECRAFT_LOG.stat()
+                state["log_inode"] = current.st_ino
+                state["log_offset"] = current.st_size
+                log(f"Started or resumed: {PREGEN_COMMAND}")
+            state["phase"] = "running"
+
+    save_state(state)
+
+
+def self_test() -> None:
+    assert player_count("There are 0 of a max of 67 players online") == 0
+    assert player_count("There are 12 of a max of 67 players online") == 12
+    assert COMPLETE_RE.search("[INFO] Pregen is complete")
+    print("self-test passed")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--once", action="store_true")
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args()
+    if args.self_test:
+        self_test()
+        return 0
+
+    STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with LOCK_FILE.open("w", encoding="utf-8") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return 0
+        password = PASSWORD_FILE.read_text(encoding="utf-8").strip()
+        state = load_state()
+        iterations = 12 if args.watch else 1
+        for iteration in range(iterations):
+            try:
+                reconcile(password, state)
+            except (ConnectionError, OSError, RuntimeError) as error:
+                log(f"Controller retryable error: {error}")
+            if iteration + 1 < iterations:
+                time.sleep(5)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
