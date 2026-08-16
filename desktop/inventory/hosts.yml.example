@@ -4,9 +4,12 @@ all:
     gaming_pc:
       hosts:
         gaming-pc:
-          # Replace this after the PC is online, then save as hosts.yml.
-          ansible_host: 192.0.2.10
+          ansible_host: 192.168.1.221
       vars:
-        ansible_user: Techn
-        ansible_connection: ssh
-        ansible_shell_type: powershell
+        ansible_user: 'KRATOS\ansible'
+        ansible_password: "{{ gaming_pc_ansible_password }}"
+        ansible_connection: winrm
+        ansible_port: 5985
+        ansible_winrm_scheme: http
+        ansible_winrm_transport: ntlm
+        ansible_winrm_server_cert_validation: ignore
