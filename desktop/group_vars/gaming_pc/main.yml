@@ -6,9 +6,6 @@ gaming_pc_winget_packages:
   - name: 7-Zip
     id: 7zip.7zip
     source: winget
-  - name: Adobe Creative Cloud
-    id: Adobe.CreativeCloud
-    source: winget
   - name: Audacity
     id: Audacity.Audacity
     source: winget
@@ -36,12 +33,6 @@ gaming_pc_winget_packages:
   - name: HandBrake
     id: HandBrake.HandBrake
     source: winget
-  - name: Logitech G HUB
-    id: Logitech.GHUB
-    source: winget
-  - name: Mozilla Firefox
-    id: Mozilla.Firefox
-    source: winget
   - name: Node.js LTS
     id: OpenJS.NodeJS.LTS
     source: winget
@@ -53,12 +44,6 @@ gaming_pc_winget_packages:
     source: winget
   - name: Plex
     id: Plex.Plex
-    source: winget
-  - name: Proton VPN
-    id: Proton.ProtonVPN
-    source: winget
-  - name: PrusaSlicer
-    id: Prusa3D.PrusaSlicer
     source: winget
   - name: Steam
     id: Valve.Steam
