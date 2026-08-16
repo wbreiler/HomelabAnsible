@@ -11,13 +11,30 @@ Configures a Windows 11 gaming PC named `gaming-pc` over WinRM.
 - Persistent, all-user `Z:` mapping to `\\10.10.20.3\clips` as SMB user
   `wbreiler`
 
-The NVIDIA driver is installed from the Windows Update driver catalog. This is
-the hardware-matched, signed route; the role intentionally does not download a
-version-specific NVIDIA web installer that will become stale.
+GPU drivers are installed from the Windows Update driver catalog. This is the
+hardware-matched, signed route; the role intentionally does not download a
+vendor-specific web installer that will become stale.
 
-Apple Music, Discord, iCloud for Windows, and NVIDIA App remain interactive
-`Techn`-profile installs. Installing them through WinRM would attach them to the
-local `ansible` account instead of the desktop user.
+Apple Music, Discord, and iCloud for Windows remain interactive `Techn`-profile
+installs. Installing them through WinRM would attach them to the local
+`ansible` account instead of the desktop user.
+
+## Planned replacement hardware
+
+The future system is the PCPartPicker list named `Orion`:
+
+- AMD Ryzen 7 9800X3D
+- Thermalright AXP90-X47 Full CPU cooler
+- Asus ROG Strix B850-I Gaming WiFi Mini ITX motherboard
+- 48 GB (2 x 24 GB) Crucial Pro DDR5-6000 CL48 memory
+- 1 TB Crucial P310 PCIe 4.0 NVMe SSD
+- Sapphire Pulse Radeon RX 7900 XT 20 GB
+- Fractal Design Terra Mini ITX case
+- Asus ROG Loki 750 W 80+ Platinum SFX power supply
+
+PCPartPicker notes that the B850 motherboard may need a BIOS update to fully
+support the 24 GB memory modules. Keep the live inventory on `KRATOS` until the
+replacement is assembled and its final hostname and IP are confirmed.
 
 ## 1. Bootstrap the PC once
 

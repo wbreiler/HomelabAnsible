@@ -82,7 +82,6 @@ gaming_pc_interactive_user_packages:
   - Apple Music
   - Discord
   - iCloud for Windows
-  - NVIDIA App
 
 gaming_pc_install_windows_updates: true
 gaming_pc_install_driver_updates: true

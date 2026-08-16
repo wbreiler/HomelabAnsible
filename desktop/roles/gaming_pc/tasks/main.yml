@@ -137,7 +137,7 @@
     reboot: "{{ gaming_pc_reboot_after_updates }}"
   when: gaming_pc_install_windows_updates | bool
 
-- name: Install signed hardware driver updates, including NVIDIA drivers
+- name: Install signed hardware driver updates, including GPU drivers
   ansible.windows.win_updates:
     category_names:
       - Drivers
