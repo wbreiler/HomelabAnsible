@@ -44,6 +44,14 @@ servers:
     dh_pregen_radius: 500
     # Optional one-time chained expansion after dh_pregen_radius completes.
     # dh_pregen_followup_radius: 768
+    # Generate real Minecraft chunks for map renderers. Radius uses chunks,
+    # and the cron controller pauses/resumes whenever players join/leave.
+    chunky_pregen_enabled: false
+    chunky_pregen_world: world
+    chunky_pregen_shape: circle
+    chunky_pregen_center_x: 0
+    chunky_pregen_center_z: 0
+    chunky_pregen_radius_chunks: 128
     # Standalone Modrinth mods layered on top of the pack (e.g. an add-on the
     # pack author doesn't bundle). Resolved to each mod's latest release for
     # this server's mc_version/loader; works with either pack_source.

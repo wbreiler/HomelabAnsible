@@ -28,6 +28,7 @@ level-seed={{ sp.level_seed }}
   (sp.enable_rcon | default(false))
   or (dh_pregen_enabled | default(false) | bool)
   or (bluemap_idle_update_enabled | default(false) | bool)
+  or (chunky_pregen_enabled | default(false) | bool)
 %}
 {% if rcon_required %}
 enable-rcon=true

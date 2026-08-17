@@ -529,6 +529,7 @@
   when: >-
     (dh_pregen_enabled | default(false) | bool)
     or (bluemap_idle_update_enabled | default(false) | bool)
+    or (chunky_pregen_enabled | default(false) | bool)
 
 - name: Generate RCON password
   ansible.builtin.command:
@@ -544,6 +545,7 @@
     - >-
       (dh_pregen_enabled | default(false) | bool)
       or (bluemap_idle_update_enabled | default(false) | bool)
+      or (chunky_pregen_enabled | default(false) | bool)
     - not minecraft_server_rcon_password_file.stat.exists
     - not ansible_check_mode
 
@@ -559,6 +561,7 @@
     - >-
       (dh_pregen_enabled | default(false) | bool)
       or (bluemap_idle_update_enabled | default(false) | bool)
+      or (chunky_pregen_enabled | default(false) | bool)
     - not minecraft_server_rcon_password_file.stat.exists
     - not ansible_check_mode
 
@@ -571,6 +574,7 @@
     - >-
       (dh_pregen_enabled | default(false) | bool)
       or (bluemap_idle_update_enabled | default(false) | bool)
+      or (chunky_pregen_enabled | default(false) | bool)
     - minecraft_server_rcon_password_file.stat.exists or not ansible_check_mode
 
 - name: Set RCON password for server configuration
@@ -582,6 +586,7 @@
     - >-
       (dh_pregen_enabled | default(false) | bool)
       or (bluemap_idle_update_enabled | default(false) | bool)
+      or (chunky_pregen_enabled | default(false) | bool)
     - minecraft_server_rcon_password_file.stat.exists or not ansible_check_mode
 
 - name: Read current RCON server properties
@@ -614,6 +619,7 @@
           ((server_properties | default({})).enable_rcon | default(false) | bool)
           or (dh_pregen_enabled | default(false) | bool)
           or (bluemap_idle_update_enabled | default(false) | bool)
+          or (chunky_pregen_enabled | default(false) | bool)
         else []
       }}
   no_log: true
@@ -746,7 +752,53 @@
   notify: Restart Minecraft service
 
 ###############################################################################
-# 12. Deploy systemd minecraft@.service template
+# 12. Optional Chunky installation
+###############################################################################
+
+- name: Validate Chunky compatibility
+  ansible.builtin.assert:
+    that:
+      - loader == 'neoforge'
+      - mc_version in ['1.21', '1.21.1']
+      - chunky_pregen_radius_chunks | int > 0
+    fail_msg: >-
+      The pinned Chunky build requires NeoForge on Minecraft 1.21 or 1.21.1
+      and a positive chunk radius.
+  when: chunky_pregen_enabled | default(false) | bool
+
+- name: Install checksum-verified Chunky jar
+  ansible.builtin.get_url:
+    url: "{{ minecraft_server_chunky_jar_url }}"
+    dest: "/opt/minecraft/mods/Chunky-NeoForge-{{ minecraft_server_chunky_version }}.jar"
+    checksum: "sha512:{{ minecraft_server_chunky_jar_sha512 }}"
+    owner: minecraft
+    group: minecraft
+    mode: "0644"
+  when: chunky_pregen_enabled | default(false) | bool
+  notify: Restart Minecraft service
+
+- name: Find superseded Chunky jars
+  ansible.builtin.find:
+    paths: /opt/minecraft/mods
+    patterns: "Chunky-NeoForge-*.jar"
+    file_type: file
+  register: minecraft_server_chunky_existing_jars
+  when: chunky_pregen_enabled | default(false) | bool
+
+- name: Remove superseded Chunky jars
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ minecraft_server_chunky_existing_jars.files | default([]) }}"
+  when:
+    - chunky_pregen_enabled | default(false) | bool
+    - >-
+      item.path != '/opt/minecraft/mods/Chunky-NeoForge-'
+      ~ minecraft_server_chunky_version ~ '.jar'
+  notify: Restart Minecraft service
+
+###############################################################################
+# 13. Deploy systemd minecraft@.service template
 ###############################################################################
 
 - name: Deploy minecraft@.service systemd template unit
@@ -759,7 +811,7 @@
   notify: Reload systemd
 
 ###############################################################################
-# 12. Deploy per-instance environment file (Xms / Xmx)
+# 14. Deploy per-instance environment file (Xms / Xmx)
 ###############################################################################
 
 - name: Deploy per-instance JVM environment file
@@ -771,7 +823,7 @@
     mode: "0640"
 
 ###############################################################################
-# 13. Deploy minecraft-update systemd units
+# 15. Deploy minecraft-update systemd units
 ###############################################################################
 
 - name: Deploy minecraft-update.service
@@ -803,14 +855,14 @@
   failed_when: false
 
 ###############################################################################
-# 14. Flush handlers (daemon-reload) before enabling units
+# 16. Flush handlers (daemon-reload) before enabling units
 ###############################################################################
 
 - name: Flush handlers to ensure systemd is reloaded before enabling units
   ansible.builtin.meta: flush_handlers
 
 ###############################################################################
-# 15. Enable and start Minecraft server service
+# 17. Enable and start Minecraft server service
 ###############################################################################
 
 - name: Enable and start minecraft@{{ instance_name }}.service
@@ -821,7 +873,7 @@
     daemon_reload: false
 
 ###############################################################################
-# 16. Manage Distant Horizons pre-generation controller
+# 18. Manage Distant Horizons pre-generation controller
 ###############################################################################
 
 - name: Create Distant Horizons pregen controller state directory
@@ -858,14 +910,17 @@
     state: started
   when: dh_pregen_enabled | default(false) | bool
 
-- name: Remove Distant Horizons pregen cron job when disabled
+- name: Remove Distant Horizons pregen cron artifacts when disabled
   ansible.builtin.file:
-    path: /etc/cron.d/minecraft-dh-pregen
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /etc/cron.d/minecraft-dh-pregen
+    - /etc/cron.d/minecraft-dh-pregen.disabled
   when: not (dh_pregen_enabled | default(false) | bool)
 
 ###############################################################################
-# 17. Manage idle-only BlueMap updates
+# 19. Manage idle-only BlueMap updates
 ###############################################################################
 
 - name: Create BlueMap idle update controller state directory
@@ -909,7 +964,51 @@
   when: not (bluemap_idle_update_enabled | default(false) | bool)
 
 ###############################################################################
-# 18. Enable and start update timer
+# 20. Manage idle-only Chunky pre-generation
+###############################################################################
+
+- name: Create Chunky pregen controller state directory
+  ansible.builtin.file:
+    path: /var/lib/minecraft-chunky-pregen
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: chunky_pregen_enabled | default(false) | bool
+
+- name: Deploy Chunky pregen controller
+  ansible.builtin.template:
+    src: chunky-pregen-controller.py.j2
+    dest: /usr/local/sbin/minecraft-chunky-pregen
+    owner: root
+    group: root
+    mode: "0755"
+  when: chunky_pregen_enabled | default(false) | bool
+
+- name: Deploy Chunky pregen cron job
+  ansible.builtin.template:
+    src: chunky-pregen.cron.j2
+    dest: /etc/cron.d/minecraft-chunky-pregen
+    owner: root
+    group: root
+    mode: "0644"
+  when: chunky_pregen_enabled | default(false) | bool
+
+- name: Enable cron for Chunky pregen controller
+  ansible.builtin.systemd_service:
+    name: cron.service
+    enabled: true
+    state: started
+  when: chunky_pregen_enabled | default(false) | bool
+
+- name: Remove Chunky pregen cron job when disabled
+  ansible.builtin.file:
+    path: /etc/cron.d/minecraft-chunky-pregen
+    state: absent
+  when: not (chunky_pregen_enabled | default(false) | bool)
+
+###############################################################################
+# 21. Enable and start update timer
 ###############################################################################
 
 - name: Enable and start minecraft-update.timer

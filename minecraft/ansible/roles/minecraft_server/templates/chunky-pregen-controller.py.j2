@@ -1,0 +1,200 @@
+#!/usr/bin/python3
+"""Generate real chunks with Chunky only while the server is empty."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import socket
+import struct
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+PASSWORD_FILE = Path("/etc/minecraft/rcon.password")
+STATE_DIR = Path("/var/lib/minecraft-chunky-pregen")
+STATE_FILE = STATE_DIR / "state.json"
+LOCK_FILE = STATE_DIR / "controller.lock"
+RCON_HOST = "127.0.0.1"
+RCON_PORT = {{ (server_properties | default({})).rcon_port | default(25575) }}
+WORLD = {{ chunky_pregen_world | default('world') | to_json }}
+SHAPE = {{ chunky_pregen_shape | default('circle') | to_json }}
+CENTER_X = {{ chunky_pregen_center_x | default(0) | int }}
+CENTER_Z = {{ chunky_pregen_center_z | default(0) | int }}
+RADIUS_CHUNKS = {{ chunky_pregen_radius_chunks | default(128) | int }}
+RADIUS_BLOCKS = RADIUS_CHUNKS * 16
+JOB = f"{WORLD}:{SHAPE}:{CENTER_X}:{CENTER_Z}:{RADIUS_BLOCKS}"
+PLAYER_RE = re.compile(r"There are (\d+) of a max of \d+ players online")
+NO_TASKS_RE = re.compile(r"No tasks running", re.IGNORECASE)
+NO_CONTINUE_RE = re.compile(r"No tasks to continue", re.IGNORECASE)
+CONTINUING_RE = re.compile(r"Task continuing", re.IGNORECASE)
+STARTED_RE = re.compile(r"Task started", re.IGNORECASE)
+COMMAND_ERROR_RE = re.compile(r"Unknown command|Incorrect argument", re.IGNORECASE)
+
+
+def log(message: str) -> None:
+    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    print(f"{stamp} {message}", flush=True)
+
+
+class Rcon:
+    def __init__(self, password: str) -> None:
+        self.password = password
+        self.sock: socket.socket | None = None
+        self.request_id = 3101
+
+    def __enter__(self) -> "Rcon":
+        self.sock = socket.create_connection((RCON_HOST, RCON_PORT), timeout=5)
+        self.sock.settimeout(5)
+        response_id, _, _ = self._exchange(3, self.password)
+        if response_id == -1:
+            raise RuntimeError("RCON authentication failed")
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        if self.sock is not None:
+            self.sock.close()
+
+    def _recv_exact(self, size: int) -> bytes:
+        assert self.sock is not None
+        chunks = bytearray()
+        while len(chunks) < size:
+            chunk = self.sock.recv(size - len(chunks))
+            if not chunk:
+                raise ConnectionError("RCON connection closed")
+            chunks.extend(chunk)
+        return bytes(chunks)
+
+    def _exchange(self, packet_type: int, payload: str) -> tuple[int, int, str]:
+        assert self.sock is not None
+        encoded = payload.encode("utf-8")
+        packet = struct.pack("<ii", self.request_id, packet_type) + encoded + b"\0\0"
+        self.sock.sendall(struct.pack("<i", len(packet)) + packet)
+        length = struct.unpack("<i", self._recv_exact(4))[0]
+        response = self._recv_exact(length)
+        response_id, response_type = struct.unpack("<ii", response[:8])
+        text = response[8:-2].decode("utf-8", errors="replace")
+        return response_id, response_type, text
+
+    def command(self, command: str) -> str:
+        _, _, response = self._exchange(2, command)
+        if COMMAND_ERROR_RE.search(response):
+            raise RuntimeError(f"Command unavailable: {command}: {response}")
+        return response
+
+
+def load_state() -> dict[str, object]:
+    try:
+        state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        if state.get("job") == JOB:
+            return state
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return {"job": JOB, "phase": "pending"}
+
+
+def save_state(state: dict[str, object]) -> None:
+    state["job"] = JOB
+    temporary = STATE_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state, sort_keys=True) + "\n", encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    temporary.replace(STATE_FILE)
+
+
+def player_count(response: str) -> int:
+    match = PLAYER_RE.search(response)
+    if not match:
+        raise RuntimeError(f"Unexpected list response: {response!r}")
+    return int(match.group(1))
+
+
+def reconcile(password: str, state: dict[str, object]) -> None:
+    with Rcon(password) as rcon:
+        players = player_count(rcon.command("list"))
+        phase = str(state.get("phase", "pending"))
+
+        if players > 0:
+            if phase == "running":
+                rcon.command("chunky pause")
+                log(f"Paused Chunky because {players} player(s) are online")
+                state["phase"] = "paused"
+        elif phase == "pending":
+            rcon.command(f"chunky world {WORLD}")
+            rcon.command(f"chunky shape {SHAPE}")
+            rcon.command(f"chunky center {CENTER_X} {CENTER_Z}")
+            rcon.command(f"chunky radius {RADIUS_BLOCKS}")
+            rcon.command("chunky quiet 30")
+            response = rcon.command("chunky start")
+            if not STARTED_RE.search(response):
+                raise RuntimeError(f"Unexpected Chunky start response: {response!r}")
+            state["phase"] = "running"
+            log(
+                f"Started Chunky for {WORLD}: {SHAPE}, center "
+                f"{CENTER_X},{CENTER_Z}, radius {RADIUS_CHUNKS} chunks"
+            )
+        elif phase == "paused":
+            response = rcon.command("chunky continue")
+            if not CONTINUING_RE.search(response):
+                raise RuntimeError(f"Unexpected Chunky continue response: {response!r}")
+            state["phase"] = "running"
+            log("Resumed Chunky because the server is empty")
+        elif phase == "running":
+            progress = rcon.command("chunky progress")
+            if NO_TASKS_RE.search(progress):
+                response = rcon.command("chunky continue")
+                if CONTINUING_RE.search(response):
+                    log("Resumed saved Chunky task after server restart")
+                elif NO_CONTINUE_RE.search(response):
+                    state["phase"] = "complete"
+                    log("Chunky pre-generation completed")
+                else:
+                    raise RuntimeError(f"Unexpected Chunky continue response: {response!r}")
+
+    save_state(state)
+
+
+def self_test() -> None:
+    assert player_count("There are 0 of a max of 67 players online") == 0
+    assert player_count("There are 12 of a max of 67 players online") == 12
+    assert NO_TASKS_RE.search("No tasks running.")
+    assert NO_CONTINUE_RE.search("No tasks to continue.")
+    assert CONTINUING_RE.search("Task continuing for world.")
+    assert STARTED_RE.search("Task started in world for the circle region")
+    print("self-test passed")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--once", action="store_true")
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args()
+    if args.self_test:
+        self_test()
+        return 0
+
+    STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with LOCK_FILE.open("w", encoding="utf-8") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return 0
+        password = PASSWORD_FILE.read_text(encoding="utf-8").strip()
+        state = load_state()
+        iterations = 12 if args.watch else 1
+        for iteration in range(iterations):
+            try:
+                reconcile(password, state)
+            except (ConnectionError, OSError, RuntimeError) as error:
+                log(f"Controller retryable error: {error}")
+            if iteration + 1 < iterations:
+                time.sleep(5)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
