@@ -148,6 +148,9 @@ def reconcile(password: str, state: dict[str, object]) -> None:
                 rcon.command("dh pregen stop")
                 log(f"Paused Distant Horizons pregen because {players} player(s) are online")
             state["phase"] = "paused"
+        elif state.get("phase") == "running" and not running:
+            log("Distant Horizons pregen completed")
+            state["phase"] = "complete"
         elif state.get("phase") != "complete":
             if not running:
                 response = rcon.command(PREGEN_COMMAND)
