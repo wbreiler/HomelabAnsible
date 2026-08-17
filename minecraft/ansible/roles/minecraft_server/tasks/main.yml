@@ -641,6 +641,7 @@
     return_content: true
     status_code: [200, 404]
   register: ops_uuid_lookup
+  check_mode: false
   loop: "{{ ops | default([]) }}"
   when: (ops | default([]) | length) > 0
 

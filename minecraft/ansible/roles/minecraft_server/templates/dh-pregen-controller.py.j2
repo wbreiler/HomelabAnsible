@@ -23,6 +23,11 @@ MINECRAFT_LOG = Path("/opt/minecraft/logs/latest.log")
 RCON_HOST = "127.0.0.1"
 RCON_PORT = {{ (server_properties | default({})).rcon_port | default(25575) }}
 PREGEN_COMMAND = "dh pregen start {{ dh_pregen_dimension | default('overworld') }} {{ dh_pregen_center_x | default(0) }} {{ dh_pregen_center_z | default(0) }} {{ dh_pregen_radius | default(500) }}"
+{% if dh_pregen_followup_radius is defined %}
+FOLLOWUP_COMMAND = "dh pregen start {{ dh_pregen_dimension | default('overworld') }} {{ dh_pregen_center_x | default(0) }} {{ dh_pregen_center_z | default(0) }} {{ dh_pregen_followup_radius }}"
+{% else %}
+FOLLOWUP_COMMAND = None
+{% endif %}
 PLAYER_RE = re.compile(r"There are (\d+) of a max of \d+ players online")
 COMPLETE_RE = re.compile(r"Pregen is complete")
 
@@ -79,7 +84,10 @@ class Rcon:
 def load_state() -> dict[str, object]:
     try:
         state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        if state.get("job") == PREGEN_COMMAND:
+        allowed_jobs = {PREGEN_COMMAND}
+        if FOLLOWUP_COMMAND:
+            allowed_jobs.add(FOLLOWUP_COMMAND)
+        if state.get("job") in allowed_jobs:
             return state
     except (FileNotFoundError, json.JSONDecodeError):
         pass
@@ -101,7 +109,7 @@ def load_state() -> dict[str, object]:
 
 
 def save_state(state: dict[str, object]) -> None:
-    state["job"] = PREGEN_COMMAND
+    state.setdefault("job", PREGEN_COMMAND)
     temporary = STATE_FILE.with_suffix(".tmp")
     temporary.write_text(json.dumps(state, sort_keys=True) + "\n", encoding="utf-8")
     os.chmod(temporary, 0o600)
@@ -131,14 +139,25 @@ def player_count(response: str) -> int:
     return int(match.group(1))
 
 
+def mark_completed(state: dict[str, object]) -> None:
+    active_command = str(state.get("job", PREGEN_COMMAND))
+    log(f"Distant Horizons pregen completed: {active_command}")
+    if FOLLOWUP_COMMAND and active_command != FOLLOWUP_COMMAND:
+        state["job"] = FOLLOWUP_COMMAND
+        state["phase"] = "pending"
+        log(f"Queued follow-up: {FOLLOWUP_COMMAND}")
+    else:
+        state["phase"] = "complete"
+
+
 def reconcile(password: str, state: dict[str, object]) -> None:
     console = read_new_console(state)
     if COMPLETE_RE.search(console):
         if state.get("phase") != "complete":
-            log("Distant Horizons pregen completed")
-        state["phase"] = "complete"
+            mark_completed(state)
 
     with Rcon(password) as rcon:
+        active_command = str(state.get("job", PREGEN_COMMAND))
         players = player_count(rcon.command("list"))
         status = rcon.command("dh pregen status")
         running = "Pregen is not running" not in status
@@ -149,17 +168,16 @@ def reconcile(password: str, state: dict[str, object]) -> None:
                 log(f"Paused Distant Horizons pregen because {players} player(s) are online")
             state["phase"] = "paused"
         elif state.get("phase") == "running" and not running:
-            log("Distant Horizons pregen completed")
-            state["phase"] = "complete"
+            mark_completed(state)
         elif state.get("phase") != "complete":
             if not running:
-                response = rcon.command(PREGEN_COMMAND)
+                response = rcon.command(active_command)
                 if "Starting pregen" not in response:
                     raise RuntimeError(f"Unexpected pregen start response: {response!r}")
                 current = MINECRAFT_LOG.stat()
                 state["log_inode"] = current.st_ino
                 state["log_offset"] = current.st_size
-                log(f"Started or resumed: {PREGEN_COMMAND}")
+                log(f"Started or resumed: {active_command}")
             state["phase"] = "running"
 
     save_state(state)

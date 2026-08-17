@@ -207,6 +207,7 @@
         dh_pregen_center_x: "{{ item.dh_pregen_center_x | default(0) }}"
         dh_pregen_center_z: "{{ item.dh_pregen_center_z | default(0) }}"
         dh_pregen_radius: "{{ item.dh_pregen_radius | default(500) }}"
+        dh_pregen_followup_radius: "{{ item.dh_pregen_followup_radius | default(omit) }}"
         xmx: "{{ item.xmx }}"
         xms: "{{ item.xms }}"
         server_properties: "{{ item.server_properties | default({}) }}"
