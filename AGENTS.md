@@ -28,7 +28,7 @@ inside its own directory.
   cluster at once. Config changes require explicit user approval; management
   access is in-band (Vlan1 SVI), so never touch Vlan1, Et1 (uplink), or the
   admin account without a confirmed out-of-band path.
-- `desktop/` — Windows 11 gaming PC (`gaming-pc`) over Windows OpenSSH
+- `desktop/` — Windows 11 gaming PC (`gaming-pc`) over WinRM
   (`desktop/README.md`).
 - `mac/` — macOS fresh-install provisioning, runs on `localhost` only, no
   inventory (`mac/CLAUDE.md`).
@@ -87,7 +87,7 @@ Commit style: `role_name: brief description` (see `proxmox/CLAUDE.md`).
 
 - Cluster `cluster-nash`: nyx (10.10.30.2, VIP), prometheus (10.10.30.3),
   atlas (10.10.30.9) — PVE 9 / Debian trixie.
-- PBS: mnemosyne (10.10.20.2), NFS-backed `MainStore` datastore.
+- PBS: mnemosyne (10.10.20.2), local-ZFS-backed `MainStore` datastore.
 - TrueNAS: erebus (10.10.10.7, SSH port 2747), key auth via 1Password agent.
 - SSH keys: `~/.ssh/cluster-nash` (proxmox, via 1Password agent),
   `~/.ssh/lxc_nash` (minecraft LXCs).

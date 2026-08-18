@@ -1,7 +1,7 @@
 # Security Sweep TODO
 
-Findings from a repo-wide security sweep (2026-08-13), sorted by severity.
-Nothing here has been fixed yet — this is a worklist.
+Completed findings from the repo-wide security sweep performed on 2026-08-13.
+Every recorded item below is fixed; this file remains as the audit record.
 
 ## Good news first
 
