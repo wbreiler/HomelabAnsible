@@ -64,12 +64,16 @@ Edit `servers.yml`. Each entry creates one LXC and configures it:
 | `ha_detach_from_rule` | Existing shared HA rule to split this LXC out of |
 | `cores` / `memory` / `disk` | CPU cores, RAM in MB, disk in GB |
 | `modpack_slug` | Modrinth project slug, or `"vanilla"` |
+| `pack_source` | `modrinth`, `curseforge`, or `manual` official server pack |
 | `pack_name` | Human-friendly name for Discord notifications |
 | `mc_version` | Minecraft version string (e.g. `"1.21.1"`) |
 | `loader` | `"neoforge"`, `"forge"`, `"fabric"`, `"quilt"`, or `""` for vanilla |
 | `instance_name` | Systemd instance name (short, no spaces) |
 | `discord_webhook_url` | References a vault variable |
 | `xmx` / `xms` | JVM heap max / initial (e.g. `"6G"`, `"2G"`) |
+| `bluemap_*` | Optional BlueMap web map and idle-only scheduled rendering |
+| `dh_pregen_*` | Optional idle-only Distant Horizons LOD pre-generation |
+| `chunky_pregen_*` | Optional idle-only real-chunk generation with Chunky |
 
 > **VMID 300 is reserved** — DiscoPanel on Prometheus. Check live cluster state
 > and allocate the next unused sequential VMID in the 100 range; do not jump to
@@ -192,6 +196,27 @@ markers disagree. Failures after the swap restore the previous mod directory
 and restart the service. The latest three backups are retained.
 
 Logs: `/var/log/minecraft-update.log` (auto-rotates at 10 MB)
+
+## Idle map and world generation
+
+The role can install three independent cron-launched controllers. Each uses
+RCON to detect players and pauses work within a few seconds when anyone joins,
+then resumes after the server is empty. RCON is enabled automatically when any
+controller is active, with a password generated and stored only on the LXC.
+
+- `bluemap_idle_update_enabled` queues BlueMap rendering at midnight and noon.
+  Set `bluemap_enabled: true`, acknowledge the download with
+  `bluemap_accept_download: true`, and select the map with
+  `bluemap_idle_update_map`.
+- `dh_pregen_enabled` runs Distant Horizons LOD pre-generation for the chosen
+  dimension, center, and block radius. `dh_pregen_followup_radius` optionally
+  starts one larger pass after the initial radius completes.
+- `chunky_pregen_enabled` installs the pinned Chunky mod and generates real
+  chunks for the selected world, shape, center, and chunk radius.
+
+See `servers.yml.example` for the complete variable set and conservative
+disabled defaults. Re-running `site.yml` removes obsolete controller cron
+entries when a feature is disabled.
 
 ## Prerequisites
 

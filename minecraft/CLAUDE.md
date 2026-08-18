@@ -153,6 +153,19 @@ are retained.
 
 `--no-wait` is used by the Ansible role for initial provisioning.
 
-## Systemd on server LXCs
+## Server services and idle controllers
 
-Uses a template unit `minecraft@.service` with `EnvironmentFile=/etc/minecraft/%i.env` for per-instance JVM heap. Start/stop a server: `systemctl start minecraft@<instance_name>`. Updates run nightly via `minecraft-update.timer` (4AM, `Persistent=true`).
+Uses a template unit `minecraft@.service` with
+`EnvironmentFile=/etc/minecraft/%i.env` for per-instance JVM heap. Start or
+stop a server with `systemctl start minecraft@<instance_name>`. Automatic
+modpack updates run nightly via `minecraft-update.timer` (4AM,
+`Persistent=true`) except when `pack_source: manual` disables the updater.
+
+BlueMap rendering, Distant Horizons LOD pre-generation, and Chunky real-chunk
+generation are optional, independent cron-launched controllers. They use RCON
+with an LXC-local generated password, stop or pause work when a player joins,
+and resume only while the server is empty. Their inventory controls are
+`bluemap_idle_update_*`, `dh_pregen_*`, and `chunky_pregen_*`; the tracked
+`servers.yml.example` is the authoritative variable example. The DH
+controller supports a one-time chained expansion through
+`dh_pregen_followup_radius`.
