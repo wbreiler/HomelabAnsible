@@ -23,7 +23,9 @@ Findings from `/ponytail-audit`, biggest cut first.
 
 All apps migrated to repository-owned managed roles: IP-Tag, Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, and Radarr. The generic remote-installer path has been removed.
 
-Follow-up when desired: step Forgejo up one major at a time (13.0.4 → 14.0.5 → 15.0.5 → 16.0.0), reviewing each major's release notes before bumping `forgejo_version` and its checksum.
+The Forgejo follow-up is complete: it was advanced one major at a time and is
+now pinned at 16.0.2. Continue reviewing release notes and changing the pinned
+version and checksum together for future upgrades.
 
 ## Completed ponytail audit items
 

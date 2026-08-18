@@ -13,8 +13,7 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
 - **PBS Storage Configuration**: Connects Proxmox nodes to your Proxmox Backup Server with shared namespace support
 - **ISO Management**: Automatically downloads ISOs from HTTP server, direct URLs, NFS, or SMB shares with real-time progress display
 - **LXC Template Downloads**: Automatically downloads latest LXC OS templates on all nodes
-- **Managed App LXCs**: Creates or adopts Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, and Radarr through repository-owned roles
-- **Standalone App LXCs**: Custom installs for gallery-dl and Stash, each opt-in and off by default
+- **Managed App LXCs**: Creates or adopts Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Bambuddy, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, Radarr, gallery-dl, Gatus, Diun, and a Tailscale subnet router through repository-owned roles
 - **PBS Backup Job**: Creates/reconciles a scheduled backup job on the PBS storage, opt-in and off by default
 - **VM Deployment**: Deploys full VMs from ISOs with customizable hardware (disk bus, BIOS, TPM, network model)
 - **Network Tuning**: Configures storage VLAN subinterface and 10G TCP sysctl tuning (BBR, large buffers)
@@ -412,7 +411,7 @@ pocket_id_version: "2.11.0"
 install_forgejo: true
 forgejo_node: "prometheus"
 forgejo_vmid: "103"
-forgejo_version: "13.0.4"  # never skip a major; upgrade one major at a time
+forgejo_version: "16.0.2"  # never skip a major; upgrade one major at a time
 
 install_sonarr: true
 sonarr_node: "atlas"

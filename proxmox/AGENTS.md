@@ -12,8 +12,10 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
 
 **Key Decisions**:
 
-* This environment does not use Ceph or Tailscale.
-* No monitoring/uptime-check stack is currently deployed.
+* This environment does not use Ceph. Tailscale is confined to the opt-in
+  `tailscale_router` LXC and is not installed on cluster nodes.
+* Gatus and Diun are opt-in monitoring roles; Discord update and health
+  reminders are also managed here.
 * The main playbook `site.yml` has two plays: the first sets up Proxmox nodes, the second runs `network_tuning` on both `proxmox_cluster` and `pbs_nodes` groups.
 * The SSH key `~/.ssh/cluster-nash` is configured in `ansible.cfg`.
 
@@ -34,13 +36,17 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
   * `prowlarr`: Creates or adopts the Prowlarr LXC with a pinned, checksum-verified release.
   * `homebridge`: Creates or adopts the Homebridge LXC with a pinned Debian package.
   * `spoolman`: Creates or adopts the Spoolman LXC with pinned application and uv releases.
+  * `bambuddy`: Creates or adopts the Bambuddy LXC with a pinned release.
   * `gitea_mirror`: Creates or adopts the Gitea Mirror LXC with pinned application and Bun releases.
   * `seerr`: Creates or adopts the Seerr LXC with pinned application and pnpm releases.
   * `pocket_id`: Creates or adopts the Pocket ID LXC with a pinned release binary.
   * `forgejo`: Creates or adopts the Forgejo LXC with a pinned release binary and strict upgrade guards.
   * `sonarr`: Creates or adopts the Sonarr LXC with a pinned, checksum-verified release.
   * `radarr`: Creates or adopts the Radarr LXC with a pinned, checksum-verified release.
+  * `gallery_dl`: Creates or adopts the privileged, NFS-mounting gallery-dl LXC.
   * `gatus`: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain.
+  * `diun`: Creates or adopts the Diun image-update watcher LXC.
+  * `tailscale_router`: Creates or adopts the Tailscale subnet-router LXC.
   * `update_all`: Updates Proxmox host nodes and LXC containers.
   * `update_reminder`: Installs per-node Discord package-update reminders.
   * `healthcheck_reminder`: Installs a cluster-master-only Discord alert for down nodes/guests.
@@ -80,33 +86,38 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 
 `site.yml` has two plays. The first runs on `proxmox_cluster` and executes roles sequentially. Each role is gated by a boolean variable (`when: role_gate_variable | default(false) | bool`).
 
-1. **configure_repos**: Disables enterprise repos, enables no-subscription repo, configures APT proxy.
-2. **cluster_setup**: Creates cluster on master node, joins other nodes.
-3. **pbs_storage**: Configures PBS backup storage with shared namespace.
-4. **manage_isos**: Downloads/copies ISOs to nodes.
-5. **iptag**: Tags LXC containers with IPs in the Proxmox UI.
-6. **download_templates**: Fetches latest LXC OS templates.
-7. **apt_cacher_ng**: Creates or adopts an Apt-Cacher NG LXC and manages it with native tasks.
-8. **prowlarr**: Creates or adopts the Prowlarr LXC and manages a pinned release.
-9. **homebridge**: Creates or adopts the Homebridge LXC and manages a pinned package.
-10. **spoolman**: Creates or adopts the Spoolman LXC and manages pinned application and uv releases.
-11. **gitea_mirror**: Creates or adopts the Gitea Mirror LXC and manages pinned application and Bun releases.
-12. **seerr**: Creates or adopts the Seerr LXC and manages pinned application and pnpm releases.
-13. **pocket_id**: Creates or adopts the Pocket ID LXC and manages a pinned release binary.
-14. **forgejo**: Creates or adopts the Forgejo LXC and manages a pinned release binary with strict upgrade guards.
-15. **sonarr**: Creates or adopts the Sonarr LXC and manages a pinned release.
-16. **radarr**: Creates or adopts the Radarr LXC and manages a pinned release.
-17. **gatus**: Creates or adopts the Gatus LXC, built from a pinned source tarball with a pinned Go toolchain.
-18. **update_all**: Updates Proxmox nodes and LXC containers.
-19. **update_reminder**: Installs independent Discord update reminders on each node.
-20. **healthcheck_reminder**: Installs a cluster-master-only Discord alert for down nodes/guests.
-21. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
-22. **pbs_restore**: Restores LXC containers from PBS backups.
-23. **vm_deploy**: Deploys full VMs from ISOs.
+1. **configure_repos**: Disables enterprise repos, enables no-subscription repo, and configures the APT proxy.
+2. **cluster_setup**: Creates the cluster on the master node and joins the others.
+3. **pbs_storage**: Configures PBS backup storage with a shared namespace.
+4. **pbs_backup_job**: Reconciles the scheduled PBS backup job.
+5. **manage_isos**: Downloads or copies ISOs to nodes.
+6. **iptag**: Tags LXC containers with their IPs in the Proxmox UI.
+7. **download_templates**: Fetches the latest LXC OS templates.
+8. **apt_cacher_ng**: Manages the Apt-Cacher NG LXC.
+9. **prowlarr**: Manages the Prowlarr LXC.
+10. **homebridge**: Manages the Homebridge LXC.
+11. **spoolman**: Manages the Spoolman LXC.
+12. **bambuddy**: Manages the Bambuddy LXC.
+13. **gitea_mirror**: Manages the Gitea Mirror LXC.
+14. **seerr**: Manages the Seerr LXC.
+15. **pocket_id**: Manages the Pocket ID LXC.
+16. **forgejo**: Manages the Forgejo LXC with strict upgrade guards.
+17. **sonarr**: Manages the Sonarr LXC.
+18. **radarr**: Manages the Radarr LXC.
+19. **gallery_dl**: Manages the privileged, NFS-mounting gallery-dl LXC.
+20. **gatus**: Manages the Gatus status-page LXC.
+21. **diun**: Manages the Diun image-update watcher LXC.
+22. **tailscale_router**: Manages the Tailscale subnet-router LXC.
+23. **update_all**: Updates Proxmox nodes and LXC operating systems.
+24. **update_reminder**: Installs per-node Discord update reminders.
+25. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
+26. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
+27. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
+28. **vm_deploy**: Deploys full VMs from ISOs.
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-24. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
+29. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
 
 ### PBS Storage Pattern
 
