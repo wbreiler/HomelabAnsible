@@ -1,6 +1,6 @@
 ---
 # tasks/set_java_version.yml
-# Computes java_version from mc_version using set_fact.
+# Computes minecraft_server_java_version from mc_version using set_fact.
 #
 # Rules (from wiki.vg / Adoptium release schedule):
 #   Java 25 — MC 26.x+ (new year-based versioning, major > 1)
@@ -10,38 +10,50 @@
 
 - name: Parse Minecraft version components
   ansible.builtin.set_fact:
-    _mc_parts: "{{ mc_version.split('.') }}"
+    minecraft_server_mc_parts: "{{ mc_version.split('.') }}"
 
 - name: Set mc_minor and mc_patch integers
   ansible.builtin.set_fact:
-    _mc_minor: "{{ _mc_parts[1] | int }}"
-    _mc_patch: "{{ (_mc_parts[2] | default('0')) | int }}"
+    minecraft_server_mc_minor: "{{ minecraft_server_mc_parts[1] | int }}"
+    minecraft_server_mc_patch: "{{ (minecraft_server_mc_parts[2] | default('0')) | int }}"
 
 - name: Determine Java version
   ansible.builtin.set_fact:
-    java_version: >-
-      {%- if (_mc_parts[0] | int) > 1 -%}
-      25
-      {%- elif (_mc_minor | int) >= 21 or ((_mc_minor | int) == 20 and (_mc_patch | int) >= 5) -%}
-      21
-      {%- elif (_mc_minor | int) >= 18 -%}
-      17
-      {%- else -%}
-      8
-      {%- endif -%}
+    minecraft_server_java_version: >-
+      {{
+        25 if minecraft_server_is_year_version
+        else 21 if minecraft_server_needs_java_21
+        else 17 if minecraft_server_mc_minor | int >= 18
+        else 8
+      }}
+  vars:
+    minecraft_server_is_year_version: "{{ minecraft_server_mc_parts[0] | int > 1 }}"
+    minecraft_server_needs_java_21: >-
+      {{
+        minecraft_server_mc_minor | int >= 21
+        or (minecraft_server_mc_minor | int == 20 and minecraft_server_mc_patch | int >= 5)
+      }}
 
 - name: Set JVM distribution and flags
   ansible.builtin.set_fact:
-    jvm_distro: >-
-      {%- if (java_version | int) in [21, 25] -%}graalvm
-      {%- elif (java_version | int) == 17 -%}temurin
-      {%- else -%}openjdk{%- endif -%}
-    jvm_flags: >-
-      {%- if (java_version | int) == 25 -%}{{ jvm_flags_graalvm25 }}
-      {%- elif (java_version | int) == 21 -%}{{ jvm_flags_graalvm21 }}
-      {%- else -%}{{ jvm_flags_aikar }}{%- endif -%}
+    minecraft_server_jvm_distro: >-
+      {{
+        'graalvm' if minecraft_server_java_version | int in [21, 25]
+        else 'temurin' if minecraft_server_java_version | int == 17
+        else 'openjdk'
+      }}
+    minecraft_server_jvm_flags: >-
+      {{
+        minecraft_server_jvm_flags_graalvm25 if minecraft_server_java_version | int == 25
+        else minecraft_server_jvm_flags_graalvm21 if minecraft_server_java_version | int == 21
+        else minecraft_server_jvm_flags_aikar
+      }}
 
-- name: Select GraalVM CE URL for Java 25
+- name: Select GraalVM CE download URL
   ansible.builtin.set_fact:
-    graalvm_ce_url: "{{ graalvm_ce_25_url }}"
-  when: (java_version | int) == 25
+    minecraft_server_graalvm_ce_url: >-
+      {{
+        graalvm_ce_25_url if minecraft_server_java_version | int == 25
+        else graalvm_ce_url
+      }}
+  when: minecraft_server_jvm_distro == 'graalvm'

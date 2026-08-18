@@ -2,6 +2,6 @@
 # NeoForge/Forge pass this file to java via run.sh (@user_jvm_args.txt).
 -Xms{{ xms }}
 -Xmx{{ xmx }}
-{% for flag in jvm_flags.split() %}
+{% for flag in minecraft_server_jvm_flags.split() %}
 {{ flag }}
 {% endfor %}

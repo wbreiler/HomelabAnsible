@@ -4,9 +4,6 @@
 # Java version is computed dynamically via set_fact in tasks/set_java_version.yml
 # because it depends on mc_version which varies per host.
 
-# Modrinth API base URL
-modrinth_api_base: "https://api.modrinth.com/v2"
-
 # BlueMap 5.7 for NeoForge. Keep the version, URL, and SHA-512 checksum in sync.
 minecraft_server_bluemap_version: "5.7-neoforge"
 minecraft_server_bluemap_jar_url: >-
@@ -21,13 +18,10 @@ minecraft_server_chunky_jar_url: >-
 minecraft_server_chunky_jar_sha512: >-
   2db769dd723f243a21e1881e7c9f825e9c193da6f2bed454b70cb6fa9e51c57f63fdcf017c0657bbd26f7bba30815413e27c74d3c7be0783390a96ee9baa4bf7
 
-# Minecraft installation directory (consistent with update.conf)
-minecraft_dir: "/opt/minecraft"
-
 # JVM flags — MeowIce G1GC set, adapted for GraalVM CE 21 (community, Java 21 compatible).
 # Removed: -XX:+UseCompactObjectHeaders (Java 24+), -Djdk.graal.EnterprisePartialUnroll (enterprise only).
 # CompilerConfiguration set to community.
-jvm_flags_graalvm21: >-
+minecraft_server_jvm_flags_graalvm21: >-
   --add-modules=jdk.incubator.vector
   -XX:+UseG1GC
   -XX:MaxGCPauseMillis=200
@@ -111,7 +105,7 @@ jvm_flags_graalvm21: >-
   -Djdk.graal.CompilerConfiguration=community
 
 # JVM flags — GraalVM CE 25 (MC 26.x+). Same as graalvm21 minus VectorizeHashes (removed in GraalVM 25).
-jvm_flags_graalvm25: >-
+minecraft_server_jvm_flags_graalvm25: >-
   --add-modules=jdk.incubator.vector
   -XX:+UseG1GC
   -XX:MaxGCPauseMillis=200
@@ -184,7 +178,7 @@ jvm_flags_graalvm25: >-
   -Djdk.graal.CompilerConfiguration=community
 
 # JVM flags — Aikar's G1GC set for Temurin 17 (MC 1.18–1.20.4).
-jvm_flags_aikar: >-
+minecraft_server_jvm_flags_aikar: >-
   -XX:+UseG1GC
   -XX:+ParallelRefProcEnabled
   -XX:MaxGCPauseMillis=200

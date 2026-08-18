@@ -20,8 +20,12 @@
     # dependency is present beside Ansible itself. Keep this override scoped to
     # the localhost/API play so guests still use their own Python interpreter.
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
-  vars_files:
-    - vault.yml
+  pre_tasks:
+    - name: Load encrypted Minecraft vault
+      ansible.builtin.include_vars:
+        file: vault.yml
+      no_log: true
+      tags: always
 
   tasks:
     - name: Load server definitions
@@ -301,8 +305,13 @@
 - name: Configure Minecraft servers
   hosts: newly_provisioned
   gather_facts: true
-  vars_files:
-    - vault.yml
+
+  pre_tasks:
+    - name: Load encrypted Minecraft vault
+      ansible.builtin.include_vars:
+        file: vault.yml
+      no_log: true
+      tags: always
 
   roles:
     - minecraft_server

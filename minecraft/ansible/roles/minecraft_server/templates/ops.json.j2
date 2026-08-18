@@ -1,5 +1,5 @@
 {% set ns = namespace(items=[]) %}
-{% for result in ops_uuid_lookup.results | default([]) %}
+{% for result in minecraft_server_ops_uuid_lookup.results | default([]) %}
 {%   if result.status is defined and result.status == 200 %}
 {%     set u = result.json.id %}
 {%     set uuid = u[0:8] ~ '-' ~ u[8:12] ~ '-' ~ u[12:16] ~ '-' ~ u[16:20] ~ '-' ~ u[20:] %}
