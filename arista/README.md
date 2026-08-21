@@ -27,6 +27,12 @@ global routing, and static routes. It is designed so the only intended
 differences from the captured state are the hostname and Ethernet7 correction;
 confirm the actual device diff before applying.
 
+Application is independently gated by `arista_apply_config`, which defaults to
+`false` in the tracked example. The playbook still validates the complete local
+desired-state schema while the gate is false, but every configuration task is
+skipped. Set it to `true` in the ignored local file only for an approved check
+or apply.
+
 Ethernet1, Vlan1, Management1, users, AAA, SSH authentication, boot settings,
 and secret-bearing unsupported-transceiver configuration are permanently
 excluded. They require a separately confirmed out-of-band management path.
@@ -71,16 +77,29 @@ python3 -m pip install -r requirements.txt
 ansible-galaxy collection install -r requirements.yml
 cp inventory.yml.example inventory.yml
 cp group_vars/arista.yml.example group_vars/arista.yml
-# Edit both ignored local files before running anything.
-ansible-playbook site.yml --ask-pass     # or set ansible_password in inventory.yml
+# Edit both ignored local files and leave arista_apply_config: false while
+# reviewing the complete desired state.
 ```
 
-Always preview switch changes first. A normal run applies the complete local
-desired state, but only differing settings should change:
+Run static validation before connecting to the switch:
+
+```bash
+ansible-lint
+ansible-playbook site.yml --syntax-check
+```
+
+For an approved live preview, set `arista_apply_config: true` locally and use
+check mode. Without that gate, the configuration tasks intentionally skip and
+the preview cannot show the intended device diff:
 
 ```bash
 ansible-playbook site.yml --ask-pass --check --diff
 ```
+
+After reviewing the complete diff and confirming a recovery path, omit
+`--check` to apply. Use `--ask-pass` or set `ansible_password` only in the
+ignored `inventory.yml`; never put the password in a command argument or a
+tracked file.
 
 The project uses `ansible-pylibssh` explicitly for `network_cli`; legacy
 OpenSSH multiplexing arguments and the deprecated Paramiko fallback are not
@@ -94,3 +113,9 @@ live discovery confirms that no secondary addresses exist. The save handler
 runs only after an Ansible-managed task changes, but EOS saves the entire
 running configuration; review any unrelated running/startup drift before the
 first apply.
+
+Layer-2 configuration is the exception to the generally additive resource
+states: `arista_l2_interfaces` uses `state: replaced` for each listed port.
+Define every access/trunk attribute that must remain on those ports and review
+the check-mode `commands` output. Do not set `mode: access`; the EOS resource
+module cannot report that default idempotently.
