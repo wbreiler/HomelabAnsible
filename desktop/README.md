@@ -11,9 +11,12 @@ Configures a Windows 11 gaming PC named `gaming-pc` over WinRM.
 - Persistent, all-user `Z:` mapping to `\\10.10.20.3\clips` as SMB user
   `wbreiler`
 
-Application installation is locked by default. Set
-`gaming_pc_install_approved_applications: true` only after reviewing
-`gaming_pc_winget_packages` in `group_vars/gaming_pc/main.yml`.
+The current `gaming_pc_winget_packages` list has been reviewed and
+`gaming_pc_install_approved_applications` is enabled. Treat edits to that list
+as a new approval boundary: review the exact package IDs before leaving the
+gate enabled for a live run. Setting the gate to `false` skips WinGet package
+installation and the optional-feature tasks, but Windows/driver updates and
+the SMB mapping have their own controls and still run unless disabled.
 
 GPU drivers are installed from the Windows Update driver catalog. This is the
 hardware-matched, signed route; the role intentionally does not download a
