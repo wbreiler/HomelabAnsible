@@ -79,11 +79,25 @@ migration paths remain local.
 1. Get the official server pack onto the controller (e.g. `~/Downloads/<name>.zip` or `.mrpack`) — either a CurseForge/ServerPackCreator-style zip (mods/config/etc. at the zip root) or a Modrinth `.mrpack` file.
 2. Set `pack_source: "manual"` on the server entry. For CurseForge-style zips also add `loader_version: "X.Y.Z"` (check `variables.txt`/`manifest.json` in the zip); for `.mrpack` files the exact loader version is read from `modrinth.index.json`'s `dependencies` automatically by the script in step 3 — set `loader_version` in `servers.yml` to match what it reports. This disables `update-modpack.sh` entirely for that server: no auto-fetch during provisioning, and `minecraft-update.timer` is not deployed (or is disabled if converting an existing server).
 3. Run `minecraft/update-script/apply-manual-pack.sh <path-to-zip-or-mrpack> root@<ansible_host>`. It runs on the controller (not the LXC), detects the format, and for `.mrpack` assembles a full server pack first — downloading each server-required file from `modrinth.index.json` and layering `overrides/` then `server-overrides/` on top — before deploying the same way as a plain zip: stops the service, backs up the existing `mods/`, `config/`, `defaultconfigs/` (e.g. `mods.pre-zip-recreate.<timestamp>`, never deleted outright), and rsyncs the fresh `mods/`, `config/`, `defaultconfigs/`, `datapacks/` (→ remote `world/datapacks/`) into `/opt/minecraft`.
-4. Run `site.yml` (`-e server_filter=<hostname>`) to reconcile everything else (JVM env, systemd unit, server.properties, timer state). If `run.sh` is already present with the matching loader version, the role skips reinstalling it; if not, a "manual pack" task section installs Forge/NeoForge via the official installer using `loader_version`.
+4. Run `site.yml` (`-e server_filter=<hostname>`) to reconcile everything else
+   (JVM env, systemd unit, server.properties, timer state). If `run.sh` is
+   already present, the role skips loader installation without checking its
+   version; otherwise, a "manual pack" task section installs Forge/NeoForge via
+   the official installer using `loader_version`. When changing loader versions,
+   verify or replace the existing loader files before relying on reconciliation.
 
 A server on `pack_source: manual` gets no further automatic mod updates — updating it means repeating this process with a newer server pack.
 
-**Extra mods on top of a modpack**: Add `extra_modrinth_mods: ["slug", ...]` to a server entry to layer standalone Modrinth mods onto a pack that doesn't bundle them (works with either `pack_source`). `update-modpack.sh` resolves each slug to its latest release for the server's `MC_VERSION`/`LOADER` and installs it alongside the pack's mods. The resolved versions are recorded in `.current_extra_mods` (parallel to `.current_excludes`) so a change to the list, or a new upstream release of one of these mods, triggers a reinstall even when the pack version itself is unchanged.
+**Extra mods on top of an automatically managed modpack**: Add
+`extra_modrinth_mods: ["slug", ...]` to a Modrinth or CurseForge server entry to
+layer standalone Modrinth mods onto a pack that does not bundle them.
+`update-modpack.sh` resolves each slug to its latest release for the server's
+`MC_VERSION`/`LOADER` and installs it alongside the pack's mods. The resolved
+versions are recorded in `.current_extra_mods` (parallel to `.current_excludes`)
+so a change to the list, or a new upstream release of one of these mods,
+triggers a reinstall even when the pack version itself is unchanged. This does
+not apply to `pack_source: manual`, because that source disables
+`update-modpack.sh`; include any extra mods in the manually deployed pack.
 
 **HA placement**: Set `ha_enabled: true`, list preferred and fallback nodes in
 `ha_nodes` with priorities, and keep `ha_strict: true` to prevent placement on
