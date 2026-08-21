@@ -31,7 +31,7 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
    ansible-galaxy collection install -r requirements.yml
    ```
 
-2. **SSH access** to all Proxmox nodes using `~/.ssh/cluster-nash` (configured in `ansible.cfg`)
+2. **SSH access** to all Proxmox nodes using `~/.ssh/cluster-nash` through the 1Password SSH agent and user SSH configuration
 
 3. **PBS server** configured and accessible
 
@@ -917,7 +917,7 @@ To extend this playbook:
 1. Add new roles in the `roles/` directory
 2. Update `site.yml` to include the new role
 3. Add corresponding defaults and example variables in `group_vars/proxmox_cluster.yml.example`
-4. Update `README.md`, `AGENTS.md`, and `CLAUDE.md` with the role behavior and usage
+4. Update `README.md` and `AGENTS.md` with the role behavior and usage
 5. Run `ansible-lint`, the main playbook syntax check, and `git diff --check`
 
 ## License

@@ -17,7 +17,9 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
 * Gatus and Diun are opt-in monitoring roles; Discord update and health
   reminders are also managed here.
 * The main playbook `site.yml` has two plays: the first sets up Proxmox nodes, the second runs `network_tuning` on both `proxmox_cluster` and `pbs_nodes` groups.
-* The SSH key `~/.ssh/cluster-nash` is configured in `ansible.cfg`.
+* The SSH key `~/.ssh/cluster-nash` is served by the 1Password SSH agent and
+  selected through the user's SSH configuration. The old `private_key_file`
+  setting remains commented out in `ansible.cfg`.
 
 ## Project Structure
 
@@ -78,13 +80,13 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 
 * **Inventory**: `inventory.yml` (gitignored) - Contains node IPs and VMID ranges.
 * **Group Variables**: `group_vars/proxmox_cluster.yml` (gitignored, Ansible Vault encrypted) - Cluster-wide secrets and configuration.
-* **Host Variables**: `host_vars/<nodename>.yml` (gitignored via `host_vars/*.yml` pattern) - Per-node PBS, corosync ring1, and ZFS storage pool config.
+* **Host Variables**: `host_vars/<nodename>.yml` (gitignored via `host_vars/*.yml` pattern) - Per-node PBS and corosync ring1 configuration.
 
 **Critical**: All actual configuration files containing IPs, credentials, and node-specific data are gitignored. Only `.example` files are tracked in git.
 
 ### Role Execution Order
 
-`site.yml` has two plays. The first runs on `proxmox_cluster` and executes roles sequentially. Each role is gated by a boolean variable (`when: role_gate_variable | default(false) | bool`).
+`site.yml` has two plays. The first runs on `proxmox_cluster` and executes roles sequentially. `configure_repos` is an unconditional pre-task role; the roles below use explicit boolean gates. Most are opt-in, while `pbs_storage`, `iptag`, and `download_templates` default to enabled.
 
 1. **configure_repos**: Disables enterprise repos, enables no-subscription repo, and configures the APT proxy.
 2. **cluster_setup**: Creates the cluster on the master node and joins the others.
@@ -129,7 +131,6 @@ Each node's `host_vars/<nodename>.yml` configures:
 
 * `pbs_username` / `pbs_namespace` — Shared PBS credentials configured on the cluster master.
 * `corosync_ring1_addr` — IP on the dedicated cluster sync network (10.10.50.x).
-* `storage_pools` — ZFS pool definitions (name, raid type, disk IDs).
 
 ### Security Model
 
@@ -160,6 +161,9 @@ ansible-lint
 
 # Validate playbook syntax
 ansible-playbook -i inventory.yml site.yml --syntax-check
+
+# Inspect the resolved task list without changing hosts
+ansible-playbook -i inventory.yml site.yml --list-tasks
 
 # Dry run (check mode) with diff output
 ansible-playbook -i inventory.yml site.yml --check --diff --ask-vault-pass
@@ -216,12 +220,13 @@ ansible proxmox_cluster -i inventory.yml -a "pvecm status" --become
 
 ### Role-Specific Commands
 
-See the `CLAUDE.md` or `README.md` files for extensive examples of role-specific commands for ISO management, LXC installation, system updates, and PBS restores.
+See `README.md` for extensive examples of role-specific commands for ISO
+management, LXC installation, system updates, and PBS restores.
 
 ## Adding New Nodes
 
 1. **Update `inventory.yml`**: Add the new node with `ansible_host`, `proxmox_node_name`, and `vmid_range_start`/`end`.
-2. **Create `host_vars/<nodename>.yml`**: Copy `host_vars/node.yml.example` and populate `corosync_ring1_addr` and `storage_pools`; set `pbs_username` and `pbs_namespace` on the cluster master only.
+2. **Create `host_vars/<nodename>.yml`**: Copy `host_vars/node.yml.example` and populate `corosync_ring1_addr`; set `pbs_username` and `pbs_namespace` on the cluster master only.
 3. **Run Playbook**: Run the playbook with `--limit <nodename>` to target the new node.
 
 ## Adding New Roles
@@ -250,6 +255,13 @@ See the `CLAUDE.md` or `README.md` files for extensive examples of role-specific
 * **Critical**: Always removes existing PBS storage before re-adding to ensure a clean state.
 * Uses `no_log: true` for security when handling passwords.
 
+### pbs_backup_job
+
+* Creates or reconciles a cluster-wide scheduled backup job targeting
+  `pbs_storage_id` and runs once on `cluster_master_node`.
+* Compares schedule, mode, compression, and VMID selection before calling
+  `pvesh set`; skipped by default unless `configure_pbs_backup_job: true`.
+
 ### cluster_setup
 
 * The `cluster_master_node` creates the cluster; other nodes join.
@@ -267,6 +279,15 @@ See the `CLAUDE.md` or `README.md` files for extensive examples of role-specific
 * Creates or adopts an LXC by hostname on `apt_cacher_ng_node`.
 * Installs `apt-cacher-ng` and `avahi-daemon`, removes the legacy remote updater, configures HTTPS pass-through and the local APT proxy, and verifies the service.
 * Skipped by default unless `install_apt_cacher_ng: true`.
+
+### Managed application LXCs
+
+* Repository-owned application roles use the shared `tasks/create_lxc.yml`
+  bootstrap. New containers default to unprivileged; `gallery_dl` is
+  privileged because its kernel NFS mount requires that mode.
+* Existing HA-managed containers are located at run time through
+  `tasks/resolve_lxc_node.yml`. A role's `<role>_node` value is therefore the
+  fresh-install fallback, not a reliable statement of its current location.
 
 ### prowlarr
 
@@ -292,35 +313,35 @@ See the `CLAUDE.md` or `README.md` files for extensive examples of role-specific
 ### gitea_mirror
 
 * Manages Gitea Mirror with repository-owned Ansible tasks.
-* Adopts `git-mirror-nash` (VMID 119, HA-managed, currently on `atlas`) while preserving its environment file and SQLite data directory; the role resolves the current hosting node at run time, and `gitea_mirror_node` is only the fresh-install fallback.
+* Adopts `git-mirror-nash` (VMID 119, HA-managed) while preserving its environment file and SQLite data directory; the role resolves the current hosting node at run time, and `gitea_mirror_node` is only the fresh-install fallback.
 * Pins and checksum-verifies both Gitea Mirror and Bun releases, refuses destructive 2.x migrations, checks SQLite integrity before upgrades, builds the new release before stopping the service, keeps a pre-upgrade backup, rolls back automatically when the upgraded service fails its health check, removes the remote updater, and verifies the installed version.
 * Skipped by default unless `install_gitea_mirror: true`.
 
 ### seerr
 
 * Manages Seerr with repository-owned Ansible tasks.
-* Adopts `seerr-nash` (VMID 117, HA-managed, currently on `atlas`) while preserving `/etc/seerr/seerr.conf` and the SQLite config data; the container was already migrated from Overseerr to Seerr by its legacy updater.
+* Adopts `seerr-nash` (VMID 117, HA-managed) while preserving `/etc/seerr/seerr.conf` and the SQLite config data; the container was already migrated from Overseerr to Seerr by its legacy updater.
 * Pins and checksum-verifies both Seerr and pnpm releases, requires NodeSource Node.js 22, refuses to overwrite an unmigrated Overseerr install, checks SQLite integrity before upgrades, builds the new release before stopping the service, keeps a pre-upgrade backup, rolls back automatically when the upgraded service fails its health check, removes the remote updater, and verifies the API-reported version.
 * Skipped by default unless `install_seerr: true`.
 
 ### pocket_id
 
 * Manages Pocket ID with repository-owned Ansible tasks.
-* Adopts `pocketid-nash` (VMID 100, HA-managed, currently on `nyx`) while preserving its `.env` (including the mandatory encryption key) and SQLite data.
+* Adopts `pocketid-nash` (VMID 100, HA-managed) while preserving its `.env` (including the mandatory encryption key) and SQLite data.
 * Pins and checksum-verifies the single release binary, checks SQLite integrity before upgrades, backs up the binary, data, and environment before swapping, rolls back automatically (including the data directory, since new versions migrate the schema on start) when the upgraded service fails its health check, removes the remote updater, and verifies the binary-reported version.
 * Skipped by default unless `install_pocket_id: true`.
 
 ### forgejo
 
 * Manages Forgejo with repository-owned Ansible tasks.
-* Adopts `forgejo-nash` (VMID 103, HA-managed, currently on `prometheus`), which serves `git.wbreiler.com` — this repository's own remote. Preserves `app.ini` and all repository data.
+* Adopts `forgejo-nash` (VMID 103, HA-managed), which serves `git.wbreiler.com` — this repository's own remote. Preserves `app.ini` and all repository data.
 * Pins and checksum-verifies the release binary, refuses downgrades and skipped major versions (Forgejo must upgrade one major at a time), checks SQLite integrity before upgrades, stages and sanity-runs the new binary before stopping the service, backs up the binary, config, and database (not the multi-GB repositories, which upgrades never rewrite), rolls back binary, database, and config automatically when the upgraded service fails its health check, removes the remote updater, and verifies the binary-reported version.
 * Skipped by default unless `install_forgejo: true`.
 
 ### sonarr
 
 * Manages Sonarr with repository-owned Ansible tasks.
-* Adopts `sonarr-nash` (VMID 110, HA-managed, currently on `atlas`) while preserving `config.xml` and the SQLite databases; the service keeps running as the `media` user with its in-container NFS media mounts untouched.
+* Adopts `sonarr-nash` (VMID 110, HA-managed) while preserving `config.xml` and the SQLite databases; the service keeps running as the `media` user with its in-container NFS media mounts untouched.
 * Pins and checksum-verifies the release tarball, backs up config and databases before atomically swapping the install directory, rolls back automatically when the upgraded service fails its `/ping` check, removes the remote updater, and verifies the API-reported version.
 * Skipped by default unless `install_sonarr: true`.
 
@@ -372,6 +393,26 @@ See the `CLAUDE.md` or `README.md` files for extensive examples of role-specific
   `<role>_health_url` — extend via `gatus_extra_endpoints`.
 * Skipped by default unless `install_gatus: true`.
 
+### diun
+
+* Creates or adopts `diun-nash` and installs a pinned, checksum-verified Diun
+  release that posts image update notifications to Discord.
+* Watches the static `diun_watch_images` list through Diun's file provider; it
+  does not discover containers from Docker or another host at run time.
+* Skipped by default unless `install_diun: true`.
+
+### tailscale_router
+
+* Creates or adopts the unprivileged `tailscale-router-nash` LXC, installs a
+  pinned Tailscale package from a checksum-verified-key APT repository, and
+  advertises the configured LAN routes.
+* This role also reconciles `/dev/net/tun` passthrough in the Proxmox-side LXC
+  configuration and restarts the container when that configuration changes.
+* Keep `tailscale_router_auth_key` in Vault. At least one advertised CIDR is
+  required, and new routes may still require approval in the Tailscale admin
+  console unless the tailnet has matching `autoApprovers`.
+* Skipped by default unless `install_tailscale_router: true`.
+
 ### pbs_restore
 
 * Restores LXC containers from PBS.
@@ -410,6 +451,7 @@ See the `CLAUDE.md` or `README.md` files for extensive examples of role-specific
 ## Ansible Configuration (`ansible.cfg`)
 
 * **Fact Caching**: Enabled with a 1-hour timeout.
-* **Host Key Checking**: Disabled (`host_key_checking = False`) for this homelab environment.
+* **Host Key Checking**: `StrictHostKeyChecking=accept-new` trusts a host on
+  first use but rejects a changed key afterward.
 * **SSH Pipelining**: Enabled for performance.
 * **Privilege Escalation**: `become = true` is set globally.

@@ -3,9 +3,8 @@
 This project manages the three-node `cluster-nash` Proxmox VE 9 cluster and
 its PBS integration. The canonical implementation and operating guidance is
 in [`AGENTS.md`](AGENTS.md); read it before making changes. Human-oriented
-setup and role documentation is in [`README.md`](README.md), while
-[`CLAUDE.md`](CLAUDE.md) contains additional role-specific implementation
-notes.
+setup and role documentation is in [`README.md`](README.md). Role-specific
+implementation notes are consolidated in [`AGENTS.md`](AGENTS.md).
 
 ## Current architecture
 
