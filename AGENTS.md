@@ -33,9 +33,11 @@ inside its own directory.
 - `mac/` — macOS fresh-install provisioning, runs on `localhost` only, no
   inventory (`mac/AGENTS.md`).
 
-Always `cd` into the project directory before running ansible — each has its
-own `ansible.cfg` (inventory, SSH key, become settings) that only applies from
-there.
+Always `cd` into the documented project directory before running Ansible so its
+local configuration and relative paths apply. Most projects have their own
+`ansible.cfg`; Minecraft's is under `minecraft/ansible/`, while `mac/` has no
+inventory or `ansible.cfg` and is run from `mac/` through its Makefile or
+`ansible-playbook main.yml`.
 
 ## Subagents
 
@@ -77,7 +79,7 @@ exact action.
 
 ```bash
 ansible-lint                                   # must pass in proxmox/ before claiming done
-ansible-playbook -i inventory.yml site.yml --syntax-check
+ansible-playbook site.yml --syntax-check       # use the project's documented entry point
 ansible-playbook ... --check --diff            # dry-run
 ```
 
@@ -91,6 +93,8 @@ Commit style: `role_name: brief description` (see `proxmox/AGENTS.md`).
 - TrueNAS: erebus (10.10.10.7, SSH port 2747), key auth via 1Password agent.
 - SSH keys: `~/.ssh/cluster-nash` (proxmox, via 1Password agent),
   `~/.ssh/lxc_nash` (minecraft LXCs).
-- Host key checking uses `StrictHostKeyChecking=accept-new` (trust on first
-  use). If a host is legitimately reinstalled, remove its old key with
-  `ssh-keygen -R <host>` — do not weaken this back to `no`.
+- Proxmox, PBS, Minecraft, and Kuma explicitly use
+  `StrictHostKeyChecking=accept-new` (trust on first use); Arista, desktop, and
+  TrueNAS keep host-key checking enabled. If a host is legitimately
+  reinstalled, remove its old key with `ssh-keygen -R <host>` — do not weaken
+  host-key checking to `no`.
