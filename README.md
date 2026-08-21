@@ -1,19 +1,19 @@
 # HomelabAnsible
 
-Monorepo for all Ansible automation in the homelab: a 3-node Proxmox VE cluster
-(`cluster-nash`: nyx, prometheus, atlas), a Proxmox Backup Server (mnemosyne),
-and Minecraft server LXCs.
+Monorepo for independently operated Ansible projects covering the Proxmox/PBS
+core, Minecraft and application LXCs, TrueNAS, the core switch, multi-site
+monitoring, and workstation provisioning.
 
 ## Projects
 
 | Directory | What it manages | Docs |
 |---|---|---|
-| [`proxmox/`](proxmox/) | Proxmox VE cluster: repos, cluster setup, PBS storage/backup jobs, ISO/template management, ~15 managed app LXCs, VM deploys, updates, restores, network tuning | [README](proxmox/README.md) |
-| [`pbs/`](pbs/) | Proxmox Backup Server: install, local ZFS datastore, users, sync/pull jobs, Tailscale | [README](pbs/README.md) |
+| [`proxmox/`](proxmox/) | Proxmox VE cluster: repos, cluster setup, PBS storage/backup jobs, ISO/template management, application LXCs, VM deploys, updates, restores, and network tuning | [README](proxmox/README.md) |
+| [`pbs/`](pbs/) | Existing Proxmox Backup Server: repository cleanup, local ZFS datastore, users, pull-style sync jobs, and Tailscale | [README](pbs/README.md) |
 | [`minecraft/`](minecraft/) | Minecraft server LXC provisioning via the Proxmox API + nightly Modrinth/CurseForge modpack update script | [README](minecraft/README.md) |
 | [`truenas/`](truenas/) | TrueNAS host `erebus`: full desired-state config (users, datasets, shares, services, apps) via middleware APIs, with read-only discovery and audit playbooks | [README](truenas/README.md) |
 | [`arista/`](arista/) | Core switch (Arista DCS-7050SX-64): incremental, explicitly scoped desired-state management | [README](arista/README.md) |
-| [`kuma/`](kuma/) | Uptime Kuma on one or more Mini PCs (multi-site, cross-monitored over Tailscale): Docker deploy, monitors/groups/notifications, quorum relay, apt auto-update | [README](kuma/README.md) |
+| [`kuma/`](kuma/) | Uptime Kuma on one or more sites: Docker deployment, Tailscale, optional API reconciliation/quorum relay, and apt auto-update | [README](kuma/README.md) |
 | [`desktop/`](desktop/) | Windows 11 gaming PC (`gaming-pc`) over WinRM: apps, updates, SMB mapping | [README](desktop/README.md) |
 | [`mac/`](mac/) | macOS fresh-install provisioning: Homebrew, Mac App Store apps, dotfiles, system defaults | [README](mac/README.md) |
 
@@ -29,7 +29,7 @@ because the projects target different machines with different credentials.
 cd proxmox && ansible-playbook -i inventory.yml site.yml --ask-vault-pass
 
 # PBS server
-cd pbs && ansible-playbook site.yml
+cd pbs && ansible-playbook site.yml --vault-password-file .vault_pass
 
 # Minecraft servers
 cd minecraft/ansible && \
