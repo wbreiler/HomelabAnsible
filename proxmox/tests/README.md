@@ -1,13 +1,13 @@
 # Test Playbooks
 
-This directory contains test playbooks for validating roles without requiring access to actual Proxmox nodes.
+This directory contains local tests that do not connect to Proxmox nodes. The ISO test does make an external HTTPS download; the PBS and IP-Tag tests are self-contained.
 
 ## Available Tests
 
 ### ISO Management Tests
 
 #### `isos-small.yml`
-Tests the `manage_isos` role with a small Alpine Linux ISO (~60MB).
+Tests the `manage_isos` role with an Alpine Linux ISO (about 200 MB). Its checksum is intentionally omitted, so this validates the download path rather than artifact integrity.
 
 ```bash
 ansible-playbook tests/isos-small.yml
@@ -19,15 +19,6 @@ ansible-playbook tests/isos-small.yml
 - File verification
 
 **Output location:** `/tmp/test-isos/`
-
-#### `isos.yml`
-Tests the `manage_isos` role with a full Ubuntu Server ISO (~2GB).
-
-```bash
-ansible-playbook tests/isos.yml
-```
-
-**Note:** This downloads a large file. Use `isos-small.yml` for quick validation.
 
 ### PBS Backup Job Tests
 
@@ -45,6 +36,8 @@ ansible-playbook tests/pbs-backup-job.yml
 - Restricted-to-all and all-to-restricted guest transitions
 - No update for an already converged job
 
+The fixture and command log are written under `/tmp/pbs-backup-job-test/`.
+
 ### IP-Tag Runtime Tests
 
 #### `test_iptag.py`
@@ -61,11 +54,13 @@ After running tests, clean up downloaded files:
 
 ```bash
 rm -rf /tmp/test-isos
+rm -rf /tmp/pbs-backup-job-test
 ```
 
 ## Adding New Tests
 
 When adding new test playbooks:
+
 1. Use descriptive names (e.g., `role-name.yml`)
 2. Use `localhost` as the target host
 3. Set `become: false` to avoid sudo requirements
