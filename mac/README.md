@@ -1,69 +1,98 @@
-# MacAnsible
+# macOS provisioning
 
-Ansible playbook to provision my Mac from a fresh install. Covers everything: Homebrew packages, Mac App Store apps, dotfiles, macOS system preferences, Dock layout, and homelab `/etc/hosts` entries.
+This Apple-silicon-specific playbook provisions a fresh Mac locally: Xcode
+Command Line Tools, Homebrew software, App Store apps, shell and editor files,
+Git/SSH configuration, homelab hosts, Dock layout, and macOS defaults. It uses
+`/opt/homebrew` paths and has no inventory or `ansible.cfg`.
 
-## Prerequisites
+## Bootstrap and run
 
-On a brand-new Mac, do these three things before running the playbook:
-
-```bash
-# 1. Install Xcode Command Line Tools (GUI dialog — click Install)
-xcode-select --install
-
-# 2. Install Homebrew
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# 3. Install Ansible
-brew install ansible
-```
-
-Also make sure you're **signed into the App Store** before running — the MAS tasks require it.
-
-## Usage
+Install Ansible first. The playbook can install Xcode Command Line Tools and
+Homebrew when absent, so they are not separate prerequisites. Sign into the Mac
+App Store before running the `mas` tasks.
 
 ```bash
-# Clone the repo
-git clone git@github.com:wbreiler/MacAnsible.git ~/Developer/MacAnsible
-cd ~/Developer/MacAnsible
-
-# Install the required Ansible collection
+cd mac
 make install
-
-# Run the full playbook (will prompt for sudo password)
+make check
 make run
 ```
 
-### Running specific sections
+`make install` installs `community.general`. `make run` applies `main.yml` to
+`localhost` and prompts for sudo. `make check` is check mode only; command,
+Homebrew, MAS, Dock, and defaults tasks may be incomplete or noisy there, and it
+does not prove convergence.
+
+To run a subset:
 
 ```bash
-make run-tags TAGS=homebrew          # just Homebrew packages
-make run-tags TAGS=defaults,dock     # system preferences + Dock
-make run-tags TAGS=shell             # Oh My Zsh + dotfiles
-make check                           # dry run — no changes applied
+make run-tags TAGS=homebrew
+make run-tags TAGS=defaults,dock
+make run-tags TAGS=shell
 ```
 
-Available tags: `xcode`, `homebrew`, `mas`, `shell`, `git`, `ssh`, `vscode`, `hosts`, `dock`, `defaults`
+Available tags are `xcode`, `homebrew`, `mas`, `shell`, `git`, `ssh`, `vscode`,
+`hosts`, `dock`, `defaults`, and `macos`. Inspect the selected tasks before a
+live run: they mutate user or system state, and Dock/defaults tasks visibly
+alter the current session.
 
-## What's Included
+## Managed areas
 
-| Section | Details |
-|---------|---------|
-| **Homebrew** | 22 taps, 100+ formulae, 60+ casks |
-| **App Store** | 20 apps — Logic Pro, Final Cut Pro, Pixelmator Pro, Infuse, Keynote/Numbers/Pages, and more |
-| **Shell** | Oh My Zsh (theme: `apple`), plugins, aliases, pyenv, `.zshrc`, `.zprofile` |
-| **Git** | Global config with GPG commit signing |
-| **SSH** | `~/.ssh/config` with OrbStack integration and 1Password SSH agent |
-| **VS Code** | 30+ extensions and full `settings.json` |
-| **Hosts** | Homelab server entries in `/etc/hosts` |
-| **Dock** | App layout (Firefox, Messages, Discord, Music, iTerm, Claude) + Downloads folder |
-| **macOS defaults** | Dark mode, Finder, trackpad, screenshots to iCloud, power management, hostname |
+| Tag | Current behavior |
+| --- | --- |
+| `xcode` | Detects and installs Xcode Command Line Tools through `softwareupdate` when absent |
+| `homebrew` | Installs/updates Homebrew, taps, formulae, casks, `dockutil`, and sudo Touch ID support |
+| `mas` | Installs IDs in `tasks/mas.yml`; requires a signed-in, entitled account and runs installs as root |
+| `shell` | Installs Oh My Zsh, replaces `.zshrc`/`.zprofile` with backups, manages pyenv Python 3.14 and selected pip/npm packages, and selects zsh |
+| `git` | Sets the global name/email and installs Git LFS hooks; it does not configure commit signing |
+| `ssh` | Replaces `~/.ssh/config` with backup and installs 1Password agent configuration; private keys are not managed |
+| `vscode` | Replaces VS Code `settings.json` with backup and attempts every extension in `tasks/vscode.yml` |
+| `hosts` | Replaces the marked Ansible block in `/etc/hosts` with the tracked homelab entries |
+| `dock` | Removes every Dock item, installs the tracked application order and Downloads folder, then restarts Dock |
+| `defaults`, `macos` | Applies user/system defaults, power settings, computer names, and restarts Finder/SystemUIServer |
 
-## After Running
+The formula, cask, MAS app, extension, Dock, host, and defaults lists change over
+time; their task files are authoritative. Homebrew formula/cask loops and VS
+Code extension installation intentionally tolerate individual failures, so a
+successful play does not prove every requested item installed.
 
-A few things still need to be done manually:
+Homebrew installs `dockutil` before a full run reaches Dock configuration.
+The sudo Touch ID bootstrap runs its binary with privilege, but its Homebrew
+service starts as the normal user; do not start `brew services` under sudo.
 
-- **GPG key** — `gpg --import your-key.asc`
-- **SSH keys** — restore private keys from 1Password or backup (e.g. `~/.ssh/PiKeys`)
-- **LM Studio** — download from [lmstudio.ai](https://lmstudio.ai) (no Homebrew cask)
-- **Parallels Desktop** — activate license after install
-- **CrossOver** — activate license after install
+## Files and safety
+
+Tracked files under `files/` replace these user files:
+
+- `~/.zshrc` and `~/.zprofile`
+- `~/.ssh/config`
+- `~/.config/1Password/ssh/agent.toml`
+- `~/Library/Application Support/Code/User/settings.json`
+
+Configured copies use backups where the tasks specify them. Review both the
+task and source file before editing or running those sections. Do not add
+private keys, tokens, passwords, or machine-local secrets to this project.
+
+The defaults task includes power settings and the hard-coded computer names in
+`tasks/macos_defaults.yml`; some changes require logout or reboot. The Dock task
+is destructive to the current layout. Obtain explicit approval immediately
+before a live application of those changes.
+
+## Manual follow-up
+
+- Restore private SSH and GPG keys outside the playbook.
+- Sign into 1Password before relying on its SSH agent.
+- Activate licensed applications such as Parallels Desktop and CrossOver.
+- Install applications absent from the current Homebrew cask and MAS lists.
+
+## Validation
+
+```bash
+cd mac
+ansible-lint main.yml
+ansible-playbook main.yml --syntax-check
+```
+
+These are local structural checks. Only an authorized live run plus checks of
+the affected files, packages, services, defaults, and UI can verify runtime
+state.
