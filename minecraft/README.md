@@ -1,249 +1,165 @@
-# MinecraftLXCAnsible
+# Minecraft server automation
 
-Automated Minecraft server provisioning and modpack update system for a Proxmox cluster.
+This project provisions unprivileged Minecraft LXCs on Proxmox and reconciles
+already-running servers. It supports Modrinth, CurseForge, and manually supplied
+official server packs.
 
-## Repository Structure
+## Layout
 
-```
-MinecraftLXCAnsible/
-├── update-script/                  # Modrinth update script (deployed to each server LXC)
-│   ├── update-modpack.sh           # Main update script
-│   ├── update.conf.example         # Config template (copy to /etc/minecraft/update.conf)
-│   ├── minecraft-update.service    # Systemd service unit
-│   └── minecraft-update.timer      # Systemd timer (nightly at 4AM)
-│
-└── ansible/                        # Ansible provisioning playbook
-    ├── provision.yml               # Main playbook
-    ├── site.yml                    # Reconcile existing LXCs without provisioning
-    ├── servers.yml.example         # Copy to ignored servers.yml and customize
-    ├── ansible.cfg
-    ├── hosts.ini                   # Static inventory (localhost only)
-    ├── vault.yml.example           # Vault structure example (copy → vault.yml, encrypt)
-    ├── group_vars/all.yml.example  # Copy to ignored all.yml and customize
-    └── roles/minecraft_server/     # Role applied to each new LXC
-        ├── tasks/main.yml
-        ├── tasks/set_java_version.yml
-        ├── templates/              # Jinja2 templates for systemd units and configs
-        └── vars/main.yml
-```
+- `ansible/provision.yml` creates and starts LXCs, reconciles HA placement,
+  configures new guests, and merges their VMIDs into the cluster backup job.
+- `ansible/site.yml` configures existing guests from their `ansible_host` values;
+  it does not create, move, resize, start, or stop LXCs or alter backup jobs.
+- `ansible/ha.yml` reconciles only PVE 9 HA resources and node-affinity rules.
+- `update-script/update-modpack.sh` is deployed to automatically managed guests.
+- `update-script/apply-manual-pack.sh` deploys official server-pack ZIP or
+  Modrinth `.mrpack` files from the controller.
 
-## Deployment Order
+Run Ansible commands from `minecraft/ansible/` so its `ansible.cfg`, inventory,
+and relative paths apply.
 
-### Step 1 — Prepare Ansible vault
+## Local setup
 
 ```bash
-cd ansible/
+cd minecraft/ansible
+python3 -m pip install -r requirements.txt
+ansible-galaxy collection install -r requirements.yml
+cp group_vars/all.yml.example group_vars/all.yml
+cp servers.yml.example servers.yml
 cp vault.yml.example vault.yml
-# Edit vault.yml: fill in Proxmox API credentials and Discord webhook URLs
 ansible-vault encrypt vault.yml
 ```
 
-### Step 2 — Prepare local environment configuration
+Customize the two ignored YAML files. `group_vars/all.yml` holds local Proxmox,
+storage, bridge, VLAN, and node settings. `servers.yml` holds guest addresses and
+desired server state. Put API credentials, the SSH public key, CurseForge key,
+and Discord webhooks in the ignored encrypted `vault.yml`; preserve the
+CurseForge key literally because its `$2a$10$` prefix is shell-sensitive.
+
+The controller needs Ansible, the Python requirements, the collection in
+`requirements.yml`, and SSH access appropriate to the selected entry point.
+Provisioning expects the configured Debian 13 template/storage to be available
+to Proxmox; the playbook ensures the named template exists on target nodes.
+
+## Define servers
+
+Start from `ansible/servers.yml.example`, which is the authoritative variable
+example. Important fields include:
+
+| Field | Purpose |
+| --- | --- |
+| `hostname`, `ansible_host`, `vmid`, `node` | Guest identity, existing address, and Proxmox placement |
+| `cores`, `memory`, `disk` | LXC resources used during provisioning |
+| `pack_source` | `modrinth`, `curseforge`, or `manual` |
+| `modpack_slug`, `curseforge_project_id` | Upstream pack identity |
+| `mc_version`, `loader`, `loader_version` | Minecraft and loader selection |
+| `instance_name`, `xms`, `xmx` | systemd instance and JVM heap |
+| `server_properties`, `ops` | Managed server settings and operators |
+| `ha_*` | Optional HA resource and node-affinity policy |
+| `extra_modrinth_mods` | Extra Modrinth projects layered onto an automatic pack |
+| `bluemap_*`, `dh_pregen_*`, `chunky_pregen_*` | Optional idle-only map/world generation |
+
+VMID 300 is reserved. Check live cluster state and allocate the next unused
+sequential VMID in the 100 range; do not jump to 301 or above. Provisioned
+Minecraft LXCs are unprivileged and use `nesting=1`.
+
+## Reconcile existing servers
 
 ```bash
-cp group_vars/all.yml.example group_vars/all.yml
-cp servers.yml.example servers.yml
-```
-
-Edit `group_vars/all.yml` for the local Proxmox nodes, network, storage, and
-template. Both generated files are ignored by Git.
-
-### Step 3 — Define your servers
-
-Edit `servers.yml`. Each entry creates one LXC and configures it:
-
-| Field | Description |
-|---|---|
-| `hostname` | LXC hostname (Greek/mythology theme) |
-| `vmid` | Proxmox VMID (must not conflict with existing VMs) |
-| `node` | Proxmox node: `prometheus`, `atlas`, or `nyx` |
-| `ha_enabled` | Manage this LXC as a Proxmox HA resource |
-| `ha_nodes` | Preferred/fallback nodes with priorities, highest first |
-| `ha_failback` | Automatically return to a higher-priority node |
-| `ha_auto_rebalance` | Allow non-failure load-balancing migrations |
-| `ha_detach_from_rule` | Existing shared HA rule to split this LXC out of |
-| `cores` / `memory` / `disk` | CPU cores, RAM in MB, disk in GB |
-| `modpack_slug` | Modrinth project slug, or `"vanilla"` |
-| `pack_source` | `modrinth`, `curseforge`, or `manual` official server pack |
-| `pack_name` | Human-friendly name for Discord notifications |
-| `mc_version` | Minecraft version string (e.g. `"1.21.1"`) |
-| `loader` | `"neoforge"`, `"forge"`, `"fabric"`, `"quilt"`, or `""` for vanilla |
-| `instance_name` | Systemd instance name (short, no spaces) |
-| `discord_webhook_url` | References a vault variable |
-| `xmx` / `xms` | JVM heap max / initial (e.g. `"6G"`, `"2G"`) |
-| `bluemap_*` | Optional BlueMap web map and idle-only scheduled rendering |
-| `dh_pregen_*` | Optional idle-only Distant Horizons LOD pre-generation |
-| `chunky_pregen_*` | Optional idle-only real-chunk generation with Chunky |
-
-> **VMID 300 is reserved** — DiscoPanel on Prometheus. Check live cluster state
-> and allocate the next unused sequential VMID in the 100 range; do not jump to
-> 301+.
-
-### Step 4 — Run the playbook
-
-Reconcile existing servers without creating, moving, or resizing their LXCs:
-
-```bash
-cd ansible/
+cd minecraft/ansible
 ansible-playbook site.yml --ask-vault-pass --check --diff
 ansible-playbook site.yml --ask-vault-pass
+ansible-playbook site.yml --ask-vault-pass -e server_filter=yabu-nash
 ```
 
-`site.yml` uses each server's `ansible_host` from the ignored `servers.yml`.
-It configures one guest at a time and does not touch Proxmox backup jobs. Use
-`-e server_filter=yabu-nash` to target a single existing server.
+`site.yml` validates that selected addresses are unique VLAN 40 addresses and
+configures guests serially. Check mode is a dry run, not runtime verification.
 
-Provision new LXCs and then configure them:
+## Provision LXCs
 
 ```bash
-cd ansible/
-ansible-playbook provision.yml --ask-vault-pass
-```
-
-The playbook:
-1. Creates each LXC via the Proxmox API (`community.proxmox.proxmox`)
-2. Reconciles optional PVE 9 HA resources and node-affinity rules
-3. Waits for SSH to become available
-4. Applies the `minecraft_server` role to each new LXC
-5. Creates or updates the `Minecraft Server Backups` cluster backup job on Proxmox (hourly, storage: `mnemosyne`) — adds provisioned VMIDs to the job, creating it if it doesn't exist
-
-> **Container type: Unprivileged** with `nesting=1`. Minecraft server LXCs don't need host mounts, so unprivileged is correct and is set automatically by the playbook.
-
-### Proxmox HA placement
-
-`ha.yml` manages only Proxmox HA resources and PVE 9 node-affinity rules. It
-does not create, resize, start, stop, or reconfigure Minecraft LXCs. Use it to
-reconcile placement without running provisioning or guest configuration:
-
-```bash
-cd ansible/
-ansible-playbook ha.yml --ask-vault-pass -e server_filter=atm10-nash
-```
-
-For a server that should normally remain on `atlas` but fail over to either
-other cluster node:
-
-```yaml
-ha_enabled: true
-ha_nodes:
-  - atlas:100
-  - prometheus:10
-  - nyx:10
-ha_strict: true
-ha_failback: false
-ha_auto_rebalance: false
-ha_detach_from_rule: ha-rule-existing-shared
-```
-
-`ha_auto_rebalance: false` prevents routine load-balancing migrations.
-`ha_failback: false` prevents another automatic interruption when `atlas`
-returns after a failure; migrate the LXC back manually. The strict rule still
-allows all three listed nodes but prevents placement on any future unlisted
-cluster node. `ha_detach_from_rule` is needed only when adopting a server that
-already belongs to a shared rule. The playbook removes only that server,
-preserves the other rule members, and uses Proxmox's digest guard to refuse a
-concurrent overwrite.
-
-**To provision a single server** from the list:
-```bash
+cd minecraft/ansible
+ssh-agent bash -c 'ssh-add ~/.ssh/lxc_nash && ansible-playbook provision.yml --ask-vault-pass'
 ssh-agent bash -c 'ssh-add ~/.ssh/lxc_nash && ansible-playbook provision.yml --ask-vault-pass -e server_filter=yabu-nash'
 ```
 
-**To set timezone only** (skips provisioning, uses `--tags timezone`):
+The SSH-agent wrapper is required when any selected server uses `migrate_from`,
+because delegated migration needs the key on its second SSH hop. Provisioning
+creates/starts guests, discovers their DHCP addresses, waits for SSH, configures
+them, and then updates the backup job whose comment is exactly
+`Minecraft Server Backups`. A new job is hourly, snapshot mode, zstd-compressed,
+and uses `proxmox_backup_storage`; an existing job keeps its storage, schedule,
+mode, compression, comment, and enabled state while receiving the new VMIDs.
+
+Do not use `provision.yml --tags timezone` as a guest-only shortcut: tasks tagged
+`always` still perform Proxmox/API discovery and guest inventory construction.
+Use `site.yml --tags timezone` for an existing server.
+
+## HA placement
+
 ```bash
-ssh-agent bash -c 'ssh-add ~/.ssh/lxc_nash && ansible-playbook provision.yml --ask-vault-pass --tags timezone'
+cd minecraft/ansible
+ansible-playbook ha.yml --ask-vault-pass -e server_filter=atm10-nash
 ```
 
-## Java Version Selection
+Set `ha_enabled: true`, list preferred/fallback nodes in `ha_nodes`, and use
+`ha_strict: true` to forbid unlisted nodes. `ha_auto_rebalance: false` blocks
+routine balancing moves, while `ha_failback: false` leaves a failed-over guest
+in place. A PVE 9 resource can belong to only one node-affinity rule. For an
+intentional split from a shared rule, set `ha_detach_from_rule`; the playbook
+preserves other members and uses the API digest guard.
 
-The playbook automatically picks the correct Java version:
+## Pack management
 
-| Minecraft Version | Java | Distribution |
-|---|---|---|
-| 26.x+ (year-based) | 25 | GraalVM CE 25 |
-| 1.21+ or 1.20.5+ | 21 | GraalVM CE 21 |
-| 1.18 – 1.20.4 | 17 | Temurin 17 |
-| 1.17 and below | 8 | OpenJDK 8 |
+For Modrinth and CurseForge sources, the role deploys
+`/usr/local/bin/update-modpack.sh`, its config under `/etc/minecraft/`, and a
+nightly persistent timer at 4 AM. The updater stages and validates content while
+the server remains online, announces/counts down, briefly stops the service,
+swaps content, verifies restart, and rolls back on failure. `--no-wait` is used
+during initial provisioning. Manual invocations support `--dry-run`, `--no-wait`,
+and `--config PATH`; logs are written to `/var/log/minecraft-update.log` and the
+latest three backups are retained.
 
-## Modpack Update Script
+`extra_modrinth_mods` can layer standalone Modrinth releases onto either kind of
+automatically managed pack. It does not apply to `pack_source: manual`.
 
-Each provisioned server gets `update-modpack.sh` at `/usr/local/bin/` and a nightly systemd timer.
+For a broken auto-reconstructed pack, prefer the official server pack:
 
-**Manual run:**
+1. Set `pack_source: manual` and the exact Forge/NeoForge `loader_version`.
+2. Run `minecraft/update-script/apply-manual-pack.sh PACK.zip root@HOST` or pass
+   a `.mrpack`. The latter is assembled from `modrinth.index.json` plus its
+   overrides before deployment.
+3. Reconcile the guest with `site.yml -e server_filter=HOSTNAME`.
+
+Manual mode disables/removes the automatic update timer. The deployment script
+backs up existing `mods`, `config`, and `defaultconfigs`, then deploys fresh
+content (including world datapacks). If `run.sh` already exists, reconciliation
+does not verify its loader version, so replace or verify loader files when the
+version changes.
+
+## Runtime features
+
+The role manages `minecraft@.service` and per-instance environment files.
+Minecraft version selects Java automatically: Java 25/GraalVM CE for year-based
+26.x+, Java 21/GraalVM CE for 1.20.5+, Java 17/Temurin for 1.18-1.20.4, and
+Java 8/OpenJDK for 1.17 and older.
+
+Optional BlueMap, Distant Horizons, and Chunky controllers use an LXC-local RCON
+password, pause while players are online, and resume while empty. Distant
+Horizons supports a one-time `dh_pregen_followup_radius` expansion. See
+`servers.yml.example` for their complete settings and disabled defaults.
+
+External DNS SRV records and router port forwards are managed outside this
+repository. See `AGENTS.md` for the last documented assignments, and verify
+those external systems live before relying on them.
+
+## Validation
+
 ```bash
-update-modpack.sh                    # apply updates if available
-update-modpack.sh --dry-run          # check only, no changes
-update-modpack.sh --config /path/to/alternate.conf
+cd minecraft/ansible
+ansible-lint
+ansible-playbook site.yml --syntax-check --ask-vault-pass
+bash -n ../update-script/update-modpack.sh ../update-script/apply-manual-pack.sh
 ```
 
-**Config** (`/etc/minecraft/update.conf`):
-```bash
-MODPACK_SLUG="all-the-mods-9"
-PACK_NAME="All the Mods 9"
-MC_VERSION="1.21.1"
-LOADER="neoforge"
-INSTANCE_NAME="atm9"
-DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
-MINECRAFT_DIR="/opt/minecraft"
-```
-
-**Update flow:** Discord announce → 5-min countdown → download, stage, and
-validate required content while the server stays online → briefly stop the
-service → atomically swap the staged content → restart and verify that it
-remains active. The successfully started version is recorded separately from
-the installed version, so a later check performs one corrective restart if the
-markers disagree. Failures after the swap restore the previous mod directory
-and restart the service. The latest three backups are retained.
-
-Logs: `/var/log/minecraft-update.log` (auto-rotates at 10 MB)
-
-## Idle map and world generation
-
-The role can install three independent cron-launched controllers. Each uses
-RCON to detect players and pauses work within a few seconds when anyone joins,
-then resumes after the server is empty. RCON is enabled automatically when any
-controller is active, with a password generated and stored only on the LXC.
-
-- `bluemap_idle_update_enabled` queues BlueMap rendering at midnight and noon.
-  Set `bluemap_enabled: true`, acknowledge the download with
-  `bluemap_accept_download: true`, and select the map with
-  `bluemap_idle_update_map`.
-- `dh_pregen_enabled` runs Distant Horizons LOD pre-generation for the chosen
-  dimension, center, and block radius. `dh_pregen_followup_radius` optionally
-  starts one larger pass after the initial radius completes.
-- `chunky_pregen_enabled` installs the pinned Chunky mod and generates real
-  chunks for the selected world, shape, center, and chunk radius.
-
-See `servers.yml.example` for the complete variable set and conservative
-disabled defaults. Re-running `site.yml` removes obsolete controller cron
-entries when a feature is disabled.
-
-## Prerequisites
-
-**Control machine:**
-```bash
-cd ansible/
-python3 -m pip install -r requirements.txt
-ansible-galaxy collection install -r requirements.yml
-```
-
-**Proxmox nodes:**
-- Debian 13 LXC template downloaded: `pveam download local debian-13-standard_13.1-2_amd64.tar.zst`
-- SSH accessible as root from control machine
-- API user with `PVEAdmin` role (or `root@pam`)
-
-**Each server LXC** (handled automatically by playbook):
-- `jq`, `curl`, `unzip`, `openjdk-XX-jre-headless`
-
-## Network Details
-
-| Resource | Address |
-|---|---|
-| Apt cache | `10.10.40.175:3142` (VLAN 40) |
-| Guest network | `10.10.40.0/24` (VLAN 40, bridge `vmbr0`) |
-
-## Adding a New Server
-
-1. Add an entry to `ansible/servers.yml`
-2. If it needs a new Discord webhook, add `vault_discord_webhook_<name>` to `vault.yml` and re-encrypt
-3. Run `ansible-playbook provision.yml --ask-vault-pass`
+Syntax/lint checks do not prove live convergence or service health.
