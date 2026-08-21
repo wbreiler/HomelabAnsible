@@ -80,9 +80,13 @@ cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
 
 * **Inventory**: `inventory.yml` (gitignored) - Contains node IPs and VMID ranges.
 * **Group Variables**: `group_vars/proxmox_cluster.yml` (gitignored, Ansible Vault encrypted) - Cluster-wide secrets and configuration.
-* **Host Variables**: `host_vars/<nodename>.yml` (gitignored via `host_vars/*.yml` pattern) - Per-node PBS and corosync ring1 configuration.
+* **Host Variables**: `host_vars/<nodename>.yml` (gitignored via `host_vars/*.yml` pattern) - Per-node corosync ring1 configuration, plus PBS identity on the cluster master.
 
-**Critical**: All actual configuration files containing IPs, credentials, and node-specific data are gitignored. Only `.example` files are tracked in git.
+**Critical**: Local inventory, group variables, and host variables are
+gitignored; only their sanitized `.example` templates are tracked. Role
+defaults may still contain non-secret environment-specific defaults such as
+service health-check addresses, so review tracked defaults as well as the
+local variable files before changing behavior.
 
 ### Role Execution Order
 
@@ -129,8 +133,11 @@ The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
 Each node's `host_vars/<nodename>.yml` configures:
 
-* `pbs_username` / `pbs_namespace` — Shared PBS credentials configured on the cluster master.
 * `corosync_ring1_addr` — IP on the dedicated cluster sync network (10.10.50.x).
+
+The cluster master's host variables additionally set `pbs_username` and
+`pbs_namespace`; `pbs_storage` uses that one identity for the cluster-wide
+storage configuration.
 
 ### Security Model
 
@@ -288,69 +295,90 @@ management, LXC installation, system updates, and PBS restores.
 * Existing HA-managed containers are located at run time through
   `tasks/resolve_lxc_node.yml`. A role's `<role>_node` value is therefore the
   fresh-install fallback, not a reliable statement of its current location.
+  Names, VMIDs, and fallback nodes documented below describe tracked defaults,
+  not verified live state; inspect cluster resources before operational work.
 
 ### prowlarr
 
 * Manages Prowlarr with repository-owned Ansible tasks.
-* Adopts `prowlarr-nash` (VMID 104 on `atlas`) without reinstalling the existing application.
+* The tracked defaults identify `prowlarr-nash` as VMID 104 with `atlas` as the fresh-install fallback; existing application data is preserved.
 * Pins the Prowlarr release and checksum, manages dependencies, data directory, service, and health checks, and removes the remote updater.
 * Skipped by default unless `install_prowlarr: true`.
 
 ### homebridge
 
 * Manages Homebridge with repository-owned Ansible tasks.
-* Adopts `homebridge-nash` (VMID 105 on `prometheus`) without replacing its data.
+* The tracked defaults identify `homebridge-nash` as VMID 105 with `prometheus` as the fresh-install fallback; existing data is preserved.
 * Pins the Homebridge Debian package and checksum-verifies its repository key, manages the APT source and package pin, and removes the remote updater.
 * Skipped by default unless `install_homebridge: true`.
 
 ### spoolman
 
 * Manages Spoolman with repository-owned Ansible tasks.
-* Adopts `spoolman-nash` (VMID 102 on `nyx`) while preserving its `.env` file and SQLite data directory.
+* The tracked defaults identify `spoolman-nash` as VMID 102 with `nyx` as the fresh-install fallback; its `.env` file and SQLite data directory are preserved.
 * Pins and checksum-verifies both Spoolman and uv releases, builds dependencies before atomically swapping the application, removes the remote updater, and verifies the reported application version.
 * Skipped by default unless `install_spoolman: true`.
+
+### bambuddy
+
+* Creates or adopts the hostname configured by `bambuddy_hostname`; its VMID
+  defaults to automatic allocation and `bambuddy_node` is only the
+  fresh-install fallback.
+* Pins and checksum-verifies the Bambuddy source release, builds its Python and
+  frontend dependencies inside the LXC, preserves an existing `.env`, manages
+  the systemd service, and verifies the web service.
+* Skipped by default unless `install_bambuddy: true`.
 
 ### gitea_mirror
 
 * Manages Gitea Mirror with repository-owned Ansible tasks.
-* Adopts `git-mirror-nash` (VMID 119, HA-managed) while preserving its environment file and SQLite data directory; the role resolves the current hosting node at run time, and `gitea_mirror_node` is only the fresh-install fallback.
+* The tracked defaults identify `git-mirror-nash` as VMID 119; its environment file and SQLite data directory are preserved, and `gitea_mirror_node` is only the fresh-install fallback.
 * Pins and checksum-verifies both Gitea Mirror and Bun releases, refuses destructive 2.x migrations, checks SQLite integrity before upgrades, builds the new release before stopping the service, keeps a pre-upgrade backup, rolls back automatically when the upgraded service fails its health check, removes the remote updater, and verifies the installed version.
 * Skipped by default unless `install_gitea_mirror: true`.
 
 ### seerr
 
 * Manages Seerr with repository-owned Ansible tasks.
-* Adopts `seerr-nash` (VMID 117, HA-managed) while preserving `/etc/seerr/seerr.conf` and the SQLite config data; the container was already migrated from Overseerr to Seerr by its legacy updater.
+* The tracked role defaults identify `seerr-nash` as VMID 117; `/etc/seerr/seerr.conf` and SQLite config data are preserved. Local overrides may retain an older hostname, so resolve the configured hostname before acting.
 * Pins and checksum-verifies both Seerr and pnpm releases, requires NodeSource Node.js 22, refuses to overwrite an unmigrated Overseerr install, checks SQLite integrity before upgrades, builds the new release before stopping the service, keeps a pre-upgrade backup, rolls back automatically when the upgraded service fails its health check, removes the remote updater, and verifies the API-reported version.
 * Skipped by default unless `install_seerr: true`.
 
 ### pocket_id
 
 * Manages Pocket ID with repository-owned Ansible tasks.
-* Adopts `pocketid-nash` (VMID 100, HA-managed) while preserving its `.env` (including the mandatory encryption key) and SQLite data.
+* The tracked defaults identify `pocketid-nash` as VMID 100; its `.env` (including the mandatory encryption key) and SQLite data are preserved.
 * Pins and checksum-verifies the single release binary, checks SQLite integrity before upgrades, backs up the binary, data, and environment before swapping, rolls back automatically (including the data directory, since new versions migrate the schema on start) when the upgraded service fails its health check, removes the remote updater, and verifies the binary-reported version.
 * Skipped by default unless `install_pocket_id: true`.
 
 ### forgejo
 
 * Manages Forgejo with repository-owned Ansible tasks.
-* Adopts `forgejo-nash` (VMID 103, HA-managed), which serves `git.wbreiler.com` — this repository's own remote. Preserves `app.ini` and all repository data.
+* The tracked defaults identify `forgejo-nash` as VMID 103. The role preserves `app.ini` and all repository data; verify the live service endpoint and hosting node before operational work.
 * Pins and checksum-verifies the release binary, refuses downgrades and skipped major versions (Forgejo must upgrade one major at a time), checks SQLite integrity before upgrades, stages and sanity-runs the new binary before stopping the service, backs up the binary, config, and database (not the multi-GB repositories, which upgrades never rewrite), rolls back binary, database, and config automatically when the upgraded service fails its health check, removes the remote updater, and verifies the binary-reported version.
 * Skipped by default unless `install_forgejo: true`.
 
 ### sonarr
 
 * Manages Sonarr with repository-owned Ansible tasks.
-* Adopts `sonarr-nash` (VMID 110, HA-managed) while preserving `config.xml` and the SQLite databases; the service keeps running as the `media` user with its in-container NFS media mounts untouched.
+* The tracked defaults identify `sonarr-nash` as VMID 110; the role preserves `config.xml` and the SQLite databases, keeps the service running as the `media` user, and does not manage its in-container media mounts.
 * Pins and checksum-verifies the release tarball, backs up config and databases before atomically swapping the install directory, rolls back automatically when the upgraded service fails its `/ping` check, removes the remote updater, and verifies the API-reported version.
 * Skipped by default unless `install_sonarr: true`.
 
 ### radarr
 
 * Manages Radarr with repository-owned Ansible tasks.
-* Creates or adopts `radarr-nash` (VMID 111 on `prometheus`) while preserving `config.xml` and the SQLite database; the service runs as the `media` user.
+* The tracked defaults identify `radarr-nash` as VMID 111 with `prometheus` as the fresh-install fallback; `config.xml` and the SQLite database are preserved, and the service runs as the `media` user.
 * Pins and checksum-verifies the release tarball, backs up config and database state before atomically swapping the install directory, rolls back automatically when the upgraded service fails its `/ping` check, removes the remote updater, and verifies the API-reported version.
 * Skipped by default unless `install_radarr: true`.
+
+### gallery_dl
+
+* Creates or adopts the configured gallery-dl LXC through the shared bootstrap;
+  the non-empty NFS settings make a newly created container privileged.
+* Installs gallery-dl, manages its config and weekly cron job, mounts the
+  configured NFS export, and optionally copies the gitignored cookies file.
+  The application itself is not version-pinned by this role.
+* Skipped by default unless `install_gallery_dl: true`.
 
 ### update_all
 
@@ -440,7 +468,9 @@ management, LXC installation, system updates, and PBS restores.
 
 * Deploys full VMs from ISOs by building `qm create` commands.
 * Runs on `vm_deploy_master_node` and delegates creation to target nodes.
-* Auto-assigns VMIDs from the 100-199 range.
+* Auto-assigns VMIDs from each target node's configured
+  `vmid_range_start`/`vmid_range_end`; the tracked example partitions 100-199
+  across the three nodes.
 * Idempotent by VM name.
 
 ### network_tuning
