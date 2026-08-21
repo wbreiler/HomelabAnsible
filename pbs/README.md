@@ -1,23 +1,22 @@
 # Proxmox Backup Server Ansible Configuration
 
-Automated deployment and configuration of Proxmox Backup Server with local
-ZFS storage, user management, and Tailscale integration using a modular
-role-based structure.
+Configures an existing Proxmox Backup Server with a local ZFS datastore, PBS
+users, optional pull-style sync jobs, and Tailscale. It does not install the
+PBS product or create/reconfigure the underlying ZFS pool.
 
 ## Features
 
-- ✅ Installs Proxmox Backup Server from no-subscription repository
-- ✅ Disables enterprise repository
+- ✅ Removes stale PBS/Proxmox enterprise and no-subscription source files
 - ✅ Uses an existing local ZFS pool of any size or vdev topology
 - ✅ Creates a dedicated ZFS dataset with `atime=off`
-- ✅ Creates and manages PBS users with secure passwords
+- ✅ Creates missing PBS users and grants datastore-wide administrator access
 - ✅ Configures MainStore on the local ZFS dataset
-- ✅ Optional remote configuration for sync/pull jobs
+- ✅ Optional remote plus pull-style sync-job creation
 - ✅ Installs and configures Tailscale VPN
 
 ## Prerequisites
 
-- Debian-based system (tested on Debian 12 Bookworm)
+- Existing PBS host on Debian 12 Bookworm; repository URLs are Bookworm-specific
 - ansible-core 2.16 through 2.21 installed on the control node
 - Root or sudo access on target PBS server
 - SSH key authentication for routine playbook runs
@@ -29,8 +28,8 @@ role-based structure.
 ### 1. Clone and Configure
 
 ```bash
-# Clone or create the repository
-cd pbs-ansible
+# From the monorepo root
+cd pbs
 
 # Install the tested controller and collection dependency ranges
 python3 -m pip install -r requirements.txt
@@ -50,9 +49,9 @@ vim group_vars/pbs_servers.yml
 ### 2. Encrypt Sensitive Data (Recommended)
 
 ```bash
-# Create vault password file (add to .gitignore)
-echo "your-vault-password" > .vault_pass
-chmod 600 .vault_pass
+# Create the ignored vault password file without exposing the secret in argv
+install -m 0600 /dev/stdin .vault_pass
+# Type the password, then press Ctrl-D
 
 # Encrypt the group vars file
 ansible-vault encrypt group_vars/pbs_servers.yml
@@ -80,9 +79,11 @@ ansible-playbook site.yml --vault-password-file .vault_pass --check
 ## Directory Structure
 
 ```
-pbs-ansible/
+pbs/
 ├── ansible.cfg                           # Ansible configuration
 ├── site.yml                              # Main playbook
+├── requirements.txt                      # Tested ansible-core range
+├── requirements.yml                      # Collection requirements
 ├── inventory.yml                         # Server inventory (DO NOT COMMIT)
 ├── inventory.yml.example                 # Example inventory
 ├── .gitignore                            # Git ignore rules
@@ -94,10 +95,10 @@ pbs-ansible/
 │   ├── users/                           # User management role
 │   │   ├── tasks/main.yml
 │   │   └── defaults/main.yml
-│   ├── pbs/                             # PBS installation and config role
+│   ├── pbs/                             # Datastore and sync-job configuration
 │   │   ├── tasks/main.yml
 │   │   ├── defaults/main.yml
-│   │   └── handlers/main.yml
+│   ├── cleanup_repos/                   # Removes stale PBS/Proxmox repo files
 │   └── tailscale/                       # Tailscale installation role
 │       ├── tasks/main.yml
 │       └── defaults/main.yml
@@ -143,16 +144,19 @@ pbs_datastore_path: "/mnt/datastore"
 pbs_namespaces: []
 pbs_namespace_password: ""  # Required when pbs_namespaces is not empty
 
-# Pull Job (runs weekly on Saturday at 11:30 PM)
-pbs_configure_pull_job: true
-pbs_pull_schedule: "sat 23:30"
+# Pull-style sync job (runs weekly on Saturday at 11:30 PM)
+pbs_configure_sync_job: true
+pbs_sync_remote_fingerprint: "CHANGE_ME_remote_fingerprint"
+pbs_sync_schedule: "sat 23:30"
 ```
 
 ## Roles
 
 ### users
 
-Creates and manages PBS users with secure password hashing.
+Creates missing PBS users, grants `DatastoreAdmin` at `/datastore`, and can set
+the root Unix password. An existing PBS user's password is not rotated because
+the create command treats `already exists` as unchanged.
 
 **Tags:** `users`, `setup`
 
@@ -163,7 +167,10 @@ Creates and manages PBS users with secure password hashing.
 
 ### pbs
 
-Installs Proxmox Backup Server, configures datastore, and manages remote sync/pull jobs.
+Waits for an already installed PBS service, validates or creates the datastore
+dataset, registers the datastore, and optionally creates a remote and
+pull-style sync job. Existing remotes/jobs are accepted as already present;
+their settings are not reconciled by this implementation.
 
 **Tags:** `pbs`, `setup`
 
@@ -176,9 +183,9 @@ Installs Proxmox Backup Server, configures datastore, and manages remote sync/pu
 - `pbs_datastore_path`: Dataset mountpoint and PBS datastore path
 - `pbs_namespaces`: Optional namespaces to create
 - `pbs_namespace_password`: PBS repository password used for namespace creation
-- `pbs_configure_remote_sync`: Enable remote sync (push)
-- `pbs_configure_pull_job`: Enable pull job
-- `pbs_pull_schedule`: Pull schedule (e.g., `"sat 23:30"`)
+- `pbs_configure_sync_job`: Create the remote and sync job
+- `pbs_sync_remote_fingerprint`: TLS fingerprint for the remote PBS
+- `pbs_sync_schedule`: Sync schedule (e.g., `"sat 23:30"`)
 
 ### tailscale
 
@@ -188,9 +195,9 @@ Installs and configures Tailscale VPN (optional).
 
 **Variables:**
 
-- `install_tailscale`: Enable Tailscale (default: `true`)
-- `tailscale_authenticate`: Auto-authenticate
-- `tailscale_args`: Additional arguments for `tailscale up`
+- `install_tailscale`: Enable the role from `site.yml` (default: `true`)
+- `tailscale_auth_key`: Optional auth key; when non-empty it is passed through
+  a mode-`0600` temporary file and removed afterward
 
 ## Usage Examples
 
@@ -222,8 +229,8 @@ ansible-vault edit group_vars/pbs_servers.yml
 # View encrypted file
 ansible-vault view group_vars/pbs_servers.yml
 
-# Run playbook with vault (password file configured in ansible.cfg)
-ansible-playbook site.yml
+# Run with the ignored local vault password file
+ansible-playbook site.yml --vault-password-file .vault_pass
 ```
 
 ### Check Mode (Dry Run)
@@ -256,7 +263,8 @@ ssh root@pbs-server
 tailscale up
 ```
 
-Or set `tailscale_authenticate: true` and provide an auth key in `tailscale_args`.
+Or set `tailscale_auth_key` in the encrypted group variables so the role can
+authenticate non-interactively.
 
 ### 3. Verify Configuration
 
@@ -269,8 +277,8 @@ zpool status backup
 zfs list backup/pbs
 df -h /mnt/datastore
 
-# Check pull jobs (if configured)
-proxmox-backup-manager pull-job list
+# Check sync jobs (if configured)
+proxmox-backup-manager sync-job list
 
 # Check remote configuration
 proxmox-backup-manager remote list
@@ -351,4 +359,4 @@ This configuration is provided as-is for homelab and personal use.
 
 ## Related Projects
 
-- [proxmox-ansible](https://git.wbreiler.com/wbreiler/proxmox-ansible) - Proxmox VE cluster configuration
+- [`../proxmox/`](../proxmox/) - Proxmox VE cluster configuration
