@@ -92,7 +92,7 @@ servers:
   # when using a .mrpack). Deploy mods/config/defaultconfigs/datapacks with
   # update-script/apply-manual-pack.sh <pack.zip|pack.mrpack> root@<ansible_host>
   # — it handles both CurseForge server-pack zips and Modrinth .mrpack files.
-  # See minecraft/CLAUDE.md for the full procedure.
+  # See minecraft/AGENTS.md for the full procedure.
   # - hostname: example-manual-pack
   #   ansible_host: 192.0.2.33
   #   vmid: 303

@@ -1,15 +1,17 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Universal guidance for agents working in the `minecraft/` project.
 
 ## What this repo does
 
-Automates Minecraft server provisioning and modpack updates for a Proxmox cluster (`cluster-nash`, nodes: Prometheus, Atlas, Nyx). Two independent components:
+Automates Minecraft server provisioning and modpack updates for a Proxmox cluster (`cluster-nash`, nodes: Prometheus, Atlas, Nyx). Two components:
 
 1. **`update-script/`** — Modpack update script deployed to each Minecraft server LXC
 2. **`ansible/`** — Playbooks that manage HA placement, create LXCs via the Proxmox API, then SSH in to configure them
 
-These components are not coupled at the code level — they share conventions (paths, config format) but run independently on different machines.
+The Ansible role deploys and invokes `update-script/update-modpack.sh`; the
+controller-side `apply-manual-pack.sh` is run separately for manually managed
+packs. Keep their shared paths and configuration contract aligned.
 
 ## Network layout
 
@@ -98,7 +100,7 @@ the other resources and supplies the rule digest to prevent concurrent writes.
 
 **CurseForge provisioning** in the role delegates to `update-modpack.sh --no-wait` rather than reimplementing the API logic. The script and its config are deployed in step 5 (before the download steps) for this reason.
 
-**Backup job**: At the end of Play 1, the playbook creates or updates a Proxmox cluster backup job (comment: `Minecraft Server Backups`, schedule: `0 * * * *`, storage: `mnemosyne`, mode: snapshot, compress: zstd). If the job already exists it merges the provisioned VMIDs into the existing VMID list. Identified by the comment string — don't rename it in the Proxmox UI. `proxmox_backup_storage` in `group_vars/all.yml` controls the target storage.
+**Backup job**: At the end of Play 1, the playbook creates or updates a Proxmox cluster backup job (comment: `Minecraft Server Backups`, schedule: `0 * * * *`, mode: snapshot, compress: zstd). If the job already exists it merges the provisioned VMIDs into the existing VMID list and preserves that job's storage and schedule. A newly created job uses `proxmox_backup_storage` from `group_vars/all.yml`. The job is identified by its comment string, so don't rename it in the Proxmox UI.
 
 ## External connectivity (`*.mc.wbreiler.com`)
 
@@ -126,8 +128,8 @@ The router (outside this repo — not Ansible-managed) forwards
 reachable server needs a unique external port both forwarded on the router
 and published in its SRV record.
 
-Current known assignments (from live DNS, not tracked anywhere else — update
-this table by hand when ports change):
+Last documented assignments (the DNS and router configuration are outside this
+repo, so verify them live before relying on or changing this table):
 
 | Server | Subdomain | External port |
 |---|---|---|
