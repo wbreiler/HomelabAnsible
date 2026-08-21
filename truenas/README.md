@@ -128,38 +128,48 @@ remain local.
 
 ## Commands
 
-Use the 1Password SSH agent for authentication. If a headless Ansible process
-cannot trigger the biometric prompt, open a temporary control connection in a
-separate Terminal:
+Run commands from this directory so `ansible.cfg` supplies the ignored local
+inventory, roles, filter plugins, and SSH settings. Its control path matches
+the user's SSH configuration, allowing Ansible to reuse an already approved
+1Password-agent connection.
+
+If no reusable connection exists and a headless Ansible process cannot trigger
+the biometric prompt, establish one in a separate Terminal using the socket
+path configured in `ansible.cfg`:
 
 ```sh
-ssh -M -S /tmp/ansible-truenas-erebus.sock \
-  -o ControlPersist=30m \
-  -fN -p 2747 root@10.10.10.7
+mkdir -p ~/.ssh/sockets
+ssh -MNf -p 2747 root@10.10.10.7
 ```
 
 Run read-only discovery:
 
 ```sh
-ANSIBLE_SSH_ARGS="-o ControlMaster=no \
--o ControlPath=/tmp/ansible-truenas-erebus.sock" \
 ansible-playbook playbooks/discover.yml
 ```
 
 Run the read-only desired-state audit:
 
 ```sh
-ANSIBLE_SSH_ARGS="-o ControlMaster=no \
--o ControlPath=/tmp/ansible-truenas-erebus.sock" \
 ansible-playbook playbooks/audit.yml
+```
+
+The audit reports modeled drift and verifies desired datasets, shares, and
+applications, including explicitly absent SMB/NFS shares. It does not prove
+that unmodeled live objects are safe or intended, and it never deletes them.
+
+Before mutation, inspect `playbooks/backup.yml`: its appliance name, remote and
+local paths, archive filename, and date are deliberately explicit. Update them
+for the reviewed run, then create the credential-bearing backup:
+
+```sh
+ansible-playbook playbooks/backup.yml
 ```
 
 Mutation through `site.yml` is blocked by default. It requires
 `truenas_allow_changes=true` and a reviewed backup:
 
 ```sh
-ANSIBLE_SSH_ARGS="-o ControlMaster=no \
--o ControlPath=/tmp/ansible-truenas-erebus.sock" \
 ansible-playbook site.yml -e truenas_allow_changes=true
 ```
 
@@ -184,3 +194,21 @@ Read [AGENTS.md](AGENTS.md) before operating on the live host. In particular:
 
 See [REVIEW.md](REVIEW.md) for notable reliability and security observations
 from discovery. They are documented rather than silently changed.
+
+## Validation
+
+The project uses `/tmp` for Ansible temporary files during static validation:
+
+```sh
+ANSIBLE_LOCAL_TEMP=/tmp/ansible-truenas-local \
+ANSIBLE_REMOTE_TEMP=/tmp/ansible-truenas-remote \
+ansible-lint
+
+ANSIBLE_LOCAL_TEMP=/tmp/ansible-truenas-local \
+ANSIBLE_REMOTE_TEMP=/tmp/ansible-truenas-remote \
+ansible-playbook --syntax-check site.yml
+```
+
+Syntax validation requires the ignored local inventory and variables created
+from the tracked examples. Do not weaken authentication or host-key checking
+to make it pass.
