@@ -6,19 +6,19 @@ inside its own directory.
 
 ## Layout
 
-- `proxmox/` — Proxmox VE cluster automation. Deep agent docs: `proxmox/CLAUDE.md` / `proxmox/AGENTS.md`.
+- `proxmox/` — Proxmox VE cluster automation. Deep agent docs: `proxmox/AGENTS.md`.
 - `pbs/` — Proxmox Backup Server setup (`pbs/README.md`).
 - `minecraft/` — Minecraft LXC provisioning + modpack update script. Agent docs:
-  `minecraft/CLAUDE.md`. If a modpack misbehaves in a way that isn't an
+  `minecraft/AGENTS.md`. If a modpack misbehaves in a way that isn't an
   obvious single-mod config bug (e.g. a client crash tied to a corrupted
   network sync packet), prefer recreating the server from the modpack's
   official server pack (`pack_source: manual` in `servers.yml`, deployed via
   `minecraft/update-script/apply-manual-pack.sh` — supports both CurseForge
   server-pack zips and Modrinth `.mrpack` files) over continuing to debug the
-  CurseForge/Modrinth auto-fetched mod set — see `minecraft/CLAUDE.md` for the
+  CurseForge/Modrinth auto-fetched mod set — see `minecraft/AGENTS.md` for the
   procedure. External access is `<name>.mc.wbreiler.com` via a per-server DNS
   SRV record (Cloudflare, managed by hand, not part of this repo) plus a
-  router port-forward — see `minecraft/CLAUDE.md` for the current port table.
+  router port-forward — see `minecraft/AGENTS.md` for the current port table.
 - `truenas/` — Desired-state config for TrueNAS host `erebus`. **Read
   `truenas/AGENTS.md` before touching it** — it has strict safety rules
   (read-only discovery, explicit approval for anything destructive, never
@@ -31,7 +31,7 @@ inside its own directory.
 - `desktop/` — Windows 11 gaming PC (`gaming-pc`) over WinRM
   (`desktop/README.md`).
 - `mac/` — macOS fresh-install provisioning, runs on `localhost` only, no
-  inventory (`mac/CLAUDE.md`).
+  inventory (`mac/AGENTS.md`).
 
 Always `cd` into the project directory before running ansible — each has its
 own `ansible.cfg` (inventory, SSH key, become settings) that only applies from
@@ -81,7 +81,7 @@ ansible-playbook -i inventory.yml site.yml --syntax-check
 ansible-playbook ... --check --diff            # dry-run
 ```
 
-Commit style: `role_name: brief description` (see `proxmox/CLAUDE.md`).
+Commit style: `role_name: brief description` (see `proxmox/AGENTS.md`).
 
 ## Environment facts
 
