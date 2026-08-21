@@ -18,11 +18,12 @@ hosts"; the roles don't care which architecture it's running on.
   deciding. See "Three or more sites: quorum instead of static primary"
   below.
 - `uptime_kuma` — installs Docker, runs Uptime Kuma in a container, then
-  drives its admin-user setup, notification providers, monitor groups, and
+  can drive admin-user setup, notification providers, monitor groups, and
   monitors through the third-party `uptime_kuma_api` Python client (Kuma has
-  no official REST API for this). Reconciliation is additive: anything
-  created by hand in the Kuma UI, or not listed in
-  `uptime_kuma_monitors`/`uptime_kuma_groups`, is left alone.
+  no official REST API for this). That API path supports Kuma 1.x only and is
+  disabled by default for the rolling Kuma 2 image. When explicitly enabled
+  with a compatible version, reconciliation is additive: anything created by
+  hand in the UI, or not listed in the desired variables, is left alone.
 - `bootstrap_lxc` / `pve_backup` — used once per Proxmox-hosted site
   (`bootstrap-lxc.yml`, not `site.yml`) to create the LXC that runs
   everything above, and to back it up to the existing PBS. Not needed for
@@ -86,15 +87,13 @@ the Proxmox host's — see "Proxmox-hosted sites" below, that's a separate,
 earlier step. For a bare-metal site (`tx`, the Pi), it's just the device's
 own IP.
 
-The `tx` Pi is online at `10.10.70.50` with system hostname `uptime-tx` and
-Ansible inventory alias `tx`. Its Kuma application configuration still needs
-`host_vars/tx/` before running `site.yml`. The `ms` and `tn` sites remain
-planned; fill in `inventory.yml` and `host_vars/<hostname>/` as each comes
-online.
+The tracked inventory and host-variable files are examples only. The real
+site list, addresses, deployment state, and per-site variables are gitignored;
+inspect those local files and verify reachability before targeting a host.
 
-## Proxmox-hosted sites (ms, tn)
+## Proxmox-hosted sites
 
-The two x86 Mini PC sites run everything above inside a Proxmox LXC rather
+An x86 Mini PC site can run everything above inside a Proxmox LXC rather
 than directly on the host OS — see the repo history/commit messages for why
 (recovery unit becomes "recreate the LXC," not "re-image the machine"; PBS
 backups give real disaster recovery). `tx` (the Pi) has no Proxmox build for
@@ -238,6 +237,11 @@ Site-specific monitors and peer watchdogs are never quorum-gated — they
 always notify straight to Discord, since there's nothing to vote on (only
 one site can check them, or the "down" itself came from a direct
 observation, not a disputed one).
+
+These monitor/notification wiring steps are produced by the optional API
+reconciliation path. With the default Kuma 2 configuration, create the
+equivalent providers and monitor associations in the UI; enabling the relay
+service alone does not modify Kuma's configuration.
 
 ## Monitors and groups
 
