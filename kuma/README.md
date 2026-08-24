@@ -269,9 +269,9 @@ routes that monitor to the quieter, no-mention notification tier — see
 uptime_kuma_shared_groups:
   - name: "Shared Infra"
 uptime_kuma_shared_monitors:
-  - name: "Proxmox nyx"
+  - name: "Proxmox atlas"
     type: port
-    hostname: "10.10.30.2"
+    hostname: "10.10.30.9"
     port: 8006
     group: "Shared Infra"
     interval: 60
