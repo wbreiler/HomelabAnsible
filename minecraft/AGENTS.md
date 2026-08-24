@@ -18,7 +18,7 @@ packs. Keep their shared paths and configuration contract aligned.
 | Resource | Address |
 |---|---|
 | apt-cacher-ng proxy | `10.10.40.175:3142` (VLAN 40) |
-| Proxmox API | `10.10.30.2` (cluster VIP, in vault) |
+| Proxmox API | `10.10.30.9` (`atlas`, in vault) |
 
 ## Key constraints
 
