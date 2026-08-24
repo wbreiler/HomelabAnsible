@@ -1,5 +1,5 @@
 ---
-gatus_node: "nyx"
+gatus_node: "atlas"
 gatus_vmid: ""
 gatus_hostname: "gatus-nash"
 gatus_storage: "local-zfs"

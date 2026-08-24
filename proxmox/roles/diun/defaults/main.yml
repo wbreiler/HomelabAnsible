@@ -1,5 +1,5 @@
 ---
-diun_node: "nyx"
+diun_node: "atlas"
 diun_vmid: ""  # auto-assign next available managed-app VMID
 diun_hostname: "diun-nash"
 diun_storage: "local-zfs"

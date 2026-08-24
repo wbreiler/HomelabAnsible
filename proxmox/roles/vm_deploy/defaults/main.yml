@@ -1,6 +1,6 @@
 ---
 # Node where Ansible coordinates VM deployment tasks (queries cluster, delegates creation)
-vm_deploy_master_node: "nyx"
+vm_deploy_master_node: "atlas"
 
 # Target node for new VMs: "random" to spread across cluster, or a specific node name.
 # Individual VMs can override this with a per-entry `node:` key.

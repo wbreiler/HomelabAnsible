@@ -3,9 +3,9 @@
 #
 # Examples:
 #   ./pbs-restore.sh prometheus 104
-#   ./pbs-restore.sh nyx 103,114
+#   ./pbs-restore.sh atlas 103,114
 #   ./pbs-restore.sh atlas 200 --no-start
-#   ./pbs-restore.sh nyx 103,114 --no-force --no-start
+#   ./pbs-restore.sh atlas 103,114 --no-force --no-start
 
 set -euo pipefail
 

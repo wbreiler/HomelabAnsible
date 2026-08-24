@@ -1,5 +1,5 @@
 ---
-pocket_id_node: "nyx"
+pocket_id_node: "atlas"
 pocket_id_vmid: "100"
 pocket_id_hostname: "pocketid-nash"
 pocket_id_storage: "local-zfs"

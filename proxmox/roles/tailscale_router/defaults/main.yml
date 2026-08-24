@@ -1,5 +1,5 @@
 ---
-tailscale_router_node: "nyx"
+tailscale_router_node: "atlas"
 tailscale_router_vmid: ""  # empty selects the next available managed-app VMID
 tailscale_router_hostname: "tailscale-router-nash"
 tailscale_router_storage: "local-zfs"

@@ -1,5 +1,5 @@
 ---
-spoolman_node: "nyx"
+spoolman_node: "atlas"
 spoolman_vmid: "102"
 spoolman_hostname: "spoolman-nash"
 spoolman_storage: "local-zfs"

@@ -4,7 +4,7 @@
 # Cluster Configuration
 setup_cluster: true  # Set to true to create/join Proxmox cluster
 cluster_name: "cluster"  # Name for your Proxmox cluster
-cluster_master_node: "nyx"  # First node that creates the cluster
+cluster_master_node: "atlas"  # Active node that coordinates cluster-wide tasks
 cluster_password: ""  # Optional: Password for joining cluster (leave empty to use SSH keys)
 configure_corosync: false  # Set to true to use custom corosync config template
 set_expected_votes: false  # Set to true to configure expected votes
@@ -133,13 +133,13 @@ install_homebridge: false
 # homebridge_version: "2.0.5"
 
 install_spoolman: false
-# spoolman_node: "nyx"
+# spoolman_node: "atlas"
 # spoolman_vmid: "102"
 # spoolman_hostname: "spoolman-nash"
 # spoolman_version: "0.24.0"
 
 install_bambuddy: false
-# bambuddy_node: "nyx"
+# bambuddy_node: "atlas"
 # bambuddy_vmid: ""  # empty selects the next available managed-app VMID
 # bambuddy_hostname: "bambuddy-nash"
 # bambuddy_version: "1.2.5"
@@ -157,7 +157,7 @@ install_seerr: false
 # seerr_version: "3.3.0"
 
 install_pocket_id: false
-# pocket_id_node: "nyx"
+# pocket_id_node: "atlas"
 # pocket_id_vmid: "100"
 # pocket_id_hostname: "pocketid-nash"
 # pocket_id_version: "2.11.0"
@@ -181,13 +181,13 @@ install_radarr: false
 # radarr_version: "6.3.0.10514"
 
 install_gallery_dl: false
-# gallery_dl_node: "nyx"
+# gallery_dl_node: "atlas"
 # gallery_dl_profiles:
 #   - user1
 #   - user2
 
 install_gatus: false
-# gatus_node: "nyx"
+# gatus_node: "atlas"
 # gatus_vmid: ""  # empty selects the next available managed-app VMID
 # gatus_hostname: "gatus-nash"
 # gatus_version: "5.36.0"
@@ -197,7 +197,7 @@ install_gatus: false
 #     url: "http://10.10.40.x:port/health"
 
 install_diun: false
-# diun_node: "nyx"
+# diun_node: "atlas"
 # diun_vmid: ""  # empty selects the next available managed-app VMID
 # diun_hostname: "diun-nash"
 # diun_version: "4.33.0"
@@ -212,7 +212,7 @@ install_diun: false
 #   - name: "example/rolling-tag-app:latest"  # only detects digest changes on this tag
 
 install_tailscale_router: false
-# tailscale_router_node: "nyx"
+# tailscale_router_node: "atlas"
 # tailscale_router_vmid: ""  # empty selects the next available managed-app VMID
 # tailscale_router_hostname: "tailscale-router-nash"
 # tailscale_router_version: "1.102.2"
@@ -259,7 +259,7 @@ healthcheck_reminder_repeat_after_minutes: 30
 # PBS Restore Configuration
 # =============================================================================
 restore_from_pbs: false  # Set to true to restore containers
-pbs_restore_node: "nyx"  # Target node for restore
+pbs_restore_node: "atlas"  # Target node for restore
 pbs_restore_storage: "local-lvm"  # Default storage for restored containers
 
 # Containers to restore from PBS backups
@@ -276,8 +276,8 @@ pbs_restore_storage: "local-lvm"  # Default storage for restored containers
 # =============================================================================
 deploy_vms: false  # Set to true to deploy VMs
 
-# Node that coordinates deployment. Defaults to "nyx" in the role.
-# vm_deploy_master_node: "nyx"
+# Node that coordinates deployment. Defaults to "atlas" in the role.
+# vm_deploy_master_node: "atlas"
 
 # Where to create VMs: "random" to spread across cluster, or a specific node name.
 # Individual VMs can override this with a per-entry `node:` key.

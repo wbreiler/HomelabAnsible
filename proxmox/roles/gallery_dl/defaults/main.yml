@@ -1,5 +1,5 @@
 ---
-gallery_dl_node: "nyx"
+gallery_dl_node: "atlas"
 gallery_dl_vmid: ""  # auto-assign next available ID if empty
 gallery_dl_hostname: "gallery-dl"
 gallery_dl_storage: "local-zfs"

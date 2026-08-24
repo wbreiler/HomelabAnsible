@@ -6,7 +6,7 @@ This file provides guidance to AI code assistants when working with code in this
 
 This is an Ansible automation project for deploying and managing a Proxmox VE cluster. It handles repository configuration, cluster formation, Proxmox Backup Server (PBS) storage, ISO management, LXC/VM deployment, network tuning, and system updates.
 
-**Target Environment**: Homelab infrastructure (3 Proxmox nodes: nyx/10.10.30.2, prometheus/10.10.30.3, atlas/10.10.30.9) running PVE 9 / Debian trixie.
+**Target Environment**: Homelab infrastructure (2 Proxmox nodes: prometheus/10.10.30.3 and atlas/10.10.30.9) running PVE 9 / Debian trixie.
 
 **PBS Server**: mnemosyne (10.10.20.2, `pbs_nodes` inventory group)
 
@@ -71,7 +71,7 @@ ansible-galaxy collection install -r requirements.yml
 # sanitized *.yml.example templates are tracked)
 cp inventory.yml.example inventory.yml
 cp group_vars/proxmox_cluster.yml.example group_vars/proxmox_cluster.yml
-cp host_vars/node.yml.example host_vars/nyx.yml  # repeat for each node
+cp host_vars/node.yml.example host_vars/atlas.yml  # repeat for each node
 ```
 
 ## Architecture
@@ -183,7 +183,7 @@ ansible-playbook -i inventory.yml site.yml --check --diff --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --ask-vault-pass
 
 # Deploy to a single node
-ansible-playbook -i inventory.yml site.yml --limit nyx --ask-vault-pass
+ansible-playbook -i inventory.yml site.yml --limit atlas --ask-vault-pass
 
 # Run a specific role only by using tags
 ansible-playbook -i inventory.yml site.yml --tags pbs --ask-vault-pass
@@ -315,7 +315,7 @@ management, LXC installation, system updates, and PBS restores.
 ### spoolman
 
 * Manages Spoolman with repository-owned Ansible tasks.
-* The tracked defaults identify `spoolman-nash` as VMID 102 with `nyx` as the fresh-install fallback; its `.env` file and SQLite data directory are preserved.
+* The tracked defaults identify `spoolman-nash` as VMID 102 with `atlas` as the fresh-install fallback; its `.env` file and SQLite data directory are preserved.
 * Pins and checksum-verifies both Spoolman and uv releases, builds dependencies before atomically swapping the application, removes the remote updater, and verifies the reported application version.
 * Skipped by default unless `install_spoolman: true`.
 

@@ -1,5 +1,5 @@
 ---
-bambuddy_node: "nyx"
+bambuddy_node: "atlas"
 bambuddy_vmid: ""
 bambuddy_hostname: "bambuddy-nash"
 bambuddy_storage: "local-zfs"

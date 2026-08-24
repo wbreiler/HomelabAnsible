@@ -2,7 +2,7 @@
 
 This Ansible project automates the setup of a Proxmox VE cluster with PBS backup integration, LXC container management, and system updates. Targets PVE 9 / Debian trixie.
 
-**Cluster**: nyx (10.10.30.2), prometheus (10.10.30.3), atlas (10.10.30.9)
+**Cluster**: prometheus (10.10.30.3), atlas (10.10.30.9)
 **PBS Server**: mnemosyne (10.10.20.2, `pbs_nodes` inventory group)
 **Second play**: `site.yml` also applies network tuning to both proxmox_cluster and pbs_nodes groups
 
@@ -50,7 +50,6 @@ proxmox-ansible/
 │   └── proxmox_cluster.yml          # Cluster-wide variables (gitignored, vault-encrypted)
 ├── host_vars/               # Per-host variables (PBS config, corosync ring1, storage)
 │   ├── node.yml.example     # Example host configuration
-│   ├── nyx.yml              # (gitignored)
 │   ├── prometheus.yml       # (gitignored)
 │   └── atlas.yml            # (gitignored)
 ├── tasks/
@@ -100,9 +99,6 @@ cp inventory.yml.example inventory.yml
 ```
 
 ```yaml
-nyx:
-  ansible_host: 10.10.30.2
-  proxmox_node_name: nyx
 prometheus:
   ansible_host: 10.10.30.3
   proxmox_node_name: prometheus
@@ -210,11 +206,11 @@ ansible-playbook site.yml --tags "repos,cluster,pbs"
 Target specific nodes using the `--limit` flag:
 
 ```bash
-# Run only on nyx
-ansible-playbook site.yml --limit nyx
+# Run only on atlas
+ansible-playbook site.yml --limit atlas
 
 # Run on multiple nodes
-ansible-playbook site.yml --limit "nyx,prometheus"
+ansible-playbook site.yml --limit "atlas,prometheus"
 ```
 
 ## Configuration Details
@@ -287,7 +283,7 @@ manage_isos_downloads:
 
 ```console
 TASK [manage_isos : Download ISOs from URLs with progress] ********************
-changed: [nyx] => (item=ubuntu-22.04.iso)
+changed: [atlas] => (item=ubuntu-22.04.iso)
 ubuntu-22.04.iso      100%[===================>]   1.4G  15.2MB/s    in 95s
 ```
 
@@ -363,11 +359,11 @@ Fourteen repository-owned roles in this section manage a single-purpose LXC; the
 - **`apt_cacher_ng`** — Apt-Cacher NG package cache with HTTPS pass-through and self-proxy configuration. Its defaults identify `apt-nash`, VMID 106, `atlas` as the fresh-install fallback, and a 2 CPU/512 MB/25 GB container. It removes the legacy remote update hook.
 - **`prowlarr`** — Prowlarr indexer manager. Its defaults identify `prowlarr-nash`, VMID 104, and `atlas` as the fresh-install fallback. It pins version 2.5.2.5491 and its release checksum, removes the remote update hook, and verifies the web interface.
 - **`homebridge`** — HomeKit bridge. Its defaults identify `homebridge-nash`, VMID 105, and `prometheus` as the fresh-install fallback. It pins package version 2.0.5, checksum-verifies the Homebridge repository key, removes the remote update hook, and verifies Homebridge and Avahi.
-- **`spoolman`** — 3D-printer spool inventory. Its defaults identify `spoolman-nash`, VMID 102, and `nyx` as the fresh-install fallback. It pins and verifies Spoolman 0.26.1 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
+- **`spoolman`** — 3D-printer spool inventory. Its defaults identify `spoolman-nash`, VMID 102, and `atlas` as the fresh-install fallback. It pins and verifies Spoolman 0.26.1 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
 - **`bambuddy`** — Bambu Lab printer management. It creates or adopts an unprivileged Debian LXC, installs a pinned and checksum-verified Bambuddy release using the sizing recommended by the Community Scripts installer, preserves local environment and data files, and verifies the web interface on port 8000. The pinned `nils_ost.bambuddy` collection is also installed for future API-driven printer and settings management; its Docker installer is not used.
 - **`gitea_mirror`** — Gitea Mirror repository mirroring service. Its defaults identify `git-mirror-nash`, VMID 119, and `atlas` as the fresh-install fallback. It pins and verifies Gitea Mirror 3.26.2 and Bun 1.3.14, preserves the existing environment file and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the installed version.
 - **`seerr`** — Seerr media-request manager. Its defaults identify `seerr-nash`, VMID 117, and `atlas` as the fresh-install fallback. It pins and verifies Seerr 3.4.1 and pnpm 10.34.4, requires Node.js 22, preserves `/etc/seerr/seerr.conf` and the SQLite config data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the API-reported version.
-- **`pocket_id`** — Pocket ID OIDC identity provider. Its defaults identify `pocketid-nash`, VMID 100, and `nyx` as the fresh-install fallback. It pins and verifies the Pocket ID 2.13.0 binary, preserves the `.env` and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
+- **`pocket_id`** — Pocket ID OIDC identity provider. Its defaults identify `pocketid-nash`, VMID 100, and `atlas` as the fresh-install fallback. It pins and verifies the Pocket ID 2.13.0 binary, preserves the `.env` and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
 - **`forgejo`** — Forgejo Git hosting. Its defaults identify `forgejo-nash`, VMID 103, and `prometheus` as the fresh-install fallback. It pins and verifies the Forgejo 16.0.2 release binary, refuses downgrades and skipped major versions, preserves `app.ini` and repository data, checks SQLite integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
 - **`sonarr`** — Sonarr TV manager. Its defaults identify `sonarr-nash`, VMID 110, and `atlas` as the fresh-install fallback. It pins and verifies Sonarr 4.0.19.2979, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`radarr`** — Radarr movie manager. Its defaults identify `radarr-nash`, VMID 111, and `prometheus` as the fresh-install fallback. It pins and verifies Radarr 6.3.0.10514, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
@@ -393,12 +389,12 @@ homebridge_vmid: "105"
 homebridge_version: "2.0.5"
 
 install_spoolman: true
-spoolman_node: "nyx"
+spoolman_node: "atlas"
 spoolman_vmid: "102"
 spoolman_version: "0.26.1"
 
 install_bambuddy: true
-bambuddy_node: "nyx"
+bambuddy_node: "atlas"
 bambuddy_vmid: ""  # selects the next available managed-app VMID
 bambuddy_version: "1.2.5"
 
@@ -413,7 +409,7 @@ seerr_vmid: "117"
 seerr_version: "3.4.1"
 
 install_pocket_id: true
-pocket_id_node: "nyx"
+pocket_id_node: "atlas"
 pocket_id_vmid: "100"
 pocket_id_version: "2.13.0"
 
@@ -435,13 +431,13 @@ radarr_version: "6.3.0.10514"
 install_gallery_dl: true
 
 install_gatus: true
-gatus_node: "nyx"
+gatus_node: "atlas"
 gatus_vmid: ""  # selects the next available managed-app VMID
 gatus_version: "5.36.0"
 gatus_discord_webhook_url: ""  # set in vault-encrypted group_vars
 
 install_diun: true
-diun_node: "nyx"
+diun_node: "atlas"
 diun_vmid: ""  # selects the next available managed-app VMID
 diun_version: "4.33.0"
 diun_discord_webhook_url: ""  # set in vault-encrypted group_vars
@@ -629,7 +625,7 @@ ansible-playbook site.yml --tags restore \
 
 ```yaml
 restore_from_pbs: true
-pbs_restore_node: "nyx"
+pbs_restore_node: "atlas"
 pbs_restore_storage: "local-lvm"
 ```
 
@@ -805,10 +801,10 @@ If you get SSH connection errors:
 
 ```bash
 # Test SSH using the user configuration and 1Password SSH agent
-ssh root@10.10.30.2
+ssh root@10.10.30.9
 
 # Inspect the effective SSH configuration without connecting
-ssh -G root@10.10.30.2 | rg '^(hostname|user|identityfile|identityagent) '
+ssh -G root@10.10.30.9 | rg '^(hostname|user|identityfile|identityagent) '
 ```
 
 ### Repository Issues
@@ -841,7 +837,6 @@ guest placement, and the current Proxmox procedure before changing membership.
 
 ```bash
 # Verify nodes can reach each other (management network)
-ping 10.10.30.2  # nyx
 ping 10.10.30.3  # prometheus
 ping 10.10.30.9  # atlas
 
