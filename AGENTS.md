@@ -87,8 +87,8 @@ Commit style: `role_name: brief description` (see `proxmox/AGENTS.md`).
 
 ## Environment facts
 
-- Cluster `cluster-nash`: nyx (10.10.30.2, VIP), prometheus (10.10.30.3),
-  atlas (10.10.30.9) — PVE 9 / Debian trixie.
+- Cluster `cluster-nash`: prometheus (10.10.30.3) and atlas (10.10.30.9) —
+  PVE 9 / Debian trixie.
 - PBS: mnemosyne (10.10.20.2), local-ZFS-backed `MainStore` datastore.
 - TrueNAS: erebus (10.10.10.7, SSH port 2747), key auth via 1Password agent.
 - SSH keys: `~/.ssh/cluster-nash` (proxmox, via 1Password agent),

@@ -88,7 +88,7 @@ Before committing, run `git status` and confirm none of the above appear.
 
 | Resource | Address |
 |---|---|
-| Proxmox nodes | nyx 10.10.30.2 (cluster VIP), prometheus 10.10.30.3, atlas 10.10.30.9 |
+| Proxmox nodes | prometheus 10.10.30.3, atlas 10.10.30.9 |
 | PBS (mnemosyne) | 10.10.20.2 |
 | TrueNAS (erebus) | 10.10.10.7 (SSH port 2747) |
 | Core switch (Arista) | 192.168.1.222 — SVI gateways 10.10.10.2 (VLAN 10 ipmi), 10.10.20.1 (VLAN 20 storage), 10.10.30.1 (VLAN 30 proxmox-hosts), 10.10.40.1 (VLAN 40 proxmox-guests) |
