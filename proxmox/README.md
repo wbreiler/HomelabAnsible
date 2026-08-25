@@ -346,7 +346,7 @@ pvecm nodes
 
 Three opt-in roles cover complementary monitoring concerns:
 
-- **`healthcheck_reminder`** (`healthcheck_reminder_enabled: true`) — no new service. Installs a systemd timer on the cluster master node only (checks are cluster-wide via `pvesh get /cluster/resources`, so running it on all three nodes would triple-alert). Every 5 minutes by default, it flags any Proxmox node that isn't `online` and any LXC/VM that isn't `running` (skip intentionally-stopped guests via `healthcheck_reminder_skip_vmids`), and sends a Discord alert. Re-notifies immediately if the set of down items changes, otherwise backs off for `healthcheck_reminder_repeat_after_minutes` (default 30) so an ongoing outage doesn't spam.
+- **`healthcheck_reminder`** (`healthcheck_reminder_enabled: true`) — no new service. Installs a systemd timer on the cluster master node only (checks are cluster-wide via `pvesh get /cluster/resources`, so running it on both nodes would duplicate alerts). Every 5 minutes by default, it flags any Proxmox node that isn't `online` and any LXC/VM that isn't `running` (skip intentionally-stopped guests via `healthcheck_reminder_skip_vmids`), and sends a Discord alert. Re-notifies immediately if the set of down items changes, otherwise backs off for `healthcheck_reminder_repeat_after_minutes` (default 30) so an ongoing outage doesn't spam.
 - **`gatus`** (`install_gatus: true`) — app-level checks and a status page/history that the script above can't give you. Creates or adopts `gatus-nash`, a small LXC running [Gatus](https://github.com/TwiN/gatus). The role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain. The generated `config.yaml` probes each Proxmox node's web UI (TCP 8006), the PBS server (TCP 8007), and each enabled managed app role that defines a health URL. Add other checks through `gatus_extra_endpoints`.
 - **`diun`** (`install_diun: true`) — watches configured container images for new tags or digests and sends a Discord alert. Creates or adopts `diun-nash`, a small LXC running [Diun](https://github.com/crazy-max/diun) from a pinned, checksum-verified release binary. It uses Diun's static `file` provider and the explicit `diun_watch_images` list, so it does not need Docker/API access to a target host. Checks every 6 hours by default (`diun_schedule`). `diun_first_check_notif: true` reports an image on its first scan; set `max_tags` on `watch_repo: true` entries to bound tag-history notifications.
 
@@ -564,7 +564,7 @@ journalctl -u homelab-update-reminder.service
 
 The `healthcheck_reminder` role installs a systemd timer on the cluster
 master node only — checks are cluster-wide via `pvesh get /cluster/resources`,
-so running it on all three nodes would triple-alert. Every 5 minutes by
+so running it on both nodes would duplicate alerts. Every 5 minutes by
 default it flags any Proxmox node that isn't `online` and any LXC/VM that
 isn't `running`, then sends a Discord alert. It re-notifies immediately if the
 set of down items changes, otherwise backs off for
@@ -683,7 +683,7 @@ The `vm_deploy` role deploys full VMs from ISOs. Runs on a master node and deleg
 
 Uses the Proxmox API to exclude occupied VMIDs from the per-node ranges in
 `inventory.yml`, and skips VMs that already exist by name. The tracked example
-partitions VMIDs 100-199 across the three nodes.
+partitions VMIDs 100-199 across the two nodes.
 
 **Enable in `group_vars/proxmox_cluster.yml`:**
 
@@ -734,9 +734,9 @@ newnode:
   vmid_range_end: 232
 ```
 
-Choose a VMID range that does not overlap any existing inventory range or a
-reserved ID. The values above are illustrative; inspect the current inventory
-and cluster allocation before assigning them.
+Choose a VMID range that does not overlap any existing inventory range. The
+values above are illustrative; inspect the current inventory and cluster
+allocation before assigning them.
 
 ### 2. Create Host Variables
 

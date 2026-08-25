@@ -470,7 +470,7 @@ management, LXC installation, system updates, and PBS restores.
 * Runs on `vm_deploy_master_node` and delegates creation to target nodes.
 * Auto-assigns VMIDs from each target node's configured
   `vmid_range_start`/`vmid_range_end`; the tracked example partitions 100-199
-  across the three nodes.
+  across the two nodes.
 * Idempotent by VM name.
 
 ### network_tuning
