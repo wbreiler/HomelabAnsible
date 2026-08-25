@@ -11,6 +11,9 @@ edits to the appliance filesystem or database.
 - Read `README.md` before changing playbooks or operating the live host.
 - Prefer `playbooks/audit.yml` for desired-state drift checks. It enables the
   roles' audit-only paths and does not reconcile detected drift.
+- TrueNAS 26 removes the legacy REST API. This project uses `midclt`, the
+  supported JSON-RPC 2.0 WebSocket API client, over SSH. Do not replace it with
+  `/api/v2.0` calls; audit any new external integration before upgrading.
 - Discovery must be read-only. Store sanitized discovery output under
   `artifacts/`; `playbooks/discover.yml` writes the ignored, mode-`0600`
   `artifacts/erebus-raw.json`. Never commit secrets, tokens, password hashes,

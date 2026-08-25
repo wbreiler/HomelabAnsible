@@ -15,6 +15,15 @@ Ansible-managed desired state for the TrueNAS host `erebus`.
 The exact platform and release are verified by read-only discovery rather than
 assumed from the reported product name.
 
+### TrueNAS 26 API compatibility
+
+TrueNAS 26 removes the legacy REST API. This project does not use REST
+`/api/v2.0` endpoints: all middleware operations run through `midclt` over SSH.
+TrueNAS documents `midclt` as the command-line client for its supported,
+versioned JSON-RPC 2.0 WebSocket API, so this Ansible integration does not need
+a transport migration before upgrading. Audit other clients and dashboards
+separately; any external REST caller must migrate before the TrueNAS 26 upgrade.
+
 ## Project Status
 
 Read-only discovery and the desired-state model were completed on 2026-07-18.
