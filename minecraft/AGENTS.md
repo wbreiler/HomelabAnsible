@@ -4,7 +4,7 @@ Universal guidance for agents working in the `minecraft/` project.
 
 ## What this repo does
 
-Automates Minecraft server provisioning and modpack updates for a Proxmox cluster (`cluster-nash`, nodes: Prometheus, Atlas, Nyx). Two components:
+Automates Minecraft server provisioning and modpack updates for a Proxmox cluster (`cluster-nash`, nodes: Prometheus and Atlas). Two components:
 
 1. **`update-script/`** — Modpack update script deployed to each Minecraft server LXC
 2. **`ansible/`** — Playbooks that manage HA placement, create LXCs via the Proxmox API, then SSH in to configure them
@@ -23,9 +23,9 @@ packs. Keep their shared paths and configuration contract aligned.
 ## Key constraints
 
 - **Minecraft server LXCs are unprivileged** with `nesting=1` (set by playbook automatically).
-- **VMID 300 is reserved** (DiscoPanel on Prometheus). Allocate the next unused
-  sequential VMID in the 100 range after checking live cluster state; do not
-  jump to 301+.
+- **Allocate VMIDs sequentially.** Check both live cluster state and the ignored
+  `servers.yml`, then use the next unused sequential ID. Do not reserve or skip
+  IDs without a current, documented conflict.
 - The CurseForge API key starts with `$2a$10$` — always store/echo it in **single quotes** to prevent bash variable expansion mangling it.
 
 ## Shell scripts (`set -euo pipefail` conventions)

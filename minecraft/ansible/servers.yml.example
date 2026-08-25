@@ -68,7 +68,7 @@ servers:
   # CurseForge example:
   # - hostname: example-modpack
   #   ansible_host: 192.0.2.32
-  #   vmid: 302
+  #   vmid: 125
   #   node: node1
   #   cores: 4
   #   memory: 8192
@@ -95,7 +95,7 @@ servers:
   # See minecraft/AGENTS.md for the full procedure.
   # - hostname: example-manual-pack
   #   ansible_host: 192.0.2.33
-  #   vmid: 303
+  #   vmid: 126
   #   node: node1
   #   cores: 4
   #   memory: 8192

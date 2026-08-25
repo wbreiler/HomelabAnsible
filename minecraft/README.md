@@ -59,8 +59,8 @@ example. Important fields include:
 | `extra_modrinth_mods` | Extra Modrinth projects layered onto an automatic pack |
 | `bluemap_*`, `dh_pregen_*`, `chunky_pregen_*` | Optional idle-only map/world generation |
 
-VMID 300 is reserved. Check live cluster state and allocate the next unused
-sequential VMID in the 100 range; do not jump to 301 or above. Provisioned
+Check live cluster state and the ignored `servers.yml`, then allocate the next
+unused sequential VMID without arbitrary reservations or gaps. Provisioned
 Minecraft LXCs are unprivileged and use `nesting=1`.
 
 ## Reconcile existing servers
