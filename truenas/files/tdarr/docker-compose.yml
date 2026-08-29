@@ -1,0 +1,85 @@
+# TrueNAS custom-app Compose configuration for erebus.
+#
+# Before starting Tdarr, grant uid/gid 568:568 write access to every media
+# library that Tdarr will modify. The live TV and anime library roots were
+# root-owned and mode 0755 when this file was created.
+
+services:
+  tdarr-server:
+    image: ghcr.io/haveagitgat/tdarr:2.81.01
+    container_name: tdarr-server
+    restart: unless-stopped
+    ports:
+      - "10.10.20.3:8265:8265"
+      - "10.10.20.3:8266:8266"
+    environment:
+      TZ: America/Chicago
+      PUID: "568"
+      PGID: "568"
+      UMASK_SET: "002"
+      serverIP: 0.0.0.0
+      serverPort: "8266"
+      webUIPort: "8265"
+      internalNode: "false"
+      inContainer: "true"
+      ffmpegVersion: "7"
+      auth: "true"
+      openBrowser: "false"
+      maxLogSizeMB: "10"
+    volumes:
+      - /mnt/gaia/appdata/tdarr/server:/app/server
+      - /mnt/gaia/appdata/tdarr/config:/app/configs
+      - /mnt/gaia/appdata/tdarr/logs:/app/logs
+      - /mnt/gaia/media:/media
+      - /mnt/gaia/appdata/tdarr/transcode_cache:/temp
+    logging:
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  tdarr-node:
+    image: ghcr.io/haveagitgat/tdarr_node:2.81.01
+    container_name: tdarr-node
+    restart: unless-stopped
+    network_mode: service:tdarr-server
+    depends_on:
+      - tdarr-server
+    environment:
+      TZ: America/Chicago
+      PUID: "568"
+      PGID: "568"
+      UMASK_SET: "002"
+      nodeName: erebus-rtx5050
+      serverIP: 0.0.0.0
+      serverPort: "8266"
+      inContainer: "true"
+      ffmpegVersion: "7"
+      nodeType: mapped
+      priority: "0"
+      maxLogSizeMB: "10"
+      pollInterval: "2000"
+      startPaused: "true"
+      transcodegpuWorkers: "1"
+      transcodecpuWorkers: "0"
+      healthcheckgpuWorkers: "0"
+      healthcheckcpuWorkers: "1"
+      NVIDIA_DRIVER_CAPABILITIES: all
+      NVIDIA_VISIBLE_DEVICES: GPU-fd41aa84-6ce4-f656-47f7-a49a6ff6fad3
+    volumes:
+      - /mnt/gaia/appdata/tdarr/config:/app/configs
+      - /mnt/gaia/appdata/tdarr/logs:/app/logs
+      - /mnt/gaia/media:/media
+      - /mnt/gaia/appdata/tdarr/transcode_cache:/temp
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids:
+                - GPU-fd41aa84-6ce4-f656-47f7-a49a6ff6fad3
+              capabilities:
+                - gpu
+    logging:
+      options:
+        max-size: 10m
+        max-file: "5"
