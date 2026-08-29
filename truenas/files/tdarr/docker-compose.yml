@@ -1,8 +1,5 @@
 # TrueNAS custom-app Compose configuration for erebus.
-#
-# Before starting Tdarr, grant uid/gid 568:568 write access to every media
-# library that Tdarr will modify. The live TV and anime library roots were
-# root-owned and mode 0755 when this file was created.
+# Tdarr runs as root so it can modify files across the existing media libraries.
 
 services:
   tdarr-server:
@@ -14,8 +11,8 @@ services:
       - "10.10.20.3:8266:8266"
     environment:
       TZ: America/Chicago
-      PUID: "568"
-      PGID: "568"
+      PUID: "0"
+      PGID: "0"
       UMASK_SET: "002"
       serverIP: 0.0.0.0
       serverPort: "8266"
@@ -46,8 +43,8 @@ services:
       - tdarr-server
     environment:
       TZ: America/Chicago
-      PUID: "568"
-      PGID: "568"
+      PUID: "0"
+      PGID: "0"
       UMASK_SET: "002"
       nodeName: erebus-rtx5050
       serverIP: 0.0.0.0
