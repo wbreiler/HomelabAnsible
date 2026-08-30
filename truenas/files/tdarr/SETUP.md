@@ -108,10 +108,13 @@ Use these stages:
    - FFmpeg quality: disabled; do not use constant QP for this flow
    - Force encoding: disabled
 7. On the HDR branch only, add **10 Bit Video** before executing the command.
-8. Add **Set Video Bitrate** after the HDR and SDR paths converge:
-   - Use percentage of input bitrate: enabled
-   - Target bitrate: `75%`
-   - Fallback bitrate: `4000` kbps
+8. Add **Custom JS Function** after the HDR and SDR paths converge. Paste the
+   contents of `source-relative-video-bitrate.js` into its **JS Code** input.
+   This calculates a target of 75% of the source video bitrate from FFprobe's
+   actual container bitrate (or actual file size and duration), after
+   subtracting known audio bitrates. Do not use **Set Video Bitrate** with
+   **Use percentage of input bitrate**: that plugin reads optional Matroska
+   `BPS` tags, which can be stale and produce grossly oversized outputs.
 9. Add **Custom Arguments** with these output arguments:
 
    ```text
@@ -139,8 +142,9 @@ Use these stages:
 Constant-QP tests expanded already-efficient x265 sources to 176-244% of their
 original size. QP values are not comparable between x265 and AV1 NVENC, and
 constant QP places no bitrate ceiling on NVENC. The live flow instead targets
-75% of the input video bitrate, while the final size gate prevents replacement
-if copied streams or encoder behavior still make the complete output larger.
+75% of the input video bitrate calculated from the actual file rather than
+embedded `BPS` tags. The final size gate prevents replacement if copied streams
+or encoder behavior still make the complete output larger.
 
 ## 5. HDR safeguards
 
