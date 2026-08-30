@@ -12,7 +12,11 @@ before processing a whole library.
 - Output video: AV1 through NVIDIA NVENC (`av1_nvenc`).
 - Skip files whose primary video stream is already AV1.
 - Do not resize, deinterlace, or tone-map by default.
-- Copy every audio and subtitle stream without transcoding.
+- Copy retained audio and subtitle streams without transcoding.
+- Movies and TV retain English audio and English subtitles.
+- Anime retains Japanese audio and English subtitles.
+- Remove tagged audio/subtitle streams in other languages. Retain untagged
+  streams because their language cannot be inferred safely.
 - Copy chapters, global metadata, language tags, and attachments.
 - Preserve HDR10 or HLG as 10-bit HDR; never tone-map it to SDR.
 - Route Dolby Vision and HDR10+ titles to manual review. Dynamic HDR metadata
@@ -64,16 +68,20 @@ For the initial rollout:
 
 - Disable folder watching and scheduled scans.
 - Do not automatically add the entire library to the transcode queue.
-- Use the same flow for all three libraries only after one sample from each
-  relevant content type passes validation.
+- Use the English-language flow for Movies and TV and the Anime-language flow
+  for Anime only after representative samples pass validation.
 
 No path translator is needed because the internal server and node share the
 same container and mounts.
 
 ## 4. Build the flow
 
-Create a Flow named `AV1 NVENC P7 VBR 75% - HDR aware and size gated`. Use
-these stages:
+Create two flows using the common encoding stages below:
+
+- `AV1 VBR 75% - English audio and subs` for Movies and TV.
+- `AV1 VBR 75% - Japanese audio, English subs` for Anime.
+
+Use these stages:
 
 1. **Input File**
 2. **Check Video Codec**: codec `av1`
@@ -83,7 +91,15 @@ these stages:
    - HDR -> require manual review, then use the 10-bit stage.
    - Not HDR -> continue through the SDR encode path.
 4. Start a separate **Begin Command** path for HDR and SDR.
-5. **Set Video Encoder**
+5. On both HDR and SDR paths, add two **Remove Stream By Property** stages:
+   - Property: `tags.language`
+   - Condition: `not_equals`
+   - Movies/TV audio: keep `eng,en`
+   - Anime audio: keep `jpn,ja`
+   - All subtitles: keep `eng,en`
+   - Limit each filter to its respective `audio` or `subtitle` codec type.
+     Untagged streams are left untouched.
+6. **Set Video Encoder**
    - Output codec: `av1`
    - Hardware encoding: enabled
    - Hardware type: `nvenc`
@@ -91,12 +107,12 @@ these stages:
    - FFmpeg preset: enabled, `veryslow`
    - FFmpeg quality: disabled; do not use constant QP for this flow
    - Force encoding: disabled
-6. On the HDR branch only, add **10 Bit Video** before executing the command.
-7. Add **Set Video Bitrate** after the HDR and SDR paths converge:
+7. On the HDR branch only, add **10 Bit Video** before executing the command.
+8. Add **Set Video Bitrate** after the HDR and SDR paths converge:
    - Use percentage of input bitrate: enabled
    - Target bitrate: `75%`
    - Fallback bitrate: `4000` kbps
-8. Add **Custom Arguments** with these output arguments:
+9. Add **Custom Arguments** with these output arguments:
 
    ```text
    -rc vbr -preset p7 -tune hq -multipass fullres -spatial-aq 1 -temporal-aq 1 -rc-lookahead 32
@@ -105,16 +121,19 @@ these stages:
    Tdarr 2.86.01's Set Video Encoder flow plugin intentionally omits `-preset`
    when the target codec is AV1, even when the preset switch is enabled, so the
    explicit P7 argument is required.
-9. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
+   On the Anime flow, append
+   `-disposition:a:0 default -disposition:s:0 default` so the first retained
+   Japanese audio and English subtitle streams are defaults.
+10. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
    existing streams and copies non-video streams without adding custom mapping
    arguments.
-10. **Compare File Size Ratio**: lower bound `20`, upper bound `100`.
+11. **Compare File Size Ratio**: lower bound `20`, upper bound `100`.
     - Within range -> continue.
     - Smaller than 20% -> manual review; an unexpectedly tiny output often
       indicates a quality or stream-selection mistake.
     - Larger than the source -> manual review; never replace automatically.
-11. Run a quick health check on the accepted working file.
-12. **Replace Original File** only on the health-checked path. A manually
+12. Run a quick health check on the accepted working file.
+13. **Replace Original File** only on the health-checked path. A manually
     reviewed out-of-range result rejoins this path only after explicit review.
 
 Constant-QP tests expanded already-efficient x265 sources to 176-244% of their
