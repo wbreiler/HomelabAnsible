@@ -221,3 +221,8 @@ ansible-playbook --syntax-check site.yml
 Syntax validation requires the ignored local inventory and variables created
 from the tracked examples. Do not weaken authentication or host-key checking
 to make it pass.
+
+## Application guides
+
+- [Tdarr on the RTX 5050](files/tdarr/SETUP.md) — same-host server/node setup,
+  AV1 NVENC flow, HDR safeguards, and staged validation.
