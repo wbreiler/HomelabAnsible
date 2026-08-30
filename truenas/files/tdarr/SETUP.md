@@ -72,14 +72,15 @@ same container and mounts.
 
 ## 4. Build the flow
 
-Create a Flow named `AV1 NVENC P7 - HDR aware and size gated`. Use these stages:
+Create a Flow named `AV1 NVENC P7 VBR 75% - HDR aware and size gated`. Use
+these stages:
 
 1. **Input File**
 2. **Check Video Codec**: codec `av1`
    - `File has codec` -> finish successfully without changing the file.
    - `File does not have codec` -> continue.
 3. **Check HDR Video**
-   - HDR -> require manual review, then use QP 28 and the 10-bit stage.
+   - HDR -> require manual review, then use the 10-bit stage.
    - Not HDR -> continue through the SDR encode path.
 4. Start a separate **Begin Command** path for HDR and SDR.
 5. **Set Video Encoder**
@@ -88,28 +89,39 @@ Create a Flow named `AV1 NVENC P7 - HDR aware and size gated`. Use these stages:
    - Hardware type: `nvenc`
    - Hardware decoding: enabled
    - FFmpeg preset: enabled, `veryslow`
-   - FFmpeg quality: enabled, `28` for HDR and `30` for SDR
+   - FFmpeg quality: disabled; do not use constant QP for this flow
    - Force encoding: disabled
 6. On the HDR branch only, add **10 Bit Video** before executing the command.
-7. Add **Custom Arguments** after the HDR and SDR paths converge, with output
-   arguments `-preset p7`. Tdarr 2.86.01's Set Video Encoder flow plugin
-   intentionally omits `-preset` when the target codec is AV1, even when the
-   preset switch is enabled, so this explicit argument is required.
-8. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
+7. Add **Set Video Bitrate** after the HDR and SDR paths converge:
+   - Use percentage of input bitrate: enabled
+   - Target bitrate: `75%`
+   - Fallback bitrate: `4000` kbps
+8. Add **Custom Arguments** with these output arguments:
+
+   ```text
+   -rc vbr -preset p7 -tune hq -multipass fullres -spatial-aq 1 -temporal-aq 1 -rc-lookahead 32
+   ```
+
+   Tdarr 2.86.01's Set Video Encoder flow plugin intentionally omits `-preset`
+   when the target codec is AV1, even when the preset switch is enabled, so the
+   explicit P7 argument is required.
+9. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
    existing streams and copies non-video streams without adding custom mapping
    arguments.
-9. **Compare File Size Ratio**: lower bound `20`, upper bound `100`.
+10. **Compare File Size Ratio**: lower bound `20`, upper bound `100`.
     - Within range -> continue.
     - Smaller than 20% -> manual review; an unexpectedly tiny output often
       indicates a quality or stream-selection mistake.
     - Larger than the source -> manual review; never replace automatically.
-10. Run a quick health check on the accepted working file.
-11. **Replace Original File** only on the health-checked path. A manually
+11. Run a quick health check on the accepted working file.
+12. **Replace Original File** only on the health-checked path. A manually
     reviewed out-of-range result rejoins this path only after explicit review.
 
-The initial QP 24 test expanded a 227 MB HEVC source to 554 MB. The live flow
-therefore starts at QP 30 for SDR and QP 28 for HDR. Lower values retain more
-quality and produce larger files. Do not judge quality from file size alone.
+Constant-QP tests expanded already-efficient x265 sources to 176-244% of their
+original size. QP values are not comparable between x265 and AV1 NVENC, and
+constant QP places no bitrate ceiling on NVENC. The live flow instead targets
+75% of the input video bitrate, while the final size gate prevents replacement
+if copied streams or encoder behavior still make the complete output larger.
 
 ## 5. HDR safeguards
 
