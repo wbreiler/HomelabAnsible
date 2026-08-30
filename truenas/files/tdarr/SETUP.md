@@ -72,48 +72,39 @@ same container and mounts.
 
 ## 4. Build the flow
 
-Create a Flow named `AV1 NVENC - preserve streams`. Use these stages:
+Create a Flow named `AV1 NVENC - HDR aware and size gated`. Use these stages:
 
 1. **Input File**
 2. **Check Video Codec**: codec `av1`
    - `File has codec` -> finish successfully without changing the file.
    - `File does not have codec` -> continue.
 3. **Check HDR Video**
-   - HDR -> route through the HDR safeguards below.
+   - HDR -> require manual review, then use QP 28 and the 10-bit stage.
    - Not HDR -> continue through the SDR encode path.
-4. **Begin Command**
-5. **Set Container**: `mkv`
-6. **Set Video Encoder**
+4. Start a separate **Begin Command** path for HDR and SDR.
+5. **Set Video Encoder**
    - Output codec: `av1`
    - Hardware encoding: enabled
-   - Hardware type: `nvidia`
+   - Hardware type: `nvenc`
    - Hardware decoding: enabled
-   - FFmpeg preset: enabled, `p7`
-   - FFmpeg quality: enabled, start at `24`
+   - FFmpeg preset: enabled, `veryslow` (Tdarr maps this to NVENC `p7`)
+   - FFmpeg quality: enabled, `28` for HDR and `30` for SDR
    - Force encoding: disabled
-7. On the HDR branch only, add **10 Bit Video** before executing the command.
-8. **Custom Arguments** output arguments:
-
-   ```text
-   -map 0 -map_metadata 0 -map_chapters 0 -c:a copy -c:s copy -c:d copy -c:t copy
-   ```
-
-   Inspect Tdarr's generated command preview. There must be exactly one video
-   encoder selection for the primary video stream, and it must be
-   `av1_nvenc`. If the plugin version produces conflicting `-map` or `-c:v`
-   arguments, remove this Custom Arguments stage and use Tdarr's individual
-   stream-copy plugins instead; do not run an ambiguous command.
-9. **Execute**
-10. Run a thorough health check on the working file.
-11. **Compare File Size Ratio**: lower bound `35`, upper bound `100`.
+6. On the HDR branch only, add **10 Bit Video** before executing the command.
+7. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
+   existing streams and copies non-video streams without adding custom mapping
+   arguments.
+8. **Compare File Size Ratio**: lower bound `20`, upper bound `100`.
     - Within range -> continue.
-    - Smaller than 35% -> manual review; an unexpectedly tiny output often
+    - Smaller than 20% -> manual review; an unexpectedly tiny output often
       indicates a quality or stream-selection mistake.
-    - Larger than the source -> discard the working file and keep the original.
-12. **Replace Original File** only on the accepted path.
+    - Larger than the source -> manual review; never replace automatically.
+9. Run a quick health check on the accepted working file.
+10. **Replace Original File** only on the health-checked path. A manually
+    reviewed out-of-range result rejoins this path only after explicit review.
 
-Quality `24` is a conservative starting point, not a universal optimum. Test
-`22`, `24`, and `26` on representative material: lower values retain more
+The initial QP 24 test expanded a 227 MB HEVC source to 554 MB. The live flow
+therefore starts at QP 30 for SDR and QP 28 for HDR. Lower values retain more
 quality and produce larger files. Do not judge quality from file size alone.
 
 ## 5. HDR safeguards
