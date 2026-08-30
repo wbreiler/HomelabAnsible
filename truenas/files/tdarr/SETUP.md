@@ -1,9 +1,10 @@
 # Tdarr setup on erebus
 
-This guide is tailored to the Compose stack in this directory, the RTX 5050,
-and the existing media paths on `erebus`. It favors safe replacement over
-maximum compression: one GPU worker, original audio/subtitles/chapters, no
-resolution change, and manual validation before processing a whole library.
+This guide is tailored to the single-container Compose stack in this directory,
+its internal Tdarr node, the RTX 5050, and the existing media paths on
+`erebus`. It favors safe replacement over maximum compression: one GPU worker,
+original audio/subtitles/chapters, no resolution change, and manual validation
+before processing a whole library.
 
 ## Encoding policy
 
@@ -27,8 +28,8 @@ and do not expect a remux-quality source to remain visually lossless.
 
 1. In TrueNAS Apps, create a custom app named `tdarr` using
    `docker-compose.yml` from this directory.
-2. Do not change the host paths. Both containers must see `/media` and `/temp`
-   at identical paths because the node is a mapped node.
+2. Do not change the `/media` and `/temp` host paths used by the internal mapped
+   node.
 3. Open `http://10.10.20.3:8265` and complete the initial account setup.
 4. Confirm the node named `erebus-rtx5050` appears. It intentionally starts
    paused.
@@ -42,8 +43,8 @@ The server API port is `8266`; it is not the web interface.
 From an `erebus` shell, these checks are read-only:
 
 ```bash
-docker exec tdarr-node nvidia-smi
-docker exec tdarr-node ffmpeg -hide_banner -h encoder=av1_nvenc
+docker exec tdarr nvidia-smi
+docker exec tdarr ffmpeg -hide_banner -h encoder=av1_nvenc
 ```
 
 Both must succeed. The first command should name the RTX 5050. The second must
@@ -66,7 +67,8 @@ For the initial rollout:
 - Use the same flow for all three libraries only after one sample from each
   relevant content type passes validation.
 
-No path translator is needed because the server and node use the same mounts.
+No path translator is needed because the internal server and node share the
+same container and mounts.
 
 ## 4. Build the flow
 

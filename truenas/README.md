@@ -224,5 +224,5 @@ to make it pass.
 
 ## Application guides
 
-- [Tdarr on the RTX 5050](files/tdarr/SETUP.md) — same-host server/node setup,
+- [Tdarr on the RTX 5050](files/tdarr/SETUP.md) — single-container internal-node setup,
   AV1 NVENC flow, HDR safeguards, and staged validation.
