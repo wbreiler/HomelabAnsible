@@ -3,7 +3,7 @@
 
 services:
   tdarr:
-    image: ghcr.io/haveagitgat/tdarr:2.81.01
+    image: ghcr.io/haveagitgat/tdarr:2.86.01
     container_name: tdarr
     restart: unless-stopped
     ports:

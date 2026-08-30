@@ -72,7 +72,7 @@ same container and mounts.
 
 ## 4. Build the flow
 
-Create a Flow named `AV1 NVENC - HDR aware and size gated`. Use these stages:
+Create a Flow named `AV1 NVENC P7 - HDR aware and size gated`. Use these stages:
 
 1. **Input File**
 2. **Check Video Codec**: codec `av1`
@@ -87,20 +87,24 @@ Create a Flow named `AV1 NVENC - HDR aware and size gated`. Use these stages:
    - Hardware encoding: enabled
    - Hardware type: `nvenc`
    - Hardware decoding: enabled
-   - FFmpeg preset: enabled, `veryslow` (Tdarr maps this to NVENC `p7`)
+   - FFmpeg preset: enabled, `veryslow`
    - FFmpeg quality: enabled, `28` for HDR and `30` for SDR
    - Force encoding: disabled
 6. On the HDR branch only, add **10 Bit Video** before executing the command.
-7. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
+7. Add **Custom Arguments** after the HDR and SDR paths converge, with output
+   arguments `-preset p7`. Tdarr 2.86.01's Set Video Encoder flow plugin
+   intentionally omits `-preset` when the target codec is AV1, even when the
+   preset switch is enabled, so this explicit argument is required.
+8. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
    existing streams and copies non-video streams without adding custom mapping
    arguments.
-8. **Compare File Size Ratio**: lower bound `20`, upper bound `100`.
+9. **Compare File Size Ratio**: lower bound `20`, upper bound `100`.
     - Within range -> continue.
     - Smaller than 20% -> manual review; an unexpectedly tiny output often
       indicates a quality or stream-selection mistake.
     - Larger than the source -> manual review; never replace automatically.
-9. Run a quick health check on the accepted working file.
-10. **Replace Original File** only on the health-checked path. A manually
+10. Run a quick health check on the accepted working file.
+11. **Replace Original File** only on the health-checked path. A manually
     reviewed out-of-range result rejoins this path only after explicit review.
 
 The initial QP 24 test expanded a 227 MB HEVC source to 554 MB. The live flow
