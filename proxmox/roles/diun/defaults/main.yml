@@ -21,6 +21,11 @@ diun_install_dir: "/opt/diun"
 diun_data_dir: "/var/lib/diun"
 diun_config_dir: "/etc/diun"
 
+# This dedicated LXC has IPv4 internet access but only link-local IPv6. Diun's
+# statically linked Go resolver can otherwise select unreachable registry AAAA
+# records instead of falling back to IPv4.
+diun_disable_ipv6: true
+
 # Cron schedule for the watch loop (default: every 6 hours).
 diun_schedule: "0 */6 * * *"
 

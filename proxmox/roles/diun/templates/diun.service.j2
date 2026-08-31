@@ -8,6 +8,10 @@ Type=simple
 User=root
 Group=root
 Environment=DIUN_DB_PATH={{ diun_data_dir }}/diun.db
+{% if diun_disable_ipv6 | bool %}
+ExecStartPre=/usr/sbin/sysctl -w net.ipv6.conf.all.disable_ipv6=1
+ExecStartPre=/usr/sbin/sysctl -w net.ipv6.conf.default.disable_ipv6=1
+{% endif %}
 ExecStart={{ diun_install_dir }}/diun serve --config {{ diun_config_dir }}/diun.yml --log-level info
 Restart=always
 RestartSec=10
