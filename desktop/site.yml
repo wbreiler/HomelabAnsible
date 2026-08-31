@@ -1,5 +1,5 @@
 ---
-- name: Configure gaming PC
+- name: Configure Orion gaming PC
   hosts: gaming_pc
   gather_facts: true
 

@@ -1,6 +1,6 @@
 # Gaming PC Ansible setup
 
-Configures a Windows 11 gaming PC named `gaming-pc` over WinRM.
+Configures the Windows 11 gaming PC `ORION` over WinRM.
 
 For a new controller or Windows installation, start with the role's
 [first setup guide](roles/gaming_pc/README.md). It separates the one-time
@@ -10,7 +10,7 @@ test, check-mode preview, live application, and interactive-user follow-up.
 ## Managed state
 
 - Machine-wide gaming, media, browser, streaming, remote-access, 3D-printing,
-  hardware-monitoring, and development applications discovered on `KRATOS`
+  hardware-monitoring, and development applications for `ORION`
 - Windows Subsystem for Linux and its Virtual Machine Platform dependency
 - Versioned AMD chipset, Realtek audio/LAN, and detected Realtek or MediaTek
   Wi-Fi/Bluetooth drivers for the Gigabyte X870 EAGLE WIFI7

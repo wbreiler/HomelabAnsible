@@ -70,7 +70,7 @@ retain it for the encrypted vault. The script:
 - permits the local administrator to receive an elevated remote token.
 
 It does not store the password. Record the exact computer-qualified username
-printed at the end, such as `KRATOS\ansible`.
+printed at the end, such as `ORION\ansible`.
 
 ## 3. Create the local inventory and encrypted vault
 
@@ -126,7 +126,7 @@ ansible gaming_pc -m ansible.windows.win_ping --ask-vault-pass
 Expected result:
 
 ```text
-gaming-pc | SUCCESS => {
+orion | SUCCESS => {
     "ping": "pong"
 }
 ```

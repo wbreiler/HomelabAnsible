@@ -3,10 +3,10 @@ all:
   children:
     gaming_pc:
       hosts:
-        gaming-pc:
+        orion:
           ansible_host: 192.168.1.221
       vars:
-        ansible_user: 'KRATOS\ansible'
+        ansible_user: 'ORION\ansible'
         ansible_password: "{{ gaming_pc_ansible_password }}"
         ansible_connection: winrm
         ansible_port: 5985
