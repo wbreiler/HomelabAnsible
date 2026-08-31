@@ -19,9 +19,9 @@ before processing a whole library.
   streams because their language cannot be inferred safely.
 - Copy chapters, global metadata, language tags, and attachments.
 - Preserve HDR10 or HLG as 10-bit HDR; never tone-map it to SDR.
-- Route Dolby Vision and HDR10+ titles to manual review. Dynamic HDR metadata
-  is not reliably preserved by a generic Tdarr/FFmpeg AV1 conversion, and
-  client support for AV1 plus those formats is less predictable than HDR10.
+- Route Dolby Vision and HDR10+ titles through a video-copy remux path. Retain
+  only the desired audio/subtitle languages while preserving the original
+  dynamic-HDR HEVC bitstream unchanged.
 - Replace an original only after health checking and confirming the result is
   smaller. Keep a backup until each content category has been playback-tested.
 
@@ -87,11 +87,18 @@ Use these stages:
 2. **Check Video Codec**: codec `av1`
    - `File has codec` -> finish successfully without changing the file.
    - `File does not have codec` -> continue.
-3. **Check HDR Video**
+3. Add a **Custom JS Function** using `dynamic-hdr-route.js`:
+   - Output 1 (Dolby Vision or HDR10+) -> the dynamic-HDR remux path.
+   - Output 2 (no dynamic HDR) -> **Check HDR Video**.
+4. On the dynamic-HDR remux path, use **Begin Command**, the same audio and
+   subtitle language filters described below, **Set Container** to MKV, and
+   **Execute**. Do not add a video encoder; the HEVC video must be stream-copied.
+5. **Check HDR Video**
    - HDR -> require manual review, then use the 10-bit stage.
    - Not HDR -> continue through the SDR encode path.
-4. Start a separate **Begin Command** path for HDR and SDR.
-5. On both HDR and SDR paths, add two **Remove Stream By Property** stages:
+6. Start a separate **Begin Command** path for HDR and SDR.
+7. On the HDR, SDR, and dynamic-HDR remux paths, add two
+   **Remove Stream By Property** stages:
    - Property: `tags.language`
    - Condition: `not_equals`
    - Movies/TV audio: keep `eng,en`
@@ -99,7 +106,7 @@ Use these stages:
    - All subtitles: keep `eng,en`
    - Limit each filter to its respective `audio` or `subtitle` codec type.
      Untagged streams are left untouched.
-6. **Set Video Encoder**
+8. **Set Video Encoder** on only the HDR and SDR AV1 paths:
    - Output codec: `av1`
    - Hardware encoding: enabled
    - Hardware type: `nvenc`
@@ -107,8 +114,8 @@ Use these stages:
    - FFmpeg preset: enabled, `veryslow`
    - FFmpeg quality: disabled; do not use constant QP for this flow
    - Force encoding: disabled
-7. On the HDR branch only, add **10 Bit Video** before executing the command.
-8. Add **Custom JS Function** after the HDR and SDR paths converge. Paste the
+9. On the HDR branch only, add **10 Bit Video** before executing the command.
+10. Add **Custom JS Function** after the HDR and SDR AV1 paths converge. Paste the
    contents of `source-relative-video-bitrate.js` into its **JS Code** input.
    This calculates a target of 75% of the source video bitrate from FFprobe's
    actual container bitrate (or actual file size and duration), after
@@ -118,7 +125,7 @@ Use these stages:
    neither scanner supplies one. Do not use **Set Video Bitrate** with
    **Use percentage of input bitrate**: that plugin reads optional Matroska
    `BPS` tags, which can be stale and produce grossly oversized outputs.
-9. Add **Custom Arguments** with these output arguments:
+11. Add **Custom Arguments** with these output arguments:
 
    ```text
    -rc vbr -preset p7 -tune hq -multipass fullres -spatial-aq 1 -temporal-aq 1 -rc-lookahead 32
@@ -130,16 +137,16 @@ Use these stages:
    On the Anime flow, append
    `-disposition:a:0 default -disposition:s:0 default` so the first retained
    Japanese audio and English subtitle streams are defaults.
-10. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
+12. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
    existing streams and copies non-video streams without adding custom mapping
    arguments.
-11. **Compare File Size Ratio**: lower bound `20`, upper bound `100`.
+13. **Compare File Size Ratio**: lower bound `20`, upper bound `100`.
     - Within range -> continue.
     - Smaller than 20% -> manual review; an unexpectedly tiny output often
       indicates a quality or stream-selection mistake.
     - Larger than the source -> manual review; never replace automatically.
-12. Run a quick health check on the accepted working file.
-13. **Replace Original File** only on the health-checked path. A manually
+14. Run a quick health check on the accepted working file.
+15. **Replace Original File** only on the health-checked path. A manually
     reviewed out-of-range result rejoins this path only after explicit review.
 
 Constant-QP tests expanded already-efficient x265 sources to 176-244% of their
@@ -157,9 +164,9 @@ MediaInfo or FFprobe data:
 - HDR10: process as 10-bit, retaining BT.2020 primaries, PQ transfer, mastering
   display metadata, and MaxCLL/MaxFALL where present.
 - HLG: process as 10-bit, retaining BT.2020 primaries and ARIB STD-B67 transfer.
-- Dolby Vision or HDR10+: send to manual review and leave the source unchanged
-  unless a test encode proves the required dynamic metadata and Plex playback
-  survive on every important client.
+- Dolby Vision or HDR10+: stream-copy the video through the dynamic-HDR remux
+  path; verify that the output still reports the original dynamic metadata
+  before replacing the source.
 
 Do not hard-code one title's mastering-display or MaxCLL values into the flow;
 those values vary by source. Current FFmpeg/NVENC can pass frame HDR metadata,
@@ -174,7 +181,7 @@ Queue copies or otherwise-backed-up examples of:
 2. 1080p SDR HEVC
 3. 2160p HDR10 HEVC
 4. One title with multiple audio and subtitle tracks
-5. Dolby Vision and HDR10+ samples for the skip/manual-review route
+5. Dolby Vision and HDR10+ samples for the video-copy remux route
 
 For every output, verify:
 
