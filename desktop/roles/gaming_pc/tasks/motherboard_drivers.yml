@@ -1,0 +1,164 @@
+---
+- name: Discover the motherboard model
+  ansible.windows.win_powershell:
+    script: |
+      $board = Get-CimInstance -ClassName Win32_BaseBoard
+      $Ansible.Result = @{
+        manufacturer = $board.Manufacturer
+        product = $board.Product
+      }
+      $Ansible.Changed = $false
+  register: gaming_pc_motherboard_discovery
+
+- name: Require the expected Gigabyte X870 motherboard
+  ansible.builtin.assert:
+    that:
+      - >-
+        gaming_pc_motherboard_discovery.result.manufacturer ==
+        gaming_pc_expected_motherboard_manufacturer
+      - >-
+        gaming_pc_motherboard_discovery.result.product ==
+        gaming_pc_expected_motherboard_product
+    fail_msg: >-
+      Refusing to install motherboard-specific drivers on
+      {{ gaming_pc_motherboard_discovery.result.manufacturer }}
+      {{ gaming_pc_motherboard_discovery.result.product }}; expected
+      {{ gaming_pc_expected_motherboard_manufacturer }}
+      {{ gaming_pc_expected_motherboard_product }}.
+
+- name: Discover the Wi-Fi 7 hardware vendor
+  ansible.windows.win_powershell:
+    script: |
+      $hardwareIds = Get-CimInstance -ClassName Win32_PnPEntity |
+        Select-Object -ExpandProperty PNPDeviceID
+
+      if ($hardwareIds -match 'VEN_10EC&DEV_8922') {
+        $vendor = 'realtek'
+      }
+      elseif ($hardwareIds -match 'VEN_14C3') {
+        $vendor = 'mediatek'
+      }
+      else {
+        $vendor = 'unknown'
+      }
+
+      $Ansible.Result = $vendor
+      $Ansible.Changed = $false
+  register: gaming_pc_wireless_discovery
+
+- name: Require a supported X870 EAGLE WIFI7 wireless module
+  ansible.builtin.assert:
+    that:
+      - gaming_pc_wireless_discovery.result in ['realtek', 'mediatek']
+    fail_msg: >-
+      Could not identify the X870 EAGLE WIFI7 wireless module as Realtek
+      RTL8922AE or MediaTek. No wireless driver will be installed until its
+      hardware ID is reviewed.
+
+- name: Install versioned X870 EAGLE WIFI7 drivers
+  ansible.windows.win_powershell:
+    script: |
+      param(
+        [string]$PackageName,
+        [string]$PackageVersion,
+        [string]$PackageUrl,
+        [string]$ExpectedSha256,
+        [string]$InstallerArguments
+      )
+
+      $ErrorActionPreference = 'Stop'
+      $safeName = $PackageName -replace '[^A-Za-z0-9._-]', '-'
+      $markerRoot = Join-Path $env:ProgramData 'Ansible\gaming-pc-drivers'
+      $marker = Join-Path $markerRoot "$safeName-$PackageVersion.installed"
+
+      if (Test-Path -LiteralPath $marker) {
+        $Ansible.Changed = $false
+        $Ansible.Result = @{
+          package = $PackageName
+          version = $PackageVersion
+          reboot_required = $false
+        }
+        return
+      }
+
+      if ($Ansible.CheckMode) {
+        $Ansible.Changed = $true
+        $Ansible.Result = @{
+          package = $PackageName
+          version = $PackageVersion
+          reboot_required = $false
+        }
+        return
+      }
+
+      $workingRoot = Join-Path $env:TEMP "ansible-$safeName-$PackageVersion"
+      $archive = Join-Path $workingRoot 'driver.zip'
+      $expanded = Join-Path $workingRoot 'expanded'
+
+      if (Test-Path -LiteralPath $workingRoot) {
+        Remove-Item -LiteralPath $workingRoot -Recurse -Force
+      }
+
+      try {
+        New-Item -ItemType Directory -Path $expanded -Force | Out-Null
+        Invoke-WebRequest -Uri $PackageUrl -OutFile $archive
+
+        $actualSha256 = (Get-FileHash -LiteralPath $archive `
+          -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualSha256 -ne $ExpectedSha256.ToLowerInvariant()) {
+          throw "Checksum mismatch for $PackageName ($actualSha256)"
+        }
+
+        Expand-Archive -LiteralPath $archive -DestinationPath $expanded
+        $installers = @(Get-ChildItem -Path $expanded -Filter '*.exe' `
+          -File -Recurse)
+        if ($installers.Count -ne 1) {
+          throw "Expected one installer for $PackageName; found $($installers.Count)"
+        }
+
+        $process = Start-Process -FilePath $installers[0].FullName `
+          -ArgumentList $InstallerArguments -Wait -PassThru
+        if ($process.ExitCode -notin @(0, 3010)) {
+          throw "$PackageName installer exited with code $($process.ExitCode)"
+        }
+
+        New-Item -ItemType Directory -Path $markerRoot -Force | Out-Null
+        New-Item -ItemType File -Path $marker -Force | Out-Null
+        $Ansible.Changed = $true
+        $Ansible.Result = @{
+          package = $PackageName
+          version = $PackageVersion
+          reboot_required = $process.ExitCode -eq 3010
+        }
+      }
+      finally {
+        if (Test-Path -LiteralPath $workingRoot) {
+          Remove-Item -LiteralPath $workingRoot -Recurse -Force
+        }
+      }
+    parameters:
+      PackageName: "{{ item.name }}"
+      PackageVersion: "{{ item.version }}"
+      PackageUrl: "{{ item.url }}"
+      ExpectedSha256: "{{ item.checksum }}"
+      InstallerArguments: "{{ item.installer_arguments }}"
+  loop: "{{ gaming_pc_motherboard_driver_packages }}"
+  loop_control:
+    label: "{{ item.name }} {{ item.version }}"
+  register: gaming_pc_motherboard_driver_results
+  when:
+    - >-
+      item.hardware == 'always' or
+      item.hardware == gaming_pc_wireless_discovery.result
+
+- name: Reboot after motherboard driver installation when requested
+  ansible.windows.win_reboot:
+  when:
+    - gaming_pc_reboot_after_updates | bool
+    - >-
+      gaming_pc_motherboard_driver_results.results |
+      selectattr('result', 'defined') |
+      map(attribute='result') |
+      selectattr('reboot_required', 'defined') |
+      selectattr('reboot_required') |
+      list | length > 0

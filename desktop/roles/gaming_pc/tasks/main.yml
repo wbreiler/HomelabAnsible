@@ -113,6 +113,10 @@
     label: "{{ item.name }}"
   when: gaming_pc_install_approved_applications | bool
 
+- name: Install X870 EAGLE WIFI7 motherboard drivers
+  ansible.builtin.include_tasks: motherboard_drivers.yml
+  when: gaming_pc_install_motherboard_drivers | bool
+
 - name: Enable required Windows optional features
   ansible.windows.win_optional_feature:
     name: "{{ item }}"

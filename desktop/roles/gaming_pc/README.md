@@ -37,6 +37,7 @@ Pay particular attention to:
 - `gaming_pc_winget_packages`
 - `gaming_pc_install_approved_applications`
 - Windows and driver update controls
+- The expected X870 EAGLE WIFI7 model and pinned motherboard driver packages
 - `gaming_pc_reboot_after_updates`
 - The SMB path, username, and drive letter
 
@@ -44,6 +45,11 @@ The application approval flag also gates WinGet setup, WSL installation, and
 Windows optional features. Windows updates, driver updates, and the SMB mapping
 have separate controls. A live run can reboot Windows when an enabled feature
 or update requires it.
+
+The motherboard-driver flag installs only after the role confirms the exact
+Gigabyte X870 EAGLE WIFI7 product string. It detects whether the board contains
+the Realtek or MediaTek wireless module and refuses to guess if neither known
+hardware ID is present.
 
 ## 2. Bootstrap Windows once
 

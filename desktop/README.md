@@ -12,6 +12,8 @@ test, check-mode preview, live application, and interactive-user follow-up.
 - Machine-wide gaming, media, browser, streaming, remote-access, 3D-printing,
   hardware-monitoring, and development applications discovered on `KRATOS`
 - Windows Subsystem for Linux and its Virtual Machine Platform dependency
+- Versioned AMD chipset, Realtek audio/LAN, and detected Realtek or MediaTek
+  Wi-Fi/Bluetooth drivers for the Gigabyte X870 EAGLE WIFI7
 - Windows, Microsoft product, and signed hardware-driver updates
 - Persistent, all-user `Z:` mapping to `\\10.10.20.3\clips` as SMB user
   `wbreiler`
@@ -23,37 +25,42 @@ gate enabled for a live run. Setting the gate to `false` skips WinGet package
 installation and the optional-feature tasks, but Windows/driver updates and
 the SMB mapping have their own controls and still run unless disabled.
 
-GPU drivers are installed from the Windows Update driver catalog. This is the
-hardware-matched, signed route; the role intentionally does not download a
-vendor-specific web installer that will become stale.
+Motherboard drivers are pinned to checksum-verified packages from Gigabyte's
+X870 EAGLE WIFI7 support page. Board revisions use either Realtek RTL8922AE or
+MediaTek wireless modules, so the role detects the installed hardware and
+refuses to guess when it cannot identify the module. The AMD chipset package
+also supplies the applicable X3D components.
 
-Apple Music, Discord, iCloud for Windows, and GPU companion suites remain
+GPU drivers are installed from the Windows Update driver catalog. AMD Radeon
+Software remains an interactive `Techn`-profile installation so its user-facing
+control panel is not attached to the automation account.
+
+Apple Music, ASTRO Command Center, ChatGPT, CurseForge, Discord, GIGABYTE
+Control Center, iCloud for Windows, Modrinth App, and AMD Radeon Software remain
 interactive `Techn`-profile installs. Installing them through WinRM would
 attach user-scoped packages to the local `ansible` account instead of the
-desktop user. Install the matching AMD Radeon Software, Intel Graphics
-Software, or NVIDIA App only after Windows detects that vendor's GPU.
+desktop user.
 
-The playbook's signed-driver update is vendor-neutral. Windows Update matches
-the installed hardware and can therefore pull AMD, Intel, or NVIDIA display
-drivers without changing the playbook. The full vendor companion application
-is not treated as the driver source and is not silently installed.
+This desired state is AMD-specific: the interactive application list no longer
+includes Intel or NVIDIA GPU companion software. The full AMD companion
+application is not treated as the driver source and is not silently installed.
 
-## Planned replacement hardware
+## Managed hardware
 
-The future system is the PCPartPicker list named `Orion`:
+The AMD gaming PC uses:
 
 - AMD Ryzen 7 9800X3D
 - Thermalright AXP90-X47 Full CPU cooler
-- Asus ROG Strix B850-I Gaming WiFi Mini ITX motherboard
+- Gigabyte X870 EAGLE WIFI7 motherboard
 - 48 GB (2 x 24 GB) Crucial Pro DDR5-6000 CL48 memory
 - 1 TB Crucial P310 PCIe 4.0 NVMe SSD
 - Sapphire Pulse Radeon RX 7900 XT 20 GB
 - Fractal Design Terra Mini ITX case
 - Asus ROG Loki 750 W 80+ Platinum SFX power supply
 
-PCPartPicker notes that the B850 motherboard may need a BIOS update to fully
-support the 24 GB memory modules. Keep the live inventory on `KRATOS` until the
-replacement is assembled and its final hostname and IP are confirmed.
+BIOS updates remain intentionally outside this role because an interrupted or
+incorrect motherboard flash can make the PC unbootable. Confirm the board
+revision and choose a stable BIOS through Gigabyte's support page separately.
 
 ## 1. Bootstrap the PC once
 

@@ -6,6 +6,9 @@ gaming_pc_winget_packages:
   - name: 7-Zip
     id: 7zip.7zip
     source: winget
+  - name: 1Password
+    id: AgileBits.1Password
+    source: winget
   - name: Audacity
     id: Audacity.Audacity
     source: winget
@@ -69,16 +72,94 @@ gaming_pc_winget_packages:
 gaming_pc_interactive_user_packages:
   - name: Apple Music
     applies_to: all
+  - name: ASTRO Command Center
+    applies_to: all
+  - name: ChatGPT
+    applies_to: all
+  - name: CurseForge
+    applies_to: all
   - name: Discord
     applies_to: all
+  - name: GIGABYTE Control Center
+    applies_to: X870 EAGLE WIFI7
   - name: iCloud for Windows
     applies_to: all
+  - name: Modrinth App
+    applies_to: all
   - name: AMD Radeon Software
-    applies_to: AMD GPU
-  - name: Intel Graphics Software
-    applies_to: Intel GPU
-  - name: NVIDIA App
-    applies_to: NVIDIA GPU
+    applies_to: Radeon RX 7000 series
+
+gaming_pc_install_motherboard_drivers: true
+gaming_pc_expected_motherboard_manufacturer: Gigabyte Technology Co., Ltd.
+gaming_pc_expected_motherboard_product: X870 EAGLE WIFI7
+
+# Versioned packages published for the X870 EAGLE WIFI7 (rev. 1.x). Wireless
+# hardware differs by board revision, so the role discovers Realtek vs.
+# MediaTek and installs only the matching set.
+gaming_pc_motherboard_driver_packages:
+  - name: AMD X870 chipset
+    version: 8.03.25.247
+    hardware: always
+    installer_arguments: /S
+    url: >-
+      https://download.gigabyte.com/FileList/Driver/mb_driver_597_chipset_8.03.25.247.zip?v=fc44742a45b2f8a2054e82289f94704e
+    checksum: 25bf26982fbdebd3c62534384abe01312d4cde30636c46418924e71776b1e837
+  - name: Realtek HD Audio
+    version: 6.0.9927.1
+    hardware: always
+    installer_arguments: -y
+    url: >-
+      https://download.gigabyte.com/FileList/Driver/mb_driver_612_realtekdch_6.0.9927.1.zip?v=5445439edfce59e0fe8c93e08214ced9
+    checksum: a3576b388d7f3cf5a8c91b54dc5c9d1cf541d7abc322d7360e5da7ae6548149d
+  - name: Realtek 2.5GbE LAN
+    version: 11.29.50.0202
+    hardware: always
+    installer_arguments: /S
+    url: >-
+      https://download.gigabyte.com/FileList/Driver/mb_driver_654_w11_11.29.50.0202.zip?v=04d967ff1547fbaee11375158ea0d33a
+    checksum: 07013117e12ab44c0afadc2d898ed4904121e56c3579df33ce7e3f687f43ae1f
+  - name: Realtek RTL8922AE Wi-Fi 7
+    version: 6102.24.143.0
+    hardware: realtek
+    installer_arguments: -y
+    url: >-
+      https://download.gigabyte.com/FileList/Driver/mb_driver_3701_realtek8922wifi_6102.24.143.0_n.zip?v=7fee4785f089787781030c3fb139b948
+    checksum: 1fb90817ca682481197b65d746b5e8328283dbe4df28a5caecaa764e918fc589
+  - name: Realtek RTL8922AE Bluetooth
+    version: 18.4032.2510.0901
+    hardware: realtek
+    installer_arguments: -y
+    url: >-
+      https://download.gigabyte.com/FileList/Driver/mb_driver_3702_realtek8922_18.4032.2510.0901.zip?v=bf7a1eb4d9511b3b631be5fce36accbf
+    checksum: e9203af6c5b9a2fc373befb45071c1290a5fc28a39c0ae6efc2f5998847dc5a5
+  - name: Realtek RTL8922AE ACX LE Audio
+    version: 2.0.11.0
+    hardware: realtek
+    installer_arguments: -y
+    url: >-
+      https://download.gigabyte.com/FileList/Driver/mb_driver_4718_realtek8922_2.0.11.0_n.zip?v=5f9230c72298b5701a5c0a8f92d0ebe5
+    checksum: f8300443f077457f948ca018e62cd740ce3d7c738a18838689b4ce17999677a8
+  - name: MediaTek Wi-Fi 7
+    version: 5.7.0.4669
+    hardware: mediatek
+    installer_arguments: -y
+    url: >-
+      https://download.gigabyte.com/FileList/Driver/mb_driver_2682_mtk_5.7.0.4669.zip?v=bd80300b5deb6e94b3e6d2c6b58e0fed
+    checksum: 8f8c481a079db0f1628c4491af4580b3f17249c219c1671dabc53a4626feb662
+  - name: MediaTek Wi-Fi 7 Bluetooth
+    version: 1.1044.0.556
+    hardware: mediatek
+    installer_arguments: -y
+    url: >-
+      https://download.gigabyte.com/FileList/Driver/mb_driver_2683_mtk_1.1044.0.556.zip?v=6f57d3e64225310190d76dcf62e3574e
+    checksum: ded0fbe2f7baef58698367addb05a18eaa1af6537d6a925721a503c4dac49c58
+  - name: MediaTek ACX LE Audio
+    version: 1.0005.0.46
+    hardware: mediatek
+    installer_arguments: -y
+    url: >-
+      https://download.gigabyte.com/FileList/Driver/mb_driver_4715_mtk_1.0005.0.46.zip?v=f8e4cdb55e98375c03194bddce0603d0
+    checksum: 7c7a6aea0b53fed1c0450c2ee87c95849f8e63ec96ae232e6d38b6650ccc2bd5
 
 gaming_pc_install_windows_updates: true
 gaming_pc_install_driver_updates: true
