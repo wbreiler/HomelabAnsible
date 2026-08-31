@@ -112,7 +112,10 @@ Use these stages:
    contents of `source-relative-video-bitrate.js` into its **JS Code** input.
    This calculates a target of 75% of the source video bitrate from FFprobe's
    actual container bitrate (or actual file size and duration), after
-   subtracting known audio bitrates. Do not use **Set Video Bitrate** with
+   subtracting retained audio bitrates. When FFprobe omits a per-stream audio
+   bitrate, as it commonly does for DTS-HD MA, the function uses MediaInfo's
+   matching audio track and falls back to a conservative audio allowance if
+   neither scanner supplies one. Do not use **Set Video Bitrate** with
    **Use percentage of input bitrate**: that plugin reads optional Matroska
    `BPS` tags, which can be stale and produce grossly oversized outputs.
 9. Add **Custom Arguments** with these output arguments:
