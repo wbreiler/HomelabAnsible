@@ -42,7 +42,7 @@ The repository currently:
   scrub schedules;
 - models the local non-built-in accounts without their non-retrievable
   passwords;
-- models Docker settings and manages the `llama-cpp`, `sabnzbd`, and `plex`
+- models Docker settings and manages the `ollama`, `sabnzbd`, and `plex`
   applications;
 - idempotently reconciles singleton settings, service enablement, storage,
   sharing, identity, applications, network interfaces, and schedules;

@@ -1,22 +1,19 @@
 # TrueNAS custom-app Compose configuration for erebus.
 
 services:
-  llama-cpp:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
-    container_name: llama-cpp
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
     restart: unless-stopped
-    command: >-
-      --host 0.0.0.0
-      --port 8080
-      --models-preset /models/preset.ini
-      --n-gpu-layers 999
     environment:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       NVIDIA_VISIBLE_DEVICES: GPU-fd41aa84-6ce4-f656-47f7-a49a6ff6fad3
+      OLLAMA_HOST: 0.0.0.0:11434
     ports:
-      - "8080:8080"
+      - "11434:11434"
     volumes:
-      - /mnt/gaia/models:/models
+      - /mnt/gaia/appdata/ollama:/root/.ollama
+      - /mnt/gaia/models:/models:ro
     deploy:
       resources:
         reservations:
