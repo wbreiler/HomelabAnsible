@@ -2,6 +2,11 @@
 
 Configures a Windows 11 gaming PC named `gaming-pc` over WinRM.
 
+For a new controller or Windows installation, start with the role's
+[first setup guide](roles/gaming_pc/README.md). It separates the one-time
+Windows bootstrap, local inventory and vault creation, read-only connection
+test, check-mode preview, live application, and interactive-user follow-up.
+
 ## Managed state
 
 - Machine-wide gaming, media, browser, streaming, remote-access, 3D-printing,
