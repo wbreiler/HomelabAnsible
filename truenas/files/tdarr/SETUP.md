@@ -96,7 +96,9 @@ Use these stages:
    subtitle language filters described below, and **Execute**. Do not add a
    video encoder or **Set Container** stage: the HEVC video must be
    stream-copied and the source container must be retained. In particular,
-   MP4 `mov_text` subtitles cannot be copied into Matroska.
+   MP4 `mov_text` subtitles cannot be copied into Matroska. Send a successful
+   remux directly to the health check instead of the AV1 size-ratio gate;
+   stream-copy container overhead can make a valid remux fractionally larger.
 5. **Check HDR Video**
    - HDR -> require manual review, then use the 10-bit stage.
    - Not HDR -> continue through the SDR encode path.
@@ -144,7 +146,9 @@ Use these stages:
 12. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
    existing streams and copies non-video streams without adding custom mapping
    arguments.
-13. **Compare File Size Ratio**: lower bound `20`, upper bound `100`.
+13. On only the HDR and SDR AV1 paths, use **Compare File Size Ratio**: lower
+    bound `20`, upper bound `100`. Do not apply this gate to the dynamic-HDR
+    video-copy path.
     - Within range -> continue.
     - Smaller than 20% -> manual review; an unexpectedly tiny output often
       indicates a quality or stream-selection mistake.
