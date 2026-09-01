@@ -8,7 +8,9 @@ before processing a whole library.
 
 ## Encoding policy
 
-- Output container: Matroska (`mkv`).
+- AV1 transcodes use Matroska (`mkv`). Dynamic-HDR video-copy jobs preserve the
+  source container so MP4-compatible subtitle streams and Dolby Vision
+  signaling are not forced into MKV.
 - Output video: AV1 through NVIDIA NVENC (`av1_nvenc`).
 - Skip files whose primary video stream is already AV1.
 - Do not resize, deinterlace, or tone-map by default.
@@ -91,8 +93,10 @@ Use these stages:
    - Output 1 (Dolby Vision or HDR10+) -> the dynamic-HDR remux path.
    - Output 2 (no dynamic HDR) -> **Check HDR Video**.
 4. On the dynamic-HDR remux path, use **Begin Command**, the same audio and
-   subtitle language filters described below, **Set Container** to MKV, and
-   **Execute**. Do not add a video encoder; the HEVC video must be stream-copied.
+   subtitle language filters described below, and **Execute**. Do not add a
+   video encoder or **Set Container** stage: the HEVC video must be
+   stream-copied and the source container must be retained. In particular,
+   MP4 `mov_text` subtitles cannot be copied into Matroska.
 5. **Check HDR Video**
    - HDR -> require manual review, then use the 10-bit stage.
    - Not HDR -> continue through the SDR encode path.
@@ -165,8 +169,8 @@ MediaInfo or FFprobe data:
   display metadata, and MaxCLL/MaxFALL where present.
 - HLG: process as 10-bit, retaining BT.2020 primaries and ARIB STD-B67 transfer.
 - Dolby Vision or HDR10+: stream-copy the video through the dynamic-HDR remux
-  path; verify that the output still reports the original dynamic metadata
-  before replacing the source.
+  path without changing its container; verify that the output still reports
+  the original dynamic metadata before replacing the source.
 
 Do not hard-code one title's mastering-display or MaxCLL values into the flow;
 those values vary by source. Current FFmpeg/NVENC can pass frame HDR metadata,
