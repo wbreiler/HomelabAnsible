@@ -143,18 +143,22 @@ Use these stages:
    On the Anime flow, append
    `-disposition:a:0 default -disposition:s:0 default` so the first retained
    Japanese audio and English subtitle streams are defaults.
-12. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
-   existing streams and copies non-video streams without adding custom mapping
-   arguments.
-13. On only the HDR and SDR AV1 paths, use **Compare File Size Ratio**: lower
+12. Add a **Custom JS Function** using `matroska-stream-compatibility.js` after
+    the HDR and SDR paths converge. This converts retained MP4 `mov_text`
+    subtitles to SubRip and removes MP4 data streams that Matroska cannot mux.
+    Existing Matroska-compatible subtitles and attachments remain unchanged.
+13. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
+    retained streams and copies compatible non-video streams without adding
+    custom mapping arguments.
+14. On only the HDR and SDR AV1 paths, use **Compare File Size Ratio**: lower
     bound `20`, upper bound `100`. Do not apply this gate to the dynamic-HDR
     video-copy path.
     - Within range -> continue.
     - Smaller than 20% -> manual review; an unexpectedly tiny output often
       indicates a quality or stream-selection mistake.
     - Larger than the source -> manual review; never replace automatically.
-14. Run a quick health check on the accepted working file.
-15. **Replace Original File** only on the health-checked path. A manually
+15. Run a quick health check on the accepted working file.
+16. **Replace Original File** only on the health-checked path. A manually
     reviewed out-of-range result rejoins this path only after explicit review.
 
 Constant-QP tests expanded already-efficient x265 sources to 176-244% of their
