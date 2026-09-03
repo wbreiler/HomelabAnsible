@@ -45,7 +45,7 @@ alter the current session.
 | `mas` | Installs IDs in `tasks/mas.yml`; requires a signed-in, entitled account and runs installs as root |
 | `shell` | Installs Oh My Zsh, replaces `.zshrc`/`.zprofile` with backups, manages pyenv Python 3.14 and selected pip/npm packages, and selects zsh |
 | `git` | Sets the global name/email and installs Git LFS hooks; it does not configure commit signing |
-| `ssh` | Replaces `~/.ssh/config` with backup and installs 1Password agent configuration; private keys are not managed |
+| `ssh` | Replaces `~/.ssh/config` with backup, configures the Bitwarden SSH agent, and removes obsolete 1Password agent configuration; private keys are not managed |
 | `vscode` | Replaces VS Code `settings.json` with backup and attempts every extension in `tasks/vscode.yml` |
 | `hosts` | Replaces the marked Ansible block in `/etc/hosts` with the tracked homelab entries |
 | `dock` | Removes every Dock item, installs the tracked application order and Downloads folder, then restarts Dock |
@@ -66,7 +66,6 @@ Tracked files under `files/` replace these user files:
 
 - `~/.zshrc` and `~/.zprofile`
 - `~/.ssh/config`
-- `~/.config/1Password/ssh/agent.toml`
 - `~/Library/Application Support/Code/User/settings.json`
 
 Configured copies use backups where the tasks specify them. Review both the
@@ -81,7 +80,7 @@ before a live application of those changes.
 ## Manual follow-up
 
 - Restore private SSH and GPG keys outside the playbook.
-- Sign into 1Password before relying on its SSH agent.
+- Sign into Bitwarden and enable its SSH agent before relying on agent-backed keys.
 - Activate licensed applications such as Parallels Desktop and CrossOver.
 - Install applications absent from the current Homebrew cask and MAS lists.
 
