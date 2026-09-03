@@ -71,6 +71,7 @@ proxmox-ansible/
 │   ├── gitea_mirror/        # Managed Gitea Mirror LXC
 │   ├── seerr/               # Managed Seerr LXC
 │   ├── pocket_id/           # Managed Pocket ID LXC
+│   ├── vaultwarden/         # Managed Vaultwarden password-manager LXC
 │   ├── forgejo/             # Managed Forgejo LXC
 │   ├── sonarr/              # Managed Sonarr LXC
 │   ├── radarr/              # Managed Radarr LXC
@@ -357,7 +358,7 @@ Together: `healthcheck_reminder` catches "is the node/guest even up" (Proxmox-na
 
 ### Standalone App LXCs
 
-Fourteen repository-owned roles in this section manage a single-purpose LXC; the Tailscale router is documented separately below. Each is opt-in and defaults off. All bootstrap through the shared `tasks/create_lxc.yml` and adopt existing containers by hostname. Because adopted containers can be HA-managed and move between nodes, each role resolves the node currently hosting its container at run time (`tasks/resolve_lxc_node.yml`); the configured `<role>_node` is only the fresh-install fallback. Names, VMIDs, sizes, nodes, and versions below are tracked defaults, not assertions about live state.
+Fifteen repository-owned roles in this section manage a single-purpose LXC; the Tailscale router is documented separately below. Each is opt-in and defaults off. All bootstrap through the shared `tasks/create_lxc.yml` and adopt existing containers by hostname. Because adopted containers can be HA-managed and move between nodes, each role resolves the node currently hosting its container at run time (`tasks/resolve_lxc_node.yml`); the configured `<role>_node` is only the fresh-install fallback. Names, VMIDs, sizes, nodes, and versions below are tracked defaults, not assertions about live state.
 
 - **`apt_cacher_ng`** — Apt-Cacher NG package cache with HTTPS pass-through and self-proxy configuration. Its defaults identify `apt-nash`, VMID 106, `atlas` as the fresh-install fallback, and a 2 CPU/512 MB/25 GB container. It removes the legacy remote update hook.
 - **`prowlarr`** — Prowlarr indexer manager. Its defaults identify `prowlarr-nash`, VMID 104, and `atlas` as the fresh-install fallback. It pins version 2.5.2.5491 and its release checksum, removes the remote update hook, and verifies the web interface.
@@ -367,6 +368,7 @@ Fourteen repository-owned roles in this section manage a single-purpose LXC; the
 - **`gitea_mirror`** — Gitea Mirror repository mirroring service. Its defaults identify `git-mirror-nash`, VMID 119, and `atlas` as the fresh-install fallback. It pins and verifies Gitea Mirror 3.26.2 and Bun 1.3.14, preserves the existing environment file and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the installed version.
 - **`seerr`** — Seerr media-request manager. Its defaults identify `seerr-nash`, VMID 117, and `atlas` as the fresh-install fallback. It pins and verifies Seerr 3.4.1 and pnpm 10.34.4, requires Node.js 22, preserves `/etc/seerr/seerr.conf` and the SQLite config data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the API-reported version.
 - **`pocket_id`** — Pocket ID OIDC identity provider. Its defaults identify `pocketid-nash`, VMID 100, and `atlas` as the fresh-install fallback. It pins and verifies the Pocket ID 2.13.0 binary, preserves the `.env` and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
+- **`vaultwarden`** — Vaultwarden password manager. Its defaults identify `vaultwarden-nash`, VMID 125, and `atlas` as the fresh-install fallback. Based on the Community Scripts design without executing its installer, it builds pinned Vaultwarden 1.37.2 source with pinned Rust 1.97.1, installs the pinned matching web vault, preserves and verifies SQLite data, uses a hardened non-root systemd service, and rolls back failed upgrades.
 - **`forgejo`** — Forgejo Git hosting. Its defaults identify `forgejo-nash`, VMID 103, and `prometheus` as the fresh-install fallback. It pins and verifies the Forgejo 16.0.2 release binary, refuses downgrades and skipped major versions, preserves `app.ini` and repository data, checks SQLite integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
 - **`sonarr`** — Sonarr TV manager. Its defaults identify `sonarr-nash`, VMID 110, and `atlas` as the fresh-install fallback. It pins and verifies Sonarr 4.0.19.2979, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`radarr`** — Radarr movie manager. Its defaults identify `radarr-nash`, VMID 111, and `prometheus` as the fresh-install fallback. It pins and verifies Radarr 6.3.0.10514, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
@@ -415,6 +417,12 @@ install_pocket_id: true
 pocket_id_node: "atlas"
 pocket_id_vmid: "100"
 pocket_id_version: "2.13.0"
+
+install_vaultwarden: true
+vaultwarden_node: "atlas"
+vaultwarden_vmid: "125"
+vaultwarden_domain: "https://vault.wbreiler.com"
+# Temporarily enable signups for initial account creation, then disable them.
 
 install_forgejo: true
 forgejo_node: "prometheus"

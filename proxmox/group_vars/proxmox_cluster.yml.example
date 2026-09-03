@@ -162,6 +162,14 @@ install_pocket_id: false
 # pocket_id_hostname: "pocketid-nash"
 # pocket_id_version: "2.11.0"
 
+install_vaultwarden: false
+# vaultwarden_node: "atlas"
+# vaultwarden_vmid: "125"
+# vaultwarden_hostname: "vaultwarden-nash"
+# vaultwarden_domain: "https://vault.wbreiler.com"
+# vaultwarden_signups_allowed: false  # temporarily enable for first account only
+# vaultwarden_admin_token: ""  # Argon2id PHC string in encrypted group_vars
+
 install_forgejo: false
 # forgejo_node: "prometheus"
 # forgejo_vmid: "103"

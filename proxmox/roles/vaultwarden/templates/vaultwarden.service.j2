@@ -1,0 +1,35 @@
+[Unit]
+Description=Vaultwarden password manager
+Documentation=https://github.com/dani-garcia/vaultwarden
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ vaultwarden_user }}
+Group={{ vaultwarden_user }}
+EnvironmentFile={{ vaultwarden_install_dir }}/.env
+ExecStart={{ vaultwarden_install_dir }}/bin/vaultwarden
+WorkingDirectory={{ vaultwarden_install_dir }}
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+LimitNOFILE=65535
+LimitNPROC=4096
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictNamespaces=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+LockPersonality=true
+DevicePolicy=closed
+ReadWritePaths={{ vaultwarden_install_dir }}/data
+
+[Install]
+WantedBy=multi-user.target

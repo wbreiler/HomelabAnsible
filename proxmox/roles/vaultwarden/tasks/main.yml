@@ -1,0 +1,405 @@
+---
+- name: Validate Vaultwarden configuration
+  ansible.builtin.assert:
+    that:
+      - vaultwarden_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - vaultwarden_source_checksum is match('^sha256:[0-9a-f]{64}$')
+      - vaultwarden_rust_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - vaultwarden_rustup_checksum is match('^sha256:[0-9a-f]{64}$')
+      - vaultwarden_web_checksum is match('^sha256:[0-9a-f]{64}$')
+      - vaultwarden_domain is match('^https://')
+      - vaultwarden_port | int >= 1024
+      - vaultwarden_port | int <= 65535
+      - vaultwarden_smtp_host | length == 0 or vaultwarden_smtp_from | length > 0
+
+- name: Resolve node currently hosting Vaultwarden
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ vaultwarden_hostname }}"
+    lxc_fallback_node: "{{ vaultwarden_node }}"
+
+- name: Set up Vaultwarden LXC on hosting node only
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Vaultwarden container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ vaultwarden_hostname }}"
+        lxc_vmid: "{{ vaultwarden_vmid }}"
+        lxc_storage: "{{ vaultwarden_storage }}"
+        lxc_template: "{{ vaultwarden_template }}"
+        lxc_cores: "{{ vaultwarden_cores }}"
+        lxc_memory: "{{ vaultwarden_memory }}"
+        lxc_disk: "{{ vaultwarden_disk }}"
+        lxc_bridge: "{{ vaultwarden_bridge }}"
+        lxc_vlan: "{{ vaultwarden_vlan }}"
+        lxc_tags: "{{ vaultwarden_tags | join(';') }}"
+        lxc_packages:
+          - build-essential
+          - ca-certificates
+          - curl
+          - libssl-dev
+          - pkgconf
+          - sqlite3
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Ensure Vaultwarden account and directories
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            user="$1"; install_dir="$2"; backup_dir="$3"; changed=0
+            if ! getent group "${user}" >/dev/null; then
+              groupadd --system "${user}"; changed=1
+            fi
+            if ! id -u "${user}" >/dev/null 2>&1; then
+              useradd --system --gid "${user}" --home-dir "${install_dir}" \
+                --shell /usr/sbin/nologin "${user}"; changed=1
+            fi
+            for path in "${install_dir}/bin" "${install_dir}/data" \
+              "${install_dir}/web-vault" "${backup_dir}"; do
+              if test ! -d "${path}"; then mkdir -p "${path}"; changed=1; fi
+            done
+            chown -R "${user}:${user}" "${install_dir}/data"
+            printf '%s\n' "${changed}"
+          - vaultwarden-runtime
+          - "{{ vaultwarden_user }}"
+          - "{{ vaultwarden_install_dir }}"
+          - "{{ vaultwarden_backup_dir }}"
+      register: vaultwarden_runtime
+      changed_when: vaultwarden_runtime.stdout | trim == '1'
+
+    - name: Read installed Vaultwarden version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - "{{ vaultwarden_install_dir }}/bin/vaultwarden"
+          - --version
+      register: vaultwarden_installed_version
+      changed_when: false
+      failed_when: vaultwarden_installed_version.rc not in [0, 1, 126, 127]
+
+    - name: Check Vaultwarden SQLite database
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -f
+          - "{{ vaultwarden_install_dir }}/data/db.sqlite3"
+      register: vaultwarden_database
+      changed_when: false
+      failed_when: vaultwarden_database.rc not in [0, 1]
+
+    - name: Verify Vaultwarden SQLite database integrity
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - sqlite3
+          - "{{ vaultwarden_install_dir }}/data/db.sqlite3"
+          - "PRAGMA integrity_check;"
+      register: vaultwarden_sqlite_integrity
+      when: vaultwarden_database.rc == 0
+      changed_when: false
+      failed_when: vaultwarden_sqlite_integrity.stdout | trim != 'ok'
+
+    - name: Render Vaultwarden environment
+      ansible.builtin.set_fact:
+        vaultwarden_environment: "{{ lookup('template', 'vaultwarden.env.j2') }}"
+      no_log: true
+
+    - name: Read installed Vaultwarden environment
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - "{{ vaultwarden_install_dir }}/.env"
+      register: vaultwarden_environment_current
+      changed_when: false
+      failed_when: vaultwarden_environment_current.rc not in [0, 1]
+      no_log: true
+
+    - name: Install Vaultwarden environment
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - "{{ vaultwarden_install_dir }}/.env"
+        stdin: "{{ vaultwarden_environment }}"
+        stdin_add_newline: false
+      when: >-
+        vaultwarden_environment_current.rc != 0 or
+        vaultwarden_environment_current.stdout != vaultwarden_environment | trim
+      changed_when: true
+      notify: Restart Vaultwarden
+      no_log: true
+
+    - name: Secure Vaultwarden environment
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - chmod
+          - "0600"
+          - "{{ vaultwarden_install_dir }}/.env"
+      changed_when: false
+
+    - name: Build and deploy pinned Vaultwarden release
+      when: >-
+        vaultwarden_installed_version.rc != 0 or
+        vaultwarden_version not in vaultwarden_installed_version.stdout
+      block:
+        - name: Download pinned Vaultwarden source
+          ansible.builtin.get_url:
+            url: "{{ vaultwarden_source_url }}"
+            dest: "/tmp/vaultwarden-{{ vaultwarden_version }}.tar.gz"
+            checksum: "{{ vaultwarden_source_checksum }}"
+            mode: "0600"
+
+        - name: Download pinned rustup bootstrap
+          ansible.builtin.get_url:
+            url: "{{ vaultwarden_rustup_url }}"
+            dest: /tmp/vaultwarden-rustup-init
+            checksum: "{{ vaultwarden_rustup_checksum }}"
+            mode: "0700"
+
+        - name: Download pinned Vaultwarden web vault
+          ansible.builtin.get_url:
+            url: "{{ vaultwarden_web_url }}"
+            dest: "/tmp/vaultwarden-web-{{ vaultwarden_web_version }}.tar.gz"
+            checksum: "{{ vaultwarden_web_checksum }}"
+            mode: "0600"
+
+        - name: Push Vaultwarden build inputs into container
+          ansible.builtin.command:
+            argv:
+              - pct
+              - push
+              - "{{ lxc_resolved_vmid }}"
+              - "{{ item.source }}"
+              - "{{ item.destination }}"
+              - --perms
+              - "{{ item.mode }}"
+          loop:
+            - source: "/tmp/vaultwarden-{{ vaultwarden_version }}.tar.gz"
+              destination: /tmp/vaultwarden-source.tar.gz
+              mode: "0600"
+            - source: /tmp/vaultwarden-rustup-init
+              destination: /tmp/rustup-init
+              mode: "0700"
+            - source: "/tmp/vaultwarden-web-{{ vaultwarden_web_version }}.tar.gz"
+              destination: /tmp/vaultwarden-web.tar.gz
+              mode: "0600"
+          changed_when: true
+          loop_control:
+            label: "{{ item.destination }}"
+
+        - name: Build and stage Vaultwarden
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eux
+                version="$1"; rust_version="$2"
+                rm -rf /tmp/vaultwarden-build /tmp/vaultwarden-stage
+                mkdir -p /tmp/vaultwarden-build /tmp/vaultwarden-stage/web-vault
+                tar -xzf /tmp/vaultwarden-source.tar.gz \
+                  --strip-components=1 -C /tmp/vaultwarden-build
+                /tmp/rustup-init -y --profile minimal \
+                  --default-toolchain "${rust_version}"
+                cd /tmp/vaultwarden-build
+                VW_VERSION="${version}" CARGO_BUILD_JOBS=4 \
+                  CARGO_PROFILE_RELEASE_LTO=false \
+                  CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
+                  /root/.cargo/bin/cargo build --features sqlite --release
+                install -m 0755 target/release/vaultwarden \
+                  /tmp/vaultwarden-stage/vaultwarden
+                tar -xzf /tmp/vaultwarden-web.tar.gz \
+                  -C /tmp/vaultwarden-stage/web-vault
+                /tmp/vaultwarden-stage/vaultwarden --version | grep -F "${version}"
+              - vaultwarden-build
+              - "{{ vaultwarden_version }}"
+              - "{{ vaultwarden_rust_version }}"
+          changed_when: true
+
+        - name: Deploy staged Vaultwarden with rollback
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ lxc_resolved_vmid }}"
+              - --
+              - bash
+              - -c
+              - |
+                set -eu
+                install_dir="$1"; backup_root="$2"; old_version="$3"
+                new_version="$4"; port="$5"; user="$6"
+                backup_dir="${backup_root}/pre-${old_version}-to-${new_version}"
+                had_service=0
+                if systemctl list-unit-files vaultwarden.service --no-legend |
+                  grep -q '^vaultwarden.service'; then
+                  had_service=1; systemctl stop vaultwarden
+                fi
+                rm -rf "${backup_dir}"; mkdir -p "${backup_dir}"
+                if test -f "${install_dir}/bin/vaultwarden"; then
+                  cp -a "${install_dir}/bin/vaultwarden" "${backup_dir}/"
+                fi
+                if test -d "${install_dir}/web-vault"; then
+                  cp -a "${install_dir}/web-vault" "${backup_dir}/"
+                fi
+                if test -f "${install_dir}/data/db.sqlite3"; then
+                  sqlite3 "${install_dir}/data/db.sqlite3" \
+                    ".backup '${backup_dir}/db.sqlite3'"
+                fi
+                install -m 0755 /tmp/vaultwarden-stage/vaultwarden \
+                  "${install_dir}/bin/vaultwarden"
+                rm -rf "${install_dir}/web-vault"
+                cp -a /tmp/vaultwarden-stage/web-vault "${install_dir}/web-vault"
+                chown -R root:root "${install_dir}/bin" "${install_dir}/web-vault"
+                if test "${had_service}" -eq 1; then
+                  systemctl start vaultwarden
+                  healthy=0
+                  for attempt in $(seq 1 12); do
+                    if curl -fsS "http://127.0.0.1:${port}/alive" >/dev/null; then
+                      healthy=1; break
+                    fi
+                    sleep 5
+                  done
+                  if test "${healthy}" -ne 1; then
+                    systemctl stop vaultwarden || true
+                    test ! -f "${backup_dir}/vaultwarden" || \
+                      cp -a "${backup_dir}/vaultwarden" "${install_dir}/bin/"
+                    if test -d "${backup_dir}/web-vault"; then
+                      rm -rf "${install_dir}/web-vault"
+                      cp -a "${backup_dir}/web-vault" "${install_dir}/"
+                    fi
+                    if test -f "${backup_dir}/db.sqlite3"; then
+                      cp -a "${backup_dir}/db.sqlite3" \
+                        "${install_dir}/data/db.sqlite3"
+                      chown "${user}:${user}" "${install_dir}/data/db.sqlite3"
+                    fi
+                    systemctl start vaultwarden; exit 1
+                  fi
+                fi
+                rm -rf /tmp/vaultwarden-build /tmp/vaultwarden-stage
+                rm -f /tmp/vaultwarden-source.tar.gz /tmp/vaultwarden-web.tar.gz
+                rm -f /tmp/rustup-init
+              - vaultwarden-deploy
+              - "{{ vaultwarden_install_dir }}"
+              - "{{ vaultwarden_backup_dir }}"
+              - "{{ vaultwarden_installed_version.stdout | trim | default('none', true) }}"
+              - "{{ vaultwarden_version }}"
+              - "{{ vaultwarden_port | string }}"
+              - "{{ vaultwarden_user }}"
+          changed_when: true
+          notify: Restart Vaultwarden
+      always:
+        - name: Remove Vaultwarden build inputs from Proxmox host
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "/tmp/vaultwarden-{{ vaultwarden_version }}.tar.gz"
+            - /tmp/vaultwarden-rustup-init
+            - "/tmp/vaultwarden-web-{{ vaultwarden_web_version }}.tar.gz"
+
+    - name: Render Vaultwarden service
+      ansible.builtin.set_fact:
+        vaultwarden_service: "{{ lookup('template', 'vaultwarden.service.j2') }}"
+
+    - name: Read installed Vaultwarden service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - cat
+          - /etc/systemd/system/vaultwarden.service
+      register: vaultwarden_service_current
+      changed_when: false
+      failed_when: vaultwarden_service_current.rc not in [0, 1]
+
+    - name: Install Vaultwarden service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - tee
+          - /etc/systemd/system/vaultwarden.service
+        stdin: "{{ vaultwarden_service }}"
+        stdin_add_newline: false
+      when: >-
+        vaultwarden_service_current.rc != 0 or
+        vaultwarden_service_current.stdout != vaultwarden_service | trim
+      changed_when: true
+      notify: Restart Vaultwarden
+
+    - name: Enable and start Vaultwarden
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - enable
+          - --now
+          - vaultwarden
+      register: vaultwarden_service_enable
+      changed_when: "'Created symlink' in vaultwarden_service_enable.stderr"
+
+    - name: Apply Vaultwarden changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Vaultwarden service, health, and version
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            systemctl is-active --quiet vaultwarden
+            curl -fsS "http://127.0.0.1:$1/alive" >/dev/null
+            "$2/bin/vaultwarden" --version | grep -F "$3"
+          - vaultwarden-verify
+          - "{{ vaultwarden_port | string }}"
+          - "{{ vaultwarden_install_dir }}"
+          - "{{ vaultwarden_version }}"
+      changed_when: false

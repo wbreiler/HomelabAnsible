@@ -76,6 +76,10 @@
       when: install_pocket_id | default(false) | bool
       tags: ['pocket_id', 'lxc']
 
+    - role: vaultwarden
+      when: install_vaultwarden | default(false) | bool
+      tags: ['vaultwarden', 'lxc']
+
     - role: forgejo
       when: install_forgejo | default(false) | bool
       tags: ['forgejo', 'lxc']

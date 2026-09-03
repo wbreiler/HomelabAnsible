@@ -1,0 +1,12 @@
+---
+- name: Restart Vaultwarden
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ lxc_resolved_vmid }}"
+      - --
+      - systemctl
+      - restart
+      - vaultwarden
+  changed_when: true

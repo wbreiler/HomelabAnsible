@@ -42,6 +42,7 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
   * `gitea_mirror`: Creates or adopts the Gitea Mirror LXC with pinned application and Bun releases.
   * `seerr`: Creates or adopts the Seerr LXC with pinned application and pnpm releases.
   * `pocket_id`: Creates or adopts the Pocket ID LXC with a pinned release binary.
+  * `vaultwarden`: Creates or adopts the Vaultwarden LXC from pinned source and web-vault releases.
   * `forgejo`: Creates or adopts the Forgejo LXC with a pinned release binary and strict upgrade guards.
   * `sonarr`: Creates or adopts the Sonarr LXC with a pinned, checksum-verified release.
   * `radarr`: Creates or adopts the Radarr LXC with a pinned, checksum-verified release.
@@ -107,23 +108,24 @@ local variable files before changing behavior.
 13. **gitea_mirror**: Manages the Gitea Mirror LXC.
 14. **seerr**: Manages the Seerr LXC.
 15. **pocket_id**: Manages the Pocket ID LXC.
-16. **forgejo**: Manages the Forgejo LXC with strict upgrade guards.
-17. **sonarr**: Manages the Sonarr LXC.
-18. **radarr**: Manages the Radarr LXC.
-19. **gallery_dl**: Manages the privileged, NFS-mounting gallery-dl LXC.
-20. **gatus**: Manages the Gatus status-page LXC.
-21. **diun**: Manages the Diun image-update watcher LXC.
-22. **tailscale_router**: Manages the Tailscale subnet-router LXC.
-23. **update_all**: Updates Proxmox nodes and LXC operating systems.
-24. **update_reminder**: Installs per-node Discord update reminders.
-25. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
-26. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
-27. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
-28. **vm_deploy**: Deploys full VMs from ISOs.
+16. **vaultwarden**: Manages the Vaultwarden LXC.
+17. **forgejo**: Manages the Forgejo LXC with strict upgrade guards.
+18. **sonarr**: Manages the Sonarr LXC.
+19. **radarr**: Manages the Radarr LXC.
+20. **gallery_dl**: Manages the privileged, NFS-mounting gallery-dl LXC.
+21. **gatus**: Manages the Gatus status-page LXC.
+22. **diun**: Manages the Diun image-update watcher LXC.
+23. **tailscale_router**: Manages the Tailscale subnet-router LXC.
+24. **update_all**: Updates Proxmox nodes and LXC operating systems.
+25. **update_reminder**: Installs per-node Discord update reminders.
+26. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
+27. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
+28. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
+29. **vm_deploy**: Deploys full VMs from ISOs.
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-29. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
+30. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
 
 ### PBS Storage Pattern
 
@@ -349,6 +351,13 @@ management, LXC installation, system updates, and PBS restores.
 * The tracked defaults identify `pocketid-nash` as VMID 100; its `.env` (including the mandatory encryption key) and SQLite data are preserved.
 * Pins and checksum-verifies the single release binary, checks SQLite integrity before upgrades, backs up the binary, data, and environment before swapping, rolls back automatically (including the data directory, since new versions migrate the schema on start) when the upgraded service fails its health check, removes the remote updater, and verifies the binary-reported version.
 * Skipped by default unless `install_pocket_id: true`.
+
+### vaultwarden
+
+* Manages Vaultwarden with repository-owned Ansible tasks based on the Community Scripts design; it never downloads or runs that installer.
+* The tracked defaults identify `vaultwarden-nash` as VMID 125 with `atlas` as the fresh-install fallback. Vaultwarden, Rust, rustup, and the matching web vault are version- or checksum-pinned.
+* Preserves and integrity-checks SQLite data, stages builds before stopping the service, keeps a pre-upgrade database/binary/web-vault backup, rolls back failed health checks, and runs under a hardened non-root systemd unit.
+* Skipped by default unless `install_vaultwarden: true`.
 
 ### forgejo
 

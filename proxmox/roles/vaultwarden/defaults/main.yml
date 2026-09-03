@@ -1,0 +1,42 @@
+---
+vaultwarden_node: "atlas"
+vaultwarden_vmid: "125"
+vaultwarden_hostname: "vaultwarden-nash"
+vaultwarden_storage: "local-zfs"
+vaultwarden_template: ""
+vaultwarden_cores: 4
+vaultwarden_memory: 6144
+vaultwarden_disk: 20
+vaultwarden_bridge: "vmbr0"
+vaultwarden_vlan: 40
+vaultwarden_tags: ["password-manager"]
+
+vaultwarden_version: "1.37.2"
+vaultwarden_source_url: >-
+  https://api.github.com/repos/dani-garcia/vaultwarden/tarball/{{ vaultwarden_version }}
+vaultwarden_source_checksum: "sha256:862c59241ea9b7291f3f354ffdc0036d3369d624e79c5b7ebfe906d5db99fd3f"
+vaultwarden_rust_version: "1.97.1"
+vaultwarden_rustup_url: >-
+  https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init
+vaultwarden_rustup_checksum: "sha256:dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71"
+vaultwarden_web_version: "2026.7.0"
+vaultwarden_web_url: >-
+  https://github.com/dani-garcia/bw_web_builds/releases/download/v{{ vaultwarden_web_version
+  }}/bw_web_v{{ vaultwarden_web_version }}.tar.gz
+vaultwarden_web_checksum: "sha256:002e972bf0d0487ec0324b06d916de33e29de4c29bffd92ee3b843084c300570"
+
+vaultwarden_install_dir: "/opt/vaultwarden"
+vaultwarden_backup_dir: "/opt/vaultwarden-backups"
+vaultwarden_user: "vaultwarden"
+vaultwarden_port: 8000
+vaultwarden_domain: "https://vault.wbreiler.com"
+vaultwarden_signups_allowed: false
+vaultwarden_invitations_allowed: false
+vaultwarden_show_password_hint: false
+vaultwarden_admin_token: ""
+vaultwarden_smtp_host: ""
+vaultwarden_smtp_from: ""
+vaultwarden_smtp_port: 587
+vaultwarden_smtp_security: "starttls"
+vaultwarden_smtp_username: ""
+vaultwarden_smtp_password: ""
