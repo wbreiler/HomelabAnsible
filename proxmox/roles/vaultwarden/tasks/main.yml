@@ -90,6 +90,20 @@
       changed_when: false
       failed_when: vaultwarden_installed_version.rc not in [0, 1, 126, 127]
 
+    - name: Check installed Vaultwarden web vault
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - test
+          - -f
+          - "{{ vaultwarden_install_dir }}/web-vault/index.html"
+      register: vaultwarden_web_vault
+      changed_when: false
+      failed_when: vaultwarden_web_vault.rc not in [0, 1]
+
     - name: Check Vaultwarden SQLite database
       ansible.builtin.command:
         argv:
@@ -156,22 +170,37 @@
       notify: Restart Vaultwarden
       no_log: true
 
-    - name: Secure Vaultwarden environment
+    - name: Secure Vaultwarden environment for runtime access
       ansible.builtin.command:
         argv:
           - pct
           - exec
           - "{{ lxc_resolved_vmid }}"
           - --
-          - chmod
-          - "0600"
+          - bash
+          - -c
+          - |
+            set -eu
+            path="$1"; group="$2"
+            if test "$(stat -c '%U:%G:%a' "${path}")" = "root:${group}:640"; then
+              echo unchanged
+            else
+              chown "root:${group}" "${path}"
+              chmod 0640 "${path}"
+              echo changed
+            fi
+          - vaultwarden-env-permissions
           - "{{ vaultwarden_install_dir }}/.env"
-      changed_when: false
+          - "{{ vaultwarden_user }}"
+      register: vaultwarden_environment_permissions
+      changed_when: vaultwarden_environment_permissions.stdout | trim == 'changed'
+      notify: Restart Vaultwarden
 
     - name: Build and deploy pinned Vaultwarden release
       when: >-
         vaultwarden_installed_version.rc != 0 or
-        vaultwarden_version not in vaultwarden_installed_version.stdout
+        vaultwarden_version not in vaultwarden_installed_version.stdout or
+        vaultwarden_web_vault.rc != 0
       block:
         - name: Download pinned Vaultwarden source
           ansible.builtin.get_url:
@@ -244,7 +273,7 @@
                 install -m 0755 target/release/vaultwarden \
                   /tmp/vaultwarden-stage/vaultwarden
                 tar -xzf /tmp/vaultwarden-web.tar.gz \
-                  -C /tmp/vaultwarden-stage/web-vault
+                  --strip-components=1 -C /tmp/vaultwarden-stage/web-vault
                 /tmp/vaultwarden-stage/vaultwarden --version | grep -F "${version}"
               - vaultwarden-build
               - "{{ vaultwarden_version }}"
@@ -397,9 +426,13 @@
             set -eu
             systemctl is-active --quiet vaultwarden
             curl -fsS "http://127.0.0.1:$1/alive" >/dev/null
-            "$2/bin/vaultwarden" --version | grep -F "$3"
+            cd "$2"
+            version_output=$(./bin/vaultwarden --version)
+            printf '%s\n' "${version_output}" | grep -F "$3"
+            printf '%s\n' "${version_output}" | grep -F "$4"
           - vaultwarden-verify
           - "{{ vaultwarden_port | string }}"
           - "{{ vaultwarden_install_dir }}"
           - "{{ vaultwarden_version }}"
+          - "{{ vaultwarden_web_version }}"
       changed_when: false
