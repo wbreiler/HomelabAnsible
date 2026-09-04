@@ -21,18 +21,6 @@ gaming_pc_winget_packages:
   - name: CrystalDiskInfo
     id: CrystalDewWorld.CrystalDiskInfo
     source: winget
-  - name: EA app
-    id: ElectronicArts.EADesktop
-    source: winget
-  - name: Elgato Stream Deck
-    id: Elgato.StreamDeck
-    source: winget
-  - name: Epic Games Launcher
-    id: EpicGames.EpicGamesLauncher
-    source: winget
-  - name: Google Chrome
-    id: Google.Chrome
-    source: winget
   - name: HandBrake
     id: HandBrake.HandBrake
     source: winget
@@ -48,14 +36,8 @@ gaming_pc_winget_packages:
   - name: Plex
     id: Plex.Plex
     source: winget
-  - name: Steam
-    id: Valve.Steam
-    source: winget
   - name: TightVNC
     id: GlavSoft.TightVNC
-    source: winget
-  - name: Ubisoft Connect
-    id: Ubisoft.Connect
     source: winget
   - name: VLC media player
     id: VideoLAN.VLC
@@ -63,31 +45,16 @@ gaming_pc_winget_packages:
   - name: Windows Subsystem for Linux
     id: Microsoft.WSL
     source: winget
-  - name: WizTree
-    id: AntibodySoftware.WizTree
-    source: winget
 
 # These packages belong to the interactive Techn profile. Installing them over
 # WinRM would put them in the local ansible account instead.
 gaming_pc_interactive_user_packages:
-  - name: Apple Music
-    applies_to: all
   - name: ASTRO Command Center
     applies_to: all
   - name: ChatGPT
     applies_to: all
-  - name: CurseForge
-    applies_to: all
-  - name: Discord
-    applies_to: all
-  - name: GIGABYTE Control Center
-    applies_to: X870 EAGLE WIFI7
   - name: iCloud for Windows
     applies_to: all
-  - name: Modrinth App
-    applies_to: all
-  - name: AMD Radeon Software
-    applies_to: Radeon RX 7000 series
 
 gaming_pc_install_motherboard_drivers: true
 gaming_pc_expected_motherboard_manufacturer: Gigabyte Technology Co., Ltd.

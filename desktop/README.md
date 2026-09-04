@@ -18,7 +18,8 @@ test, check-mode preview, live application, and interactive-user follow-up.
 - Persistent, all-user `Z:` mapping to `\\10.10.20.3\clips` as SMB user
   `wbreiler`
 
-The current `gaming_pc_winget_packages` list has been reviewed and
+The current `gaming_pc_winget_packages` list contains only applications not
+installed by the custom ORION ISO. It has been reviewed and
 `gaming_pc_install_approved_applications` is enabled. Treat edits to that list
 as a new approval boundary: review the exact package IDs before leaving the
 gate enabled for a live run. Setting the gate to `false` skips WinGet package
@@ -35,11 +36,11 @@ GPU drivers are installed from the Windows Update driver catalog. AMD Radeon
 Software remains an interactive `Techn`-profile installation so its user-facing
 control panel is not attached to the automation account.
 
-Apple Music, ASTRO Command Center, ChatGPT, CurseForge, Discord, GIGABYTE
-Control Center, iCloud for Windows, Modrinth App, and AMD Radeon Software remain
-interactive `Techn`-profile installs. Installing them through WinRM would
-attach user-scoped packages to the local `ansible` account instead of the
-desktop user.
+ASTRO Command Center, ChatGPT, and iCloud for Windows remain interactive
+`Techn`-profile installs. The ISO handles the other previously listed
+interactive applications. Installing these remaining applications through
+WinRM would attach user-scoped packages to the local `ansible` account instead
+of the desktop user.
 
 This desired state is AMD-specific: the interactive application list no longer
 includes Intel or NVIDIA GPU companion software. The full AMD companion
