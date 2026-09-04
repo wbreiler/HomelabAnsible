@@ -52,6 +52,7 @@ The AMD gaming PC uses:
 - AMD Ryzen 7 9800X3D
 - Thermalright AXP90-X47 Full CPU cooler
 - Gigabyte X870 EAGLE WIFI7 motherboard
+- Motherboard PCB revision 1.1 with Realtek RTL8922AE Wi-Fi 7/Bluetooth
 - 48 GB (2 x 24 GB) Crucial Pro DDR5-6000 CL48 memory
 - 1 TB Crucial P310 PCIe 4.0 NVMe SSD
 - Sapphire Pulse Radeon RX 7900 XT 20 GB

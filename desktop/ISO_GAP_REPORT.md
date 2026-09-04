@@ -20,8 +20,9 @@ The completed ISO must:
   context rather than the automation account.
 - Install Bitwarden. Do not install 1Password; the user migrated to Bitwarden.
 - Bundle and install the exact AMD X870 chipset, Ethernet, Wi-Fi, Bluetooth,
-  audio, and RX 7900 XT drivers. Confirm the X870 EAGLE WIFI7 board revision and
-  detect Realtek versus MediaTek wireless hardware instead of guessing.
+  audio, and RX 7900 XT drivers. The confirmed X870 EAGLE WIFI7 rev. 1.1 uses
+  the Realtek RTL8922AE wireless module; still verify its hardware ID before
+  applying the Realtek Wi-Fi, Bluetooth, and ACX packages.
 - Make the matching network drivers available offline. ORION is configured for
   AHCI/NVMe with RAID disabled, so do not add AMD RAID preinstallation drivers
   or RAIDXpert2 to the image.
@@ -57,7 +58,8 @@ Driver/update controls remain enabled as post-install validation and recovery.
 
 ## Remaining validation before use
 
-- Confirm the exact motherboard revision and installed wireless PNP hardware.
+- Confirm the installed wireless PNP hardware matches the rev. 1.1 Realtek
+  RTL8922AE specification.
 - Verify every WinGet ID, source URL, checksum, signature, and silent argument.
 - Validate the answer file and injected `boot.wim`/Windows 11 Pro indexes.
 - Test Setup and reboot behavior in a VM, then on isolated ORION hardware.

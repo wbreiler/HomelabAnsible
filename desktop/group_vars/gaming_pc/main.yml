@@ -11,9 +11,10 @@ gaming_pc_install_motherboard_drivers: true
 gaming_pc_expected_motherboard_manufacturer: Gigabyte Technology Co., Ltd.
 gaming_pc_expected_motherboard_product: X870 EAGLE WIFI7
 
-# Versioned packages published for the X870 EAGLE WIFI7 (rev. 1.x). Wireless
-# hardware differs by board revision, so the role discovers Realtek vs.
-# MediaTek and installs only the matching set.
+# Versioned packages published for the X870 EAGLE WIFI7 (rev. 1.x). ORION is
+# confirmed as PCB rev. 1.1, which Gigabyte specifies with Realtek RTL8922AE.
+# The role still verifies the PNP hardware and refuses to guess before choosing
+# the Realtek or MediaTek package set.
 gaming_pc_motherboard_driver_packages:
   - name: AMD X870 chipset
     version: 8.03.25.247
