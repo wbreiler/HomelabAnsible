@@ -22,8 +22,9 @@ The completed ISO must:
 - Bundle and install the exact AMD X870 chipset, Ethernet, Wi-Fi, Bluetooth,
   audio, and RX 7900 XT drivers. Confirm the X870 EAGLE WIFI7 board revision and
   detect Realtek versus MediaTek wireless hardware instead of guessing.
-- Make the matching network drivers available offline. Add an AMD RAID storage
-  driver only when RAID is actually enabled.
+- Make the matching network drivers available offline. ORION is configured for
+  AHCI/NVMe with RAID disabled, so do not add AMD RAID preinstallation drivers
+  or RAIDXpert2 to the image.
 - Install GIGABYTE Control Center and the RGB Fusion/ARGB component.
 - Run Windows, Microsoft-product, and signed hardware-driver updates, handling
   and logging required reboots.
