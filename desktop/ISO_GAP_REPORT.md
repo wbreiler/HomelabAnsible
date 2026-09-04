@@ -1,33 +1,67 @@
 # ORION ISO gap report
 
-The Ansible role now assumes the custom ISO installs the applications named in
-the September 4 deployment report and enables Hyper-V. Those confirmed overlaps
-were removed from the role.
+This document defines the responsibility boundary between the custom Windows 11
+Pro ISO and the post-install Ansible workflow. The ISO owns the complete
+non-secret baseline. Ansible owns credentials, remote-management bootstrap, the
+protected SMB mapping, and later validation or remediation.
 
-## The ISO still needs to do
+## ISO responsibility: non-secret baseline
 
-- Bundle and install the correct AMD X870 chipset, Ethernet, Wi-Fi, Bluetooth,
-  audio, and RX 7900 XT drivers. Detect the board revision and wireless hardware
-  instead of guessing; include offline network drivers and add a storage driver
-  only if RAID is actually enabled.
-- Install the playbook-only machine applications if the goal is for a fresh ISO
-  installation to reach the same state without Ansible: 7-Zip, 1Password,
-  Audacity, Bambu Studio, Battle.net, CrystalDiskInfo, HandBrake, Node.js LTS,
-  OBS Studio, Parsec, Plex, TightVNC, VLC, and WSL.
-- Enable the separate `VirtualMachinePlatform` Windows feature required by WSL.
-  Enabling Hyper-V does not make that explicit playbook step redundant.
-- Install ASTRO Command Center, ChatGPT, and iCloud in the normal desktop user
-  profile if those applications should be present immediately.
-- Run Windows, Microsoft product, and signed hardware-driver updates, including
-  any required reboots.
-- Create the persistent all-user `Z:` mapping to `\\10.10.20.3\clips`. This
-  requires the SMB credential, so it may be safer to leave it in the encrypted
-  Ansible workflow.
-- Create or repair the dedicated local `ansible` administrator and enable WinRM
-  if the PC will continue to be managed by this playbook. Do not bake its
-  password into the ISO.
+The completed ISO must:
 
-The ISO report already lists the right remaining validation work: verify WinGet
-IDs, checksums and signatures; validate injected WIM indexes; test in a VM and
-on isolated ORION hardware; inspect Device Manager; review logs; and verify the
-state again after reboot.
+- Install Windows 11 Pro on the operator-selected disk. Disk selection remains
+  manual; the ISO must never erase the automatically detected “smallest” disk.
+- Set hostname `ORION`, enable dark mode, remove OneDrive without deleting user
+  data, and enable both Hyper-V and `VirtualMachinePlatform`.
+- Install WSL and every approved application from the September 4 report plus
+  7-Zip, Audacity, Bambu Studio, Battle.net, CrystalDiskInfo, HandBrake,
+  Node.js LTS, OBS Studio, Parsec, Plex, TightVNC, and VLC.
+- Install ASTRO Command Center, ChatGPT, and iCloud in the normal desktop-user
+  context rather than the automation account.
+- Install Bitwarden. Do not install 1Password; the user migrated to Bitwarden.
+- Bundle and install the exact AMD X870 chipset, Ethernet, Wi-Fi, Bluetooth,
+  audio, and RX 7900 XT drivers. Confirm the X870 EAGLE WIFI7 board revision and
+  detect Realtek versus MediaTek wireless hardware instead of guessing.
+- Make the matching network drivers available offline. Add an AMD RAID storage
+  driver only when RAID is actually enabled.
+- Install GIGABYTE Control Center and the RGB Fusion/ARGB component.
+- Run Windows, Microsoft-product, and signed hardware-driver updates, handling
+  and logging required reboots.
+- Record package sources, versions, SHA-256 checksums, signatures, hardware
+  applicability, install results, and reboot state.
+
+The ISO must contain no reusable passwords, vault data, SMB credentials, or
+management-account secrets.
+
+## Ansible responsibility: protected and live state
+
+After the normal desktop user can sign in, Ansible remains responsible for:
+
+- Creating or repairing the dedicated local `ansible` administrator and
+  enabling WinRM through the interactive `bootstrap-winrm.ps1` flow. The
+  password is prompted for locally and then stored only in Ansible Vault.
+- Creating the persistent all-user `Z:` mapping to `\\10.10.20.3\clips` with
+  the SMB credential stored only in Ansible Vault.
+- Revalidating the exact motherboard and wireless hardware before applying the
+  checksum-pinned chipset, audio, LAN, Wi-Fi, or Bluetooth driver packages as
+  remediation. Unknown hardware must stop safely rather than receive a guess.
+- Re-running Windows, Microsoft-product, and signed hardware-driver updates as
+  continuing desired-state maintenance.
+- Reporting drift and repairing missing protected/live configuration without
+  duplicating ISO-owned application or optional-feature installation.
+
+Accordingly, `gaming_pc_install_approved_applications` is disabled and the
+role's WinGet, interactive-user package, and optional-feature lists are empty.
+Driver/update controls remain enabled as post-install validation and recovery.
+
+## Remaining validation before use
+
+- Confirm the exact motherboard revision and installed wireless PNP hardware.
+- Verify every WinGet ID, source URL, checksum, signature, and silent argument.
+- Validate the answer file and injected `boot.wim`/Windows 11 Pro indexes.
+- Test Setup and reboot behavior in a VM, then on isolated ORION hardware.
+- Inspect Device Manager and test Ethernet, Wi-Fi, Bluetooth, audio, GPU,
+  Stream Deck, Meta Quest Link, WSL, Hyper-V, and ARGB control.
+- Review installation logs and verify the complete state again after reboot.
+- Only after the ISO passes those checks, bootstrap Ansible, preview with
+  `--check --diff`, and apply the credentialed/live configuration.

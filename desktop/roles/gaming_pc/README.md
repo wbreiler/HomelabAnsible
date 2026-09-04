@@ -34,17 +34,16 @@ less roles/gaming_pc/tasks/main.yml
 
 Pay particular attention to:
 
-- `gaming_pc_winget_packages`
-- `gaming_pc_install_approved_applications`
+- `gaming_pc_install_approved_applications` remaining disabled
 - Windows and driver update controls
 - The expected X870 EAGLE WIFI7 model and pinned motherboard driver packages
 - `gaming_pc_reboot_after_updates`
 - The SMB path, username, and drive letter
 
-The application approval flag also gates WinGet setup, WSL installation, and
-Windows optional features. Windows updates, driver updates, and the SMB mapping
-have separate controls. A live run can reboot Windows when an enabled feature
-or update requires it.
+The custom ISO owns applications, WSL, and Windows optional features. The role
+keeps its application gate disabled and its package/feature lists empty.
+Windows updates, driver remediation, and the SMB mapping have separate controls.
+A live run can reboot Windows when a driver or update requires it.
 
 The motherboard-driver flag installs only after the role confirms the exact
 Gigabyte X870 EAGLE WIFI7 product string. It detects whether the board contains
@@ -153,7 +152,7 @@ behavior still match your intent.
 ## 6. Apply the role
 
 Save work on the PC and close games before the first live run. The role may
-install applications and Windows updates and may reboot the machine.
+install driver or Windows updates and may reboot the machine.
 
 ```bash
 ANSIBLE_LOCAL_TEMP=/tmp/desktop-ansible-local \
@@ -167,20 +166,18 @@ considering the application successful.
 
 ## 7. Finish the interactive-user setup
 
-Sign in as the normal desktop user after the playbook completes. Install or
-verify the packages listed under `gaming_pc_interactive_user_packages` in
-`group_vars/gaming_pc/main.yml`. Those packages intentionally are not installed
-through WinRM because doing so would attach user-scoped applications to the
-local `ansible` account.
+Sign in as the normal desktop user after the playbook completes. Verify the
+ISO-installed user-profile applications there; the role intentionally does not
+install them through WinRM because that would attach them to the local
+`ansible` account.
 
 Finally, verify:
 
 - Windows Update has no unexpected pending restart;
 - `Z:` opens `\\10.10.20.3\clips` for the interactive user;
-- Steam and the approved machine-wide applications launch;
-- WSL opens if it remains in the approved package list; and
+- the ISO-installed applications launch;
+- WSL opens; and
 - Device Manager shows the expected hardware without warning icons.
 
 Re-run the playbook after later desired-state edits, beginning with the check
-mode command in step 5. Treat every application-list change as a new review and
-approval decision.
+mode command in step 5.

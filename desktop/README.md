@@ -7,24 +7,27 @@ For a new controller or Windows installation, start with the role's
 Windows bootstrap, local inventory and vault creation, read-only connection
 test, check-mode preview, live application, and interactive-user follow-up.
 
-## Managed state
+## Responsibility boundary
 
-- Machine-wide gaming, media, browser, streaming, remote-access, 3D-printing,
-  hardware-monitoring, and development applications for `ORION`
-- Windows Subsystem for Linux and its Virtual Machine Platform dependency
+The custom ORION ISO owns the complete non-secret baseline: applications, WSL,
+Hyper-V and Virtual Machine Platform, user-profile applications, initial
+drivers, and initial updates. It intentionally excludes 1Password after the
+migration to Bitwarden.
+
+This Ansible project owns protected and continuing live state:
+
 - Versioned AMD chipset, Realtek audio/LAN, and detected Realtek or MediaTek
-  Wi-Fi/Bluetooth drivers for the Gigabyte X870 EAGLE WIFI7
-- Windows, Microsoft product, and signed hardware-driver updates
+  Wi-Fi/Bluetooth driver validation and remediation for the Gigabyte X870
+  EAGLE WIFI7
+- Continuing Windows, Microsoft-product, and signed hardware-driver updates
 - Persistent, all-user `Z:` mapping to `\\10.10.20.3\clips` as SMB user
   `wbreiler`
+- The separately bootstrapped local `ansible` administrator and WinRM access
 
-The current `gaming_pc_winget_packages` list contains only applications not
-installed by the custom ORION ISO. It has been reviewed and
-`gaming_pc_install_approved_applications` is enabled. Treat edits to that list
-as a new approval boundary: review the exact package IDs before leaving the
-gate enabled for a live run. Setting the gate to `false` skips WinGet package
-installation and the optional-feature tasks, but Windows/driver updates and
-the SMB mapping have their own controls and still run unless disabled.
+`gaming_pc_install_approved_applications` is disabled, and the WinGet,
+interactive-user package, and optional-feature lists are empty. The role does
+not duplicate the ISO-owned software baseline. Windows/driver updates,
+motherboard-driver remediation, and the SMB mapping retain separate controls.
 
 Motherboard drivers are pinned to checksum-verified packages from Gigabyte's
 X870 EAGLE WIFI7 support page. Board revisions use either Realtek RTL8922AE or
@@ -32,15 +35,11 @@ MediaTek wireless modules, so the role detects the installed hardware and
 refuses to guess when it cannot identify the module. The AMD chipset package
 also supplies the applicable X3D components.
 
-GPU drivers are installed from the Windows Update driver catalog. AMD Radeon
-Software remains an interactive `Techn`-profile installation so its user-facing
-control panel is not attached to the automation account.
-
-ASTRO Command Center, ChatGPT, and iCloud for Windows remain interactive
-`Techn`-profile installs. The ISO handles the other previously listed
-interactive applications. Installing these remaining applications through
-WinRM would attach user-scoped packages to the local `ansible` account instead
-of the desktop user.
+GPU drivers are maintained through the Windows Update driver catalog after the
+ISO installs the initial RX 7900 XT driver. AMD Radeon Software, ASTRO Command
+Center, ChatGPT, and iCloud are installed by the ISO in the normal desktop-user
+context. They are not installed over WinRM, which would attach user-scoped
+packages to the local `ansible` account.
 
 This desired state is AMD-specific: the interactive application list no longer
 includes Intel or NVIDIA GPU companion software. The full AMD companion

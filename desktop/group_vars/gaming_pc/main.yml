@@ -1,60 +1,11 @@
 ---
-# Application list reviewed and approved.
-gaming_pc_install_approved_applications: true
-
-gaming_pc_winget_packages:
-  - name: 7-Zip
-    id: 7zip.7zip
-    source: winget
-  - name: 1Password
-    id: AgileBits.1Password
-    source: winget
-  - name: Audacity
-    id: Audacity.Audacity
-    source: winget
-  - name: Bambu Studio
-    id: Bambulab.Bambustudio
-    source: winget
-  - name: Battle.net
-    id: Blizzard.BattleNet
-    source: winget
-  - name: CrystalDiskInfo
-    id: CrystalDewWorld.CrystalDiskInfo
-    source: winget
-  - name: HandBrake
-    id: HandBrake.HandBrake
-    source: winget
-  - name: Node.js LTS
-    id: OpenJS.NodeJS.LTS
-    source: winget
-  - name: OBS Studio
-    id: OBSProject.OBSStudio
-    source: winget
-  - name: Parsec
-    id: Parsec.Parsec
-    source: winget
-  - name: Plex
-    id: Plex.Plex
-    source: winget
-  - name: TightVNC
-    id: GlavSoft.TightVNC
-    source: winget
-  - name: VLC media player
-    id: VideoLAN.VLC
-    source: winget
-  - name: Windows Subsystem for Linux
-    id: Microsoft.WSL
-    source: winget
-
-# These packages belong to the interactive Techn profile. Installing them over
-# WinRM would put them in the local ansible account instead.
-gaming_pc_interactive_user_packages:
-  - name: ASTRO Command Center
-    applies_to: all
-  - name: ChatGPT
-    applies_to: all
-  - name: iCloud for Windows
-    applies_to: all
+# The custom ORION ISO owns all non-secret application and optional-feature
+# installation. Keep WinGet disabled in the role so user-scoped packages are
+# not attached to the local ansible account and machine packages are not
+# duplicated. 1Password is intentionally excluded after migration to Bitwarden.
+gaming_pc_install_approved_applications: false
+gaming_pc_winget_packages: []
+gaming_pc_interactive_user_packages: []
 
 gaming_pc_install_motherboard_drivers: true
 gaming_pc_expected_motherboard_manufacturer: Gigabyte Technology Co., Ltd.
@@ -132,8 +83,7 @@ gaming_pc_install_windows_updates: true
 gaming_pc_install_driver_updates: true
 gaming_pc_reboot_after_updates: true
 
-gaming_pc_windows_optional_features:
-  - VirtualMachinePlatform
+gaming_pc_windows_optional_features: []
 
 gaming_pc_smb_drive_letter: Z
 gaming_pc_smb_path: '\\10.10.20.3\clips'
