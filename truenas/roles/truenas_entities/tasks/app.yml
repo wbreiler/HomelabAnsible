@@ -31,15 +31,21 @@
   ansible.builtin.raw: >-
     midclt call -j app.create
     {{
-      {
-        'app_name': desired_app.name,
-        'custom_app': desired_app.custom_app,
-        'catalog_app': desired_app.catalog_app | default(none),
-        'train': desired_app.train | default(none),
-        'values': desired_app['values'] | default({}),
-        'custom_compose_config':
-          desired_app['custom_compose_config'] | default(none)
-      } | to_json | quote
+      (
+        {
+          'app_name': desired_app.name,
+          'custom_app': true,
+          'custom_compose_config': desired_app['custom_compose_config']
+        }
+        if desired_app.custom_app else
+        {
+          'app_name': desired_app.name,
+          'custom_app': false,
+          'catalog_app': desired_app.catalog_app,
+          'train': desired_app.train | default('stable'),
+          'values': desired_app.get('values', {})
+        }
+      ) | to_json | quote
     }}
   changed_when: true
   when:

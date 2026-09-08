@@ -226,3 +226,6 @@ to make it pass.
 
 - [Tdarr on the RTX 5050](files/tdarr/SETUP.md) — single-container internal-node setup,
   AV1 NVENC flow, HDR safeguards, and staged validation.
+
+- [Cobalt downloader](files/cobalt/SETUP.md) — LAN web/API custom app,
+  pinned API image, web build, and isolated deployment playbook.

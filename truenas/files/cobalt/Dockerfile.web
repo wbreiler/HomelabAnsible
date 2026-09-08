@@ -1,0 +1,11 @@
+FROM node:24-alpine AS build
+WORKDIR /app
+COPY . .
+RUN corepack enable && pnpm install --frozen-lockfile --filter @imput/cobalt-web...
+ARG WEB_DEFAULT_API
+ARG WEB_HOST
+ENV WEB_DEFAULT_API=$WEB_DEFAULT_API WEB_HOST=$WEB_HOST
+RUN pnpm --filter @imput/cobalt-web build
+FROM nginx:stable-alpine
+COPY --from=build /app/web/build /usr/share/nginx/html
+COPY cobalt-nginx.conf /etc/nginx/conf.d/default.conf

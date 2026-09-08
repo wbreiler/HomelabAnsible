@@ -1,0 +1,26 @@
+---
+- name: Deploy only the Cobalt custom application
+  hosts: truenas
+  gather_facts: false
+  vars:
+    cobalt_compose_path: "{{ playbook_dir }}/../artifacts/cobalt-compose.yml"
+  tasks:
+    - name: Require explicit deployment opt-in
+      ansible.builtin.assert:
+        that: ansible_check_mode or truenas_allow_changes | bool
+    - name: Read current Cobalt application configuration
+      ansible.builtin.raw: >-
+        midclt call app.query '[["name","=","cobalt"]]'
+        '{"extra":{"retrieve_config":true}}'
+      check_mode: false
+      register: cobalt_query
+      changed_when: false
+    - name: Reconcile only Cobalt
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
+      vars:
+        truenas_entities_apps: "{{ cobalt_query.stdout | from_json }}"
+        desired_app:
+          name: cobalt
+          custom_app: true
+          state: RUNNING
+          custom_compose_config: "{{ lookup('file', cobalt_compose_path) | from_yaml }}"

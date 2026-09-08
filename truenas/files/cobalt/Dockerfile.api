@@ -1,0 +1,6 @@
+FROM ghcr.io/imputnet/cobalt@sha256:63186dd68afd57ce3bb1f62cc4c139f5fa95b9c3e87a3cf5c6e4c7a570523f62
+USER root
+# Some providers label HLS playlists as text/plain. Once Cobalt recognizes
+# and rewrites a playlist, identify it correctly for FFmpeg's HLS probe.
+RUN node --input-type=commonjs -e 'const fs = require("fs"); const p = "src/stream/internal.js"; const s = fs.readFileSync(p, "utf8"); const from = "if (isHls) {\n            await handleHlsPlaylist"; if (s.split(from).length !== 2) throw Error("upstream HLS code changed"); fs.writeFileSync(p, s.replace(from, "if (isHls) {\n            res.setHeader(\"content-type\", \"application/vnd.apple.mpegurl\");\n            await handleHlsPlaylist"));'
+USER node
