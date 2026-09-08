@@ -1,0 +1,137 @@
+---
+- name: Validate pinned Wyze Bridge image
+  ansible.builtin.assert:
+    that:
+      - wyze_bridge_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - wyze_bridge_digest is match('^sha256:[0-9a-f]{64}$')
+
+- name: Resolve node hosting Wyze Bridge
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ wyze_bridge_hostname }}"
+    lxc_fallback_node: "{{ wyze_bridge_node }}"
+
+- name: Deploy Wyze Bridge on its hosting node
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap dedicated Wyze Bridge container
+      ansible.builtin.include_tasks: ../../../tasks/create_lxc.yml
+      vars:
+        lxc_hostname: "{{ wyze_bridge_hostname }}"
+        lxc_vmid: "{{ wyze_bridge_vmid }}"
+        lxc_storage: "{{ wyze_bridge_storage }}"
+        lxc_template: "{{ wyze_bridge_template }}"
+        lxc_cores: "{{ wyze_bridge_cores }}"
+        lxc_memory: "{{ wyze_bridge_memory }}"
+        lxc_disk: "{{ wyze_bridge_disk }}"
+        lxc_bridge: "{{ wyze_bridge_bridge }}"
+        lxc_vlan: "{{ wyze_bridge_vlan }}"
+        lxc_tags: smarthome
+        lxc_packages: [ca-certificates, docker.io, docker-compose, openssl, curl, nginx]
+        lxc_nfs_server: ""
+
+    - name: Enable container autostart
+      ansible.builtin.command:
+        cmd: pct set {{ lxc_resolved_vmid }} --onboot 1
+      changed_when: false
+
+    - name: Prepare private persistent credentials
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            install -d -m 0700 /opt/wyze-bridge /opt/wyze-bridge/tokens /opt/wyze-bridge/secrets
+            umask 077
+            for key in WB_PASSWORD WB_API; do
+              file=/opt/wyze-bridge/secrets/$key
+              if ! test -s "$file"; then
+                openssl rand -hex 24 > "$file"
+                echo changed
+              fi
+              chmod 0600 "$file"
+            done
+            # nginx workers must traverse this directory to read the password hash.
+            chmod 0711 /opt/wyze-bridge
+            if ! test -s /opt/wyze-bridge/web.htpasswd; then
+              hash=$(openssl passwd -apr1 -stdin < /opt/wyze-bridge/secrets/WB_PASSWORD)
+              printf 'wbadmin:%s\n' "$hash" > /opt/wyze-bridge/web.htpasswd
+              chown root:www-data /opt/wyze-bridge/web.htpasswd
+              chmod 0640 /opt/wyze-bridge/web.htpasswd
+              echo changed
+            fi
+      register: wyze_bridge_credentials
+      changed_when: "'changed' in wyze_bridge_credentials.stdout"
+      no_log: true
+
+    - name: Install Wyze Bridge service files
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            target="$1"
+            staged=$(mktemp)
+            trap 'rm -f "$staged"' EXIT
+            cat > "$staged"
+            if ! cmp -s "$staged" "$target"; then
+              install -m 0644 "$staged" "$target"
+              echo changed
+            fi
+          - wyze-file
+          - "{{ item.dest }}"
+        stdin: "{{ lookup('template', item.src) }}"
+        stdin_add_newline: false
+      loop:
+        - src: nginx.conf.j2
+          dest: /etc/nginx/conf.d/wyze-bridge.conf
+        - src: compose.yml.j2
+          dest: /opt/wyze-bridge/compose.yml
+        - src: wyze-bridge.service.j2
+          dest: /etc/systemd/system/wyze-bridge.service
+      register: wyze_bridge_files
+      changed_when: "'changed' in wyze_bridge_files.stdout"
+
+    - name: Reconcile Wyze Bridge service
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -c
+          - |
+            set -eu
+            systemctl daemon-reload
+            systemctl enable --now docker
+            cd /opt/wyze-bridge
+            docker compose config --quiet
+            docker compose up -d
+            systemctl enable --now wyze-bridge
+            nginx -t
+            systemctl enable --now nginx
+            systemctl reload nginx
+      register: wyze_bridge_up
+      changed_when: "'Started' in wyze_bridge_up.stderr or 'Created' in wyze_bridge_up.stderr"
+
+    - name: Verify protected Wyze Bridge web service
+      ansible.builtin.command:
+        cmd: >-
+          pct exec {{ lxc_resolved_vmid }} --
+          curl --silent --output /dev/null --write-out %{http_code} http://127.0.0.1:5050/
+      register: wyze_bridge_http
+      changed_when: false
+      until: wyze_bridge_http.stdout == '401'
+      retries: 12
+      delay: 5

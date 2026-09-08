@@ -426,3 +426,9 @@ vm_deploy_vms:
     disk_size: 20
     disk_bus: virtio
     net_model: virtio
+
+# Dedicated Wyze camera RTSP bridge; enter account credentials in its web UI.
+install_wyze_bridge: false
+# wyze_bridge_node: "atlas"
+# wyze_bridge_vmid: ""  # next available cluster VMID
+# wyze_bridge_hostname: "wyze-bridge-nash"
