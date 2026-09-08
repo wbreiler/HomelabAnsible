@@ -56,10 +56,6 @@
       when: install_homebridge | default(false) | bool
       tags: ['homebridge', 'lxc']
 
-    - role: wyze_bridge
-      when: install_wyze_bridge | default(false) | bool
-      tags: ['wyze_bridge', 'lxc']
-
     - role: spoolman
       when: install_spoolman | default(false) | bool
       tags: ['spoolman', 'lxc']
