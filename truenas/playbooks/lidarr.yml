@@ -1,0 +1,56 @@
+---
+- name: Deploy only the Lidarr custom application
+  hosts: truenas
+  gather_facts: false
+  tasks:
+    - name: Require explicit deployment opt-in and local configuration
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode or truenas_allow_changes | bool
+          - lidarr_config_path is defined
+          - lidarr_music_path is defined
+          - lidarr_downloads_path is defined
+          - lidarr_uid is defined
+          - lidarr_gid is defined
+          - lidarr_bind_address is defined
+    - name: Create dedicated Lidarr directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ lidarr_uid }}"
+        group: "{{ lidarr_gid }}"
+        mode: "0750"
+      loop:
+        - "{{ lidarr_config_path }}"
+        - "{{ lidarr_music_path }}"
+    - name: Read current Lidarr application configuration
+      ansible.builtin.raw: >-
+        midclt call app.query '[["name","=","lidarr"]]'
+        '{"extra":{"retrieve_config":true}}'
+      check_mode: false
+      register: lidarr_query
+      changed_when: false
+    - name: Reconcile only Lidarr
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
+      vars:
+        truenas_entities_apps: "{{ lidarr_query.stdout | from_json }}"
+        desired_app:
+          name: lidarr
+          custom_app: true
+          state: RUNNING
+          custom_compose_config:
+            services:
+              lidarr:
+                image: lscr.io/linuxserver/lidarr:3.1.0.4875-ls38
+                restart: unless-stopped
+                environment:
+                  PUID: "{{ lidarr_uid | string }}"
+                  PGID: "{{ lidarr_gid | string }}"
+                  TZ: "{{ lidarr_timezone | default('Etc/UTC') }}"
+                  UMASK: '002'
+                ports:
+                  - "{{ lidarr_bind_address }}:8686:8686"
+                volumes:
+                  - "{{ lidarr_config_path }}:/config"
+                  - "{{ lidarr_music_path }}:/music"
+                  - "{{ lidarr_downloads_path }}:/nzb"

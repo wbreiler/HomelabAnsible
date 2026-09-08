@@ -1,0 +1,8 @@
+---
+lidarr_config_path: /mnt/tank/appdata/lidarr
+lidarr_music_path: /mnt/tank/media/music
+lidarr_downloads_path: /mnt/tank/downloads/nzb
+lidarr_uid: 1000
+lidarr_gid: 1000
+lidarr_bind_address: 192.0.2.10
+lidarr_timezone: Etc/UTC
