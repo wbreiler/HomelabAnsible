@@ -3,4 +3,20 @@ USER root
 # Some providers label HLS playlists as text/plain. Once Cobalt recognizes
 # and rewrites a playlist, identify it correctly for FFmpeg's HLS probe.
 RUN node --input-type=commonjs -e 'const fs = require("fs"); const p = "src/stream/internal.js"; const s = fs.readFileSync(p, "utf8"); const from = "if (isHls) {\n            await handleHlsPlaylist"; if (s.split(from).length !== 2) throw Error("upstream HLS code changed"); fs.writeFileSync(p, s.replace(from, "if (isHls) {\n            res.setHeader(\"content-type\", \"application/vnd.apple.mpegurl\");\n            await handleHlsPlaylist"));'
+# The current token provider requires a JSON POST. Use the authenticated
+# session client for all ordinary YouTube qualities, including audio-only.
+RUN node --input-type=commonjs <<'JS'
+const fs = require('fs');
+const p = 'src/processing/helpers/youtube-session.js';
+const s = fs.readFileSync(p, 'utf8');
+const from = "{ method: 'POST', dispatcher: defaultAgent }";
+if (s.split(from).length !== 2) throw Error('upstream session request changed');
+fs.writeFileSync(p, s.replace(from, "{ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', dispatcher: defaultAgent }"));
+const y = 'src/processing/services/youtube.js';
+const v = fs.readFileSync(y, 'utf8');
+const start = v.indexOf('    let useSession =');
+const end = v.indexOf('    // we can get subtitles', start);
+if (start < 0 || end < 0) throw Error('upstream session selection changed');
+fs.writeFileSync(y, v.slice(0, start) + '    let useSession = env.ytSessionServer && !useHLS && innertubeClient === "IOS";\n\n' + v.slice(end));
+JS
 USER node

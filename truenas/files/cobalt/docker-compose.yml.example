@@ -1,7 +1,10 @@
 services:
   api:
-    image: cobalt-api:a636575-hls1
+    image: cobalt-api:a636575-youtube1
     pull_policy: never
+    depends_on:
+      youtube-session:
+        condition: service_healthy
     init: true
     read_only: true
     restart: unless-stopped
@@ -9,6 +12,8 @@ services:
       - "192.0.2.10:9000:9000"
     environment:
       API_URL: http://192.0.2.10:9000/
+      YOUTUBE_SESSION_INNERTUBE_CLIENT: MWEB
+      YOUTUBE_SESSION_SERVER: http://youtube-session:4416/
       CORS_WILDCARD: "0"
       CORS_URL: http://192.0.2.10:9001
     healthcheck:
@@ -28,3 +33,15 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+  youtube-session:
+    logging:
+      driver: none
+    image: brainicism/bgutil-ytdlp-pot-provider@sha256:ed86b6fdd5e430ddd7c8ce1adb55e1ab54db7c7dbc1bcbf3a82454a85b971164
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4416/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

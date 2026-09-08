@@ -13,7 +13,7 @@ source matches its revision: `a636575b09de1fc55d9b8cd98cac88f5f2f16b42`
 the advertised address. Build dependencies use the upstream pnpm lockfile.
 
 1. Build the API image on the Docker host with
-   `docker build -t cobalt-api:a636575-hls1 - < Dockerfile.api`.
+   `docker build -t cobalt-api:a636575-youtube1 - < Dockerfile.api`.
    Clone <https://github.com/imputnet/cobalt> and check out that revision.
 2. Copy `Dockerfile.web` into the checkout and `nginx.conf` into the checkout
    as `cobalt-nginx.conf`.
@@ -79,4 +79,37 @@ the upstream Bluesky video fixture from zero bytes to a nonempty remuxed stream
 in an isolated container; the patched live API then delivered 65,536 video
 bytes in the smoke test. The final apply reported `changed=0`. Vimeo returned a provider fetch error; a YouTube
 sample returned an empty stream even with this fix. These provider cases are
-not claimed working. No account cookies or session generator are configured.
+not claimed working. No account cookies are configured. See the subsequent YouTube setup below.
+
+
+## YouTube session provider
+
+The custom app also runs BgUtils POT Provider 2.0.0, pinned by digest, on its
+internal Docker network. It has no published host port. Cobalt loads tokens
+from `http://youtube-session:4416/` and refreshes them every five minutes.
+The provider shares the API's outbound public IP and stores sessions in memory.
+Provider log storage is disabled because its diagnostics include session IDs.
+The API waits for provider health on startup; initial token generation can
+still take several seconds before YouTube requests are ready.
+
+The older `imputnet/yt-session-generator` timed out obtaining tokens and is
+not used. Cobalt 11.7.1 needs two additional checked build patches:
+
+- Send JSON in the `/get_pot` POST, as required by the current provider.
+- Select the session client for normal video qualities and audio-only requests,
+  rather than only qualities above 1080p. `YOUTUBE_SESSION_INNERTUBE_CLIENT`
+  selects `MWEB`; the default `WEB_EMBEDDED` was rejected by YouTube.
+
+The earlier HLS MIME correction remains in the same API image. Subtitle
+requests retain upstream's iOS-client behavior and are not covered by this
+session-client fix. Rebuild using the current `Dockerfile.api` before applying
+the Compose example. Use the same backup, check, apply, and idempotency procedure
+above. The provider image is pulled automatically by TrueNAS.
+
+Final YouTube validation on 2026-09-08 succeeded through the live API using
+`https://www.youtube.com/watch?v=jNQXAC9IVRw`: complete video (742,286 bytes)
+and audio-only (304,598 bytes) downloads both decoded with FFmpeg exit 0.
+All three containers were healthy; all existing apps remained RUNNING and both
+pools ONLINE. The second apply reported `changed=0`; project lint and syntax
+checks passed. This verifies the tested public clip, not every YouTube video,
+quality, account restriction, or subtitle path.
