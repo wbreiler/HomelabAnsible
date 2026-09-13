@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly BACKUP_STORAGE="{{ update_apps_backup_storage }}"
+readonly SKIP_VMIDS="{{ update_apps_skip_vmids | map('string') | join(' ') }}"
+DRY_RUN=false
+ASSUME_YES=false
+declare -a REQUESTED=()
+
+usage() {
+  echo "Usage: update-apps [--dry-run] [--yes] [VMID ...]"
+}
+
+is_vmid() {
+  [[ "$1" =~ ^[1-9][0-9]*$ ]]
+}
+
+is_skipped() {
+  [[ " $SKIP_VMIDS " == *" $1 "* ]]
+}
+
+is_community_script() {
+  pct config "$1" 2>/dev/null |
+    sed -n 's/^tags: //p' |
+    tr ';' '\n' |
+    grep -Eq '^(community-script|proxmox-helper-scripts)$'
+}
+
+self_test() {
+  is_vmid 108
+  ! is_vmid '108;reboot'
+  is_skipped "{{ sonarr_vmid | default(110) }}"
+  ! is_skipped 999999
+  echo "Self-test passed"
+}
+
+while (($#)); do
+  case "$1" in
+    --dry-run) DRY_RUN=true ;;
+    --yes) ASSUME_YES=true ;;
+    --self-test) self_test; exit ;;
+    --help|-h) usage; exit ;;
+    --*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    *) is_vmid "$1" || { echo "Invalid VMID: $1" >&2; exit 2; }; REQUESTED+=("$1") ;;
+  esac
+  shift
+done
+
+declare -a TARGETS=()
+if [[ -v 'REQUESTED[0]' ]]; then
+  CANDIDATES=("${REQUESTED[@]}")
+else
+  mapfile -t CANDIDATES < <(pct list | awk 'NR > 1 && $2 == "running" {print $1}')
+fi
+
+for vmid in "${CANDIDATES[@]}"; do
+  pct status "$vmid" 2>/dev/null | grep -q '^status: running$' || {
+    echo "Skip $vmid: not a running local LXC" >&2
+    continue
+  }
+  is_community_script "$vmid" || {
+    echo "Skip $vmid: no Community Scripts tag" >&2
+    continue
+  }
+  if is_skipped "$vmid"; then
+    echo "Skip $vmid: managed by Ansible" >&2
+    continue
+  fi
+  pct exec "$vmid" -- test -x /usr/bin/update || {
+    echo "Skip $vmid: /usr/bin/update is absent" >&2
+    continue
+  }
+  TARGETS+=("$vmid")
+done
+
+[[ -v 'TARGETS[0]' ]] || { echo "No eligible LXCs found"; exit; }
+echo "Eligible LXCs: ${TARGETS[*]}"
+if $DRY_RUN; then
+  exit
+fi
+
+[[ -n "$BACKUP_STORAGE" ]] || {
+  echo "No backup storage is configured. Set update_apps_backup_storage in Ansible." >&2
+  exit 1
+}
+pvesm status --storage "$BACKUP_STORAGE" --enabled 1 >/dev/null
+
+if ! $ASSUME_YES; then
+  read -r -p "Back up and update these LXCs? [y/N] " answer
+  [[ "$answer" =~ ^[Yy]$ ]] || exit
+fi
+
+for vmid in "${TARGETS[@]}"; do
+  echo "Backing up LXC $vmid"
+  vzdump "$vmid" --storage "$BACKUP_STORAGE" --mode snapshot --compress zstd
+  echo "Updating LXC $vmid"
+  pct exec "$vmid" -- /usr/bin/update
+done

@@ -1,0 +1,17 @@
+---
+update_apps_path: /usr/local/sbin/update-apps
+update_apps_backup_storage: "{{ pbs_storage_id | default('') }}"
+update_apps_skip_vmids:
+  - "{{ pocket_id_vmid | default(100) }}"
+  - "{{ spoolman_vmid | default(102) }}"
+  - "{{ forgejo_vmid | default(103) }}"
+  - "{{ prowlarr_vmid | default(104) }}"
+  - "{{ homebridge_vmid | default(105) }}"
+  - "{{ apt_cacher_ng_vmid | default(106) }}"
+  - "{{ sonarr_vmid | default(110) }}"
+  - "{{ radarr_vmid | default(111) }}"
+  - "{{ seerr_vmid | default(117) }}"
+  - "{{ gitea_mirror_vmid | default(119) }}"
+  - "{{ diun_vmid | default(121) }}"
+  - "{{ tailscale_router_vmid | default(123) }}"
+  - "{{ vaultwarden_vmid | default(125) }}"

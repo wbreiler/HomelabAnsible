@@ -501,6 +501,17 @@ ansible-playbook -i inventory.yml site.yml --tags tailscale_router -e 'install_t
 
 ### System Updates
 
+Install the repository-owned Community Scripts application updater with:
+
+```bash
+ansible-playbook site.yml --tags update_apps -e 'install_update_apps=true' --ask-vault-pass
+```
+
+Run `update-apps --dry-run` on a Proxmox node to list eligible local LXCs. Run
+`update-apps` to create a backup and invoke each existing in-container updater.
+The command excludes LXCs managed by dedicated Ansible roles. It does not
+download or source the upstream orchestration script.
+
 The `update_all` role updates Proxmox hosts and operating-system packages in running LXC containers (apt for Debian/Ubuntu, apk for Alpine). It never executes application-specific updater hooks; applications managed by dedicated roles upgrade only through pinned version bumps.
 
 **Usage:**

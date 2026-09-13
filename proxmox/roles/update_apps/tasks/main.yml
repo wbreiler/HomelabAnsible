@@ -1,0 +1,13 @@
+---
+- name: Install repository-owned Community Scripts application updater
+  ansible.builtin.template:
+    src: update-apps.sh.j2
+    dest: "{{ update_apps_path }}"
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Verify application updater self-test
+  ansible.builtin.command:
+    cmd: "{{ update_apps_path }} --self-test"
+  changed_when: false

@@ -395,6 +395,15 @@ management, LXC installation, system updates, and PBS restores.
 * For each container: detects package manager (apt/apk) and updates OS packages.
 * Never executes application-specific updater hooks; managed applications upgrade only through pinned role version bumps.
 
+### update_apps
+
+* Installs a repository-owned replacement for the Community Scripts
+  `update-apps.sh` orchestration script on each Proxmox node.
+* Backs up and updates only running, tagged, unmanaged LXCs with an existing
+  `/usr/bin/update`; dedicated Ansible roles remain the only update method for
+  managed applications.
+* Never downloads or sources the upstream orchestration script at runtime.
+
 ### update_reminder
 
 * Installs a systemd timer on every Proxmox node and checks the node plus its

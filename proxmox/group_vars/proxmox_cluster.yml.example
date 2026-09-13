@@ -232,6 +232,9 @@ install_tailscale_router: false
 # =============================================================================
 # System Updates Configuration
 # =============================================================================
+install_update_apps: false  # Install the reviewed Community Scripts application updater
+update_apps_backup_storage: "{{ pbs_storage_id }}"
+
 run_updates: false  # Set to true to run system updates
 update_nodes: true  # Update Proxmox host nodes
 update_lxcs: true   # Update LXC containers
