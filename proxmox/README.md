@@ -345,7 +345,7 @@ pvecm nodes
 
 ### Monitoring
 
-Three opt-in roles cover complementary monitoring concerns:
+Four opt-in roles cover complementary monitoring concerns:
 
 - **`healthcheck_reminder`** (`healthcheck_reminder_enabled: true`) — no new service. Installs a systemd timer on the cluster master node only (checks are cluster-wide via `pvesh get /cluster/resources`, so running it on both nodes would duplicate alerts). Every 5 minutes by default, it flags any Proxmox node that isn't `online` and any LXC/VM that isn't `running` (skip intentionally-stopped guests via `healthcheck_reminder_skip_vmids`), and sends a Discord alert. Re-notifies immediately if the set of down items changes, otherwise backs off for `healthcheck_reminder_repeat_after_minutes` (default 30) so an ongoing outage doesn't spam.
 - **`gatus`** (`install_gatus: true`) — app-level checks and a status page/history that the script above can't give you. Creates or adopts `gatus-nash`, a small LXC running [Gatus](https://github.com/TwiN/gatus). The role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain. The generated `config.yaml` probes each Proxmox node's web UI (TCP 8006), the PBS server (TCP 8007), and each enabled managed app role that defines a health URL. Add other checks through `gatus_extra_endpoints`.
@@ -353,6 +353,10 @@ Three opt-in roles cover complementary monitoring concerns:
   The dedicated LXC disables IPv6 by default (`diun_disable_ipv6: true`)
   because VLAN 40 provides IPv4 internet access but no routed IPv6; this keeps
   registry lookups from selecting unreachable AAAA records.
+- **`centralized_logging`** (`install_centralized_logging: true`) — creates
+  `loki-nash` with Loki and Grafana. It installs Alloy on each running non-game
+  LXC and both PVE hosts. Loki keeps logs for 30 days. Grafana includes one
+  dashboard for service logs, host journals, and error counts.
 
 Together: `healthcheck_reminder` catches "is the node/guest even up" (Proxmox-native, zero footprint); `gatus` catches "is the app inside actually responding" plus gives you history and a dashboard; `diun` catches "is there a newer image available" for anything running Docker, cluster or not.
 
@@ -375,6 +379,78 @@ Fifteen repository-owned roles in this section manage a single-purpose LXC; the 
 - **`gallery_dl`** — gallery-dl on a cron schedule, NFS-mounted to the vault share. Configure `gallery_dl_profiles` (usernames to archive) and optionally `gallery_dl_cookies_file`.
 - **`gatus`** — Uptime monitoring/status page. See [Monitoring](#monitoring) above for details.
 - **`diun`** — Docker image update watcher. See [Monitoring](#monitoring) above for details.
+- **`centralized_logging`** — Loki, Grafana, and Alloy. See [Centralized logging](#centralized-logging).
+
+### Centralized logging
+
+Grafana is available at `http://10.10.40.193:3000` over the LAN/Tailscale
+subnet route. The internal NPM name is `http://graf-nash`. No internal DNS
+exists, so clients need `10.10.40.86 graf-nash` in their hosts file to use
+that name. The direct IP works without a hosts-file change. No public DNS
+record or port forward is required or created.
+
+The role manages `/etc/nginx/conf.d/homelab-grafana.conf` inside NPM. This
+route permits only private/Tailscale source addresses, using the actual
+connection peer instead of client-supplied headers. It is separate from
+NPM's UI-managed proxy entries. The role checks Nginx configuration before
+reload and restores the previous file if validation fails.
+
+The role stores Loki data in `/var/lib/loki` inside `loki-nash`. It provisions
+the Loki data source and the **Homelab Logs** dashboard in Grafana. Retrieve the
+generated Grafana password without printing it into Ansible logs:
+
+```bash
+ssh root@10.10.30.3 'pct exec 127 -- cat /etc/grafana/admin-password'
+```
+
+Run the role again after a new LXC starts. The role discovers each running LXC
+and installs Alloy. Add an application log path in
+`roles/centralized_logging/templates/alloy.config.j2` and its read-access
+directory in `tasks/deploy_lxc_agent.yml`. Forgejo logs arrive through its
+systemd journal. NPM and the *arr hosts also ship application files.
+
+Change `centralized_logging_retention` to change the Loki retention period.
+The minimum supported period is 24 hours. The compactor checks every ten
+minutes and deletes expired chunks after a two-hour delay. An isolated test
+verified deletion of synthetic 31-day-old chunks with the same 720-hour
+retention. Production logs have not yet reached 30 days.
+
+Two Grafana rules show missing Proxmox logs and an NPM error spike. No
+external notification channel is configured. Uptime Kuma retains uptime
+monitoring responsibility.
+
+Game servers start in `centralized_logging_excluded_vmids`. Remove one VMID at
+a time after the 30-day storage rate is known. The main PBS job includes VMID
+127 because that job backs up all non-game guests. Its root disk contains
+all Loki data, Grafana data, and configuration. Diun (121) is also excluded
+until its 256 MiB RAM allocation can be increased safely. The router's Alloy
+package is installed, and its agent runs within the existing 256 MiB limit.
+
+The addresses above are the deployment snapshot. Reserve the DHCP leases
+in the existing DHCP server to keep them stable. If an address changes,
+rerun the role and update client hosts-file entries as needed.
+
+For a delivery check, emit the same unique marker with `logger -t
+homelab-logging-check MARKER` on each included host. Then run
+`python3 roles/centralized_logging/files/verify_logging.py
+http://10.10.40.193:3100 MARKER HOST...`. The check requires every expected
+host and rejects labels outside `host`, `job`, and `unit`.
+
+For an isolated retention check, copy
+`roles/centralized_logging/files/verify_retention.py` into `loki-nash` and
+run it with Python 3 as root. It uses local-only test ports and separate
+temporary storage, then stops its test process.
+
+Deployment checks on 2026-09-14 confirmed 21 sources, persistent journals,
+Grafana authentication, datasource health, and dashboard provisioning.
+The three pilot journals and both application-file sources delivered test
+markers within 12.8 seconds. The isolated 30-day retention test deleted its
+expired synthetic chunk. Five game servers and Diun remain excluded.
+
+```bash
+ansible-playbook -i inventory.yml site.yml --tags centralized_logging \
+  -e install_centralized_logging=true
+```
 
 ```yaml
 install_apt_cacher_ng: true

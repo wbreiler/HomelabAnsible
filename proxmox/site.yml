@@ -104,6 +104,10 @@
       when: install_diun | default(false) | bool
       tags: ['diun', 'monitoring', 'lxc']
 
+    - role: centralized_logging
+      when: install_centralized_logging | default(false) | bool
+      tags: ['centralized_logging', 'monitoring', 'lxc']
+
     - role: tailscale_router
       when: install_tailscale_router | default(false) | bool
       tags: ['tailscale_router', 'networking', 'lxc']

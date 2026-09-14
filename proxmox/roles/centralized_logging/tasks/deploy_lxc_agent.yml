@@ -1,0 +1,132 @@
+---
+- name: Read installed Alloy version in {{ centralized_logging_guest.name }}
+  ansible.builtin.command:
+    argv: [pct, exec, "{{ centralized_logging_guest.vmid | string }}", --, dpkg-query, -W, "-f=${Version}", alloy]
+  register: _centralized_logging_lxc_alloy_version
+  changed_when: false
+  failed_when: _centralized_logging_lxc_alloy_version.rc not in [0, 1]
+
+- name: Install pinned Alloy in {{ centralized_logging_guest.name }}
+  when: >-
+    _centralized_logging_lxc_alloy_version.rc != 0 or
+    _centralized_logging_lxc_alloy_version.stdout | trim != centralized_logging_alloy_version
+  block:
+    - name: Push Grafana repository key into {{ centralized_logging_guest.name }}
+      ansible.builtin.command:
+        argv: [pct, push, "{{ centralized_logging_guest.vmid | string }}", /var/cache/homelab-grafana.asc, /etc/apt/keyrings/grafana.asc, --perms, "0644"]
+      changed_when: true
+
+    - name: Install Grafana repository and Alloy in {{ centralized_logging_guest.name }}
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ centralized_logging_guest.vmid | string }}"
+          - --
+          - bash
+          - -ceu
+          - |
+            printf '%s\n' 'deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main' > /etc/apt/sources.list.d/grafana.list
+            policy=/usr/sbin/policy-rc.d
+            saved=$(mktemp -d)
+            if test -e "$policy" || test -L "$policy"; then mv "$policy" "$saved/policy"; fi
+            trap 'rm -f "$policy"; if test -e "$saved/policy" || test -L "$saved/policy"; then mv "$saved/policy" "$policy"; fi; rmdir "$saved"' EXIT
+            printf '#!/bin/sh\nexit 101\n' > "$policy"
+            chmod 0755 "$policy"
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -q "alloy={{ centralized_logging_alloy_version }}" acl
+            apt-mark hold alloy
+      changed_when: true
+
+- name: Configure Alloy in {{ centralized_logging_guest.name }}
+  vars:
+    centralized_logging_agent_name: "{{ centralized_logging_guest.name }}"
+    _centralized_logging_agent_config: "{{ lookup('template', 'alloy.config.j2') }}"
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ centralized_logging_guest.vmid | string }}"
+      - --
+      - bash
+      - -ceu
+      - |
+        tmp=$(mktemp)
+        cat > "$tmp"
+        if test -f /etc/alloy/config.alloy && cmp -s "$tmp" /etc/alloy/config.alloy; then
+          rm -f "$tmp"
+          echo unchanged
+        else
+          if test -f /etc/alloy/config.alloy; then
+            cp -a --backup=numbered /etc/alloy/config.alloy /etc/alloy/config.alloy.pre-logging
+          fi
+          install -o root -g alloy -m 0640 "$tmp" /etc/alloy/config.alloy
+          rm -f "$tmp"
+          echo changed
+        fi
+    stdin: "{{ _centralized_logging_agent_config }}"
+    stdin_add_newline: false
+  register: _centralized_logging_lxc_config
+  changed_when: _centralized_logging_lxc_config.stdout | trim == 'changed'
+
+- name: Disable Alloy reporting in {{ centralized_logging_guest.name }}
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ centralized_logging_guest.vmid | string }}"
+      - --
+      - bash
+      - -ceu
+      - |
+        desired='CONFIG_FILE="/etc/alloy/config.alloy"
+        CUSTOM_ARGS="--disable-reporting"
+        RESTART_ON_UPGRADE=true'
+        if test -f /etc/default/alloy && test "$(cat /etc/default/alloy)" = "$desired"; then
+          echo unchanged
+        else
+          printf '%s\n' "$desired" > /etc/default/alloy
+          echo changed
+        fi
+  register: _centralized_logging_lxc_defaults
+  changed_when: _centralized_logging_lxc_defaults.stdout | trim == 'changed'
+
+- name: Grant Alloy application log access in {{ centralized_logging_guest.name }}
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ centralized_logging_guest.vmid | string }}"
+      - --
+      - bash
+      - -ceu
+      - |
+        for path in {{ _centralized_logging_app_log_dirs[centralized_logging_guest.name] | map('quote') | join(' ') }}; do
+          test -d "$path" || continue
+          setfacl -R -m u:alloy:rX -m d:u:alloy:rX "$path"
+        done
+  vars:
+    _centralized_logging_app_log_dirs:
+      npm-nash: [/data/logs]
+      prowlarr-nash: [/var/lib/prowlarr/logs]
+      sonarr-nash: [/var/lib/sonarr/logs]
+      radarr-nash: [/var/lib/radarr/logs]
+  when: centralized_logging_guest.name in _centralized_logging_app_log_dirs
+  changed_when: false
+
+- name: Start Alloy in {{ centralized_logging_guest.name }}
+  ansible.builtin.command:
+    argv: [pct, exec, "{{ centralized_logging_guest.vmid | string }}", --, systemctl, enable, --now, alloy]
+  register: _centralized_logging_lxc_alloy_start
+  changed_when: "'Created symlink' in _centralized_logging_lxc_alloy_start.stderr"
+
+- name: Restart changed Alloy agent in {{ centralized_logging_guest.name }}
+  ansible.builtin.command:
+    argv: [pct, exec, "{{ centralized_logging_guest.vmid | string }}", --, systemctl, restart, alloy]
+  when: _centralized_logging_lxc_config.changed or _centralized_logging_lxc_defaults.changed
+  changed_when: true
+
+- name: Verify Alloy in {{ centralized_logging_guest.name }}
+  ansible.builtin.command:
+    argv: [pct, exec, "{{ centralized_logging_guest.vmid | string }}", --, systemctl, is-active, alloy]
+  changed_when: false

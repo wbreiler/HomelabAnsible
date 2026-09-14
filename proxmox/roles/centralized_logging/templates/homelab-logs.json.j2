@@ -1,0 +1,40 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "sum by (host) (count_over_time({host=~\".+\"} |~ `(?i)(error|critical|fatal)` [5m]))", "refId": "A"}],
+      "title": "Errors by host",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 12, "w": 12, "x": 0, "y": 8},
+      "id": 2,
+      "targets": [{"expr": "{host=~\"$host\", job=~\"$job\"}", "refId": "A"}],
+      "title": "Service logs",
+      "type": "logs"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 12, "w": 12, "x": 12, "y": 8},
+      "id": 3,
+      "targets": [{"expr": "{host=~\"prometheus|atlas\", job=\"systemd-journal\"}", "refId": "A"}],
+      "title": "Proxmox host journals",
+      "type": "logs"
+    }
+  ],
+  "schemaVersion": 41,
+  "tags": ["logs", "homelab"],
+  "templating": {"list": [
+    {"datasource": {"type": "loki", "uid": "loki"}, "definition": "label_values(host)", "includeAll": true, "label": "Host", "name": "host", "query": "label_values(host)", "refresh": 1, "type": "query"},
+    {"datasource": {"type": "loki", "uid": "loki"}, "definition": "label_values({host=~\"$host\"}, job)", "includeAll": true, "label": "Job", "name": "job", "query": "label_values({host=~\"$host\"}, job)", "refresh": 1, "type": "query"}
+  ]},
+  "time": {"from": "now-6h", "to": "now"},
+  "title": "Homelab Logs",
+  "uid": "homelab-logs",
+  "version": 1
+}

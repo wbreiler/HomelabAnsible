@@ -49,6 +49,7 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
   * `gallery_dl`: Creates or adopts the privileged, NFS-mounting gallery-dl LXC.
   * `gatus`: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain.
   * `diun`: Creates or adopts the Diun image-update watcher LXC.
+  * `centralized_logging`: Creates Loki and Grafana and deploys Alloy.
   * `tailscale_router`: Creates or adopts the Tailscale subnet-router LXC.
   * `update_all`: Updates Proxmox host nodes and LXC containers.
   * `update_reminder`: Installs per-node Discord package-update reminders.
@@ -115,17 +116,18 @@ local variable files before changing behavior.
 20. **gallery_dl**: Manages the privileged, NFS-mounting gallery-dl LXC.
 21. **gatus**: Manages the Gatus status-page LXC.
 22. **diun**: Manages the Diun image-update watcher LXC.
-23. **tailscale_router**: Manages the Tailscale subnet-router LXC.
-24. **update_all**: Updates Proxmox nodes and LXC operating systems.
-25. **update_reminder**: Installs per-node Discord update reminders.
-26. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
-27. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
-28. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
-29. **vm_deploy**: Deploys full VMs from ISOs.
+23. **centralized_logging**: Creates Loki and Grafana and deploys Alloy.
+24. **tailscale_router**: Manages the Tailscale subnet-router LXC.
+25. **update_all**: Updates Proxmox nodes and LXC operating systems.
+26. **update_reminder**: Installs per-node Discord update reminders.
+27. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
+28. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
+29. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
+30. **vm_deploy**: Deploys full VMs from ISOs.
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-30. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
+31. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
 
 ### PBS Storage Pattern
 

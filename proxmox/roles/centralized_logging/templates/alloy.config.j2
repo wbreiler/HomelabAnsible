@@ -1,0 +1,61 @@
+logging {
+  level = "info"
+}
+
+loki.write "central" {
+  endpoint {
+    url = "http://{{ centralized_logging_ip }}:3100/loki/api/v1/push"
+  }
+}
+
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+  rule {
+    target_label = "job"
+    replacement  = "systemd-journal"
+  }
+}
+
+loki.source.journal "system" {
+  forward_to = [loki.write.central.receiver]
+  relabel_rules = loki.relabel.journal.rules
+  labels = {
+    host = "{{ centralized_logging_agent_name }}",
+    job  = "systemd-journal",
+  }
+}
+{% set app_paths = {
+  'npm-nash': '/data/logs/*_*.log',
+  'prowlarr-nash': '/var/lib/prowlarr/logs/prowlarr*.txt',
+  'sonarr-nash': '/var/lib/sonarr/logs/sonarr*.txt',
+  'radarr-nash': '/var/lib/radarr/logs/radarr*.txt'
+} %}
+{% if centralized_logging_agent_name in app_paths %}
+
+local.file_match "application" {
+  path_targets = [{
+    __path__ = "{{ app_paths[centralized_logging_agent_name] }}",
+    host     = "{{ centralized_logging_agent_name }}",
+    job      = "{{ 'nginx-proxy-manager' if centralized_logging_agent_name == 'npm-nash' else centralized_logging_agent_name | regex_replace('-nash$', '') }}",
+  }]
+}
+
+loki.relabel "application" {
+  forward_to = [loki.write.central.receiver]
+
+  rule {
+    action = "labeldrop"
+    regex  = "filename"
+  }
+}
+
+loki.source.file "application" {
+  targets    = local.file_match.application.targets
+  forward_to = [loki.relabel.application.receiver]
+}
+{% endif %}

@@ -11,6 +11,7 @@
 - name: "Locate cluster-wide container {{ lxc_lookup_hostname }}"
   ansible.builtin.command: pvesh get /cluster/resources --type vm --output-format json
   register: _lxc_cluster_resources
+  check_mode: false
   changed_when: false
 
 - name: "Resolve node hosting {{ lxc_lookup_hostname }}"

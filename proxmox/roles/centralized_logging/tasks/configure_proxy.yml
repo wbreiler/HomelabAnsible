@@ -1,0 +1,35 @@
+---
+- name: Install internal Grafana route in NPM
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ centralized_logging_proxy.vmid | string }}"
+      - --
+      - bash
+      - -ceu
+      - |
+        path=/etc/nginx/conf.d/homelab-grafana.conf
+        tmp=$(mktemp)
+        trap 'rm -f "$tmp"' EXIT
+        cat > "$tmp"
+        if test -f "$path" && cmp -s "$tmp" "$path"; then
+          echo unchanged
+          exit 0
+        fi
+        existed=false
+        if test -f "$path"; then
+          cp -a "$path" "$path.pre-logging"
+          existed=true
+        fi
+        install -m 0644 "$tmp" "$path"
+        if ! nginx -t; then
+          if "$existed"; then mv "$path.pre-logging" "$path"; else rm "$path"; fi
+          exit 1
+        fi
+        nginx -s reload
+        echo changed
+    stdin: "{{ lookup('template', 'nginx-grafana.conf.j2') }}"
+    stdin_add_newline: false
+  register: _centralized_logging_proxy_config
+  changed_when: _centralized_logging_proxy_config.stdout | trim == 'changed'

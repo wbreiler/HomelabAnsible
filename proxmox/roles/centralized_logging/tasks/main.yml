@@ -1,0 +1,349 @@
+---
+- name: Validate centralized logging configuration
+  ansible.builtin.assert:
+    that:
+      - centralized_logging_vmid | int > 0
+      - centralized_logging_grafana_hostname is match('^[a-z0-9][a-z0-9.-]*$')
+      - centralized_logging_disk | int >= 64
+      - centralized_logging_retention is match('^[0-9]+h$')
+      - centralized_logging_retention[:-1] | int >= 24
+      - centralized_logging_loki_version is match('^3\.[0-9]+\.[0-9]+$')
+      - centralized_logging_grafana_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - centralized_logging_alloy_version is match('^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$')
+      - centralized_logging_grafana_key_checksum is match('^sha256:[0-9a-f]{64}$')
+
+- name: Resolve node currently hosting centralized logging
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ centralized_logging_hostname }}"
+    lxc_fallback_node: "{{ centralized_logging_node }}"
+
+- name: Use a check-mode logging address
+  ansible.builtin.set_fact:
+    centralized_logging_ip: "10.0.0.1"
+  when: ansible_check_mode and inventory_hostname == lxc_current_node
+
+- name: Install centralized logging core
+  when:
+    - not ansible_check_mode
+    - proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap centralized logging container
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ centralized_logging_hostname }}"
+        lxc_vmid: "{{ centralized_logging_vmid }}"
+        lxc_storage: "{{ centralized_logging_storage }}"
+        lxc_template: "{{ centralized_logging_template }}"
+        lxc_cores: "{{ centralized_logging_cores }}"
+        lxc_memory: "{{ centralized_logging_memory }}"
+        lxc_disk: "{{ centralized_logging_disk }}"
+        lxc_bridge: "{{ centralized_logging_bridge }}"
+        lxc_vlan: "{{ centralized_logging_vlan }}"
+        lxc_tags: "{{ centralized_logging_tags | join(';') }}"
+        lxc_packages: [ca-certificates, curl, gpg, openssl]
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Read centralized logging address
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, hostname, -I]
+      register: _centralized_logging_addresses
+      changed_when: false
+
+    - name: Store centralized logging address
+      ansible.builtin.set_fact:
+        centralized_logging_ip: "{{ _centralized_logging_addresses.stdout.split() | select('match', '^10\\.') | first }}"
+
+    - name: Download pinned Grafana repository key
+      ansible.builtin.get_url:
+        url: "{{ centralized_logging_grafana_key_url }}"
+        dest: /var/cache/homelab-grafana.asc
+        checksum: "{{ centralized_logging_grafana_key_checksum }}"
+        mode: "0644"
+
+    - name: Push Grafana repository key into centralized logging container
+      ansible.builtin.command:
+        argv: [pct, push, "{{ lxc_resolved_vmid }}", /var/cache/homelab-grafana.asc, /etc/apt/keyrings/grafana.asc, --perms, "0644"]
+      changed_when: false
+
+    - name: Read installed core package versions
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, bash, -c, "dpkg-query -W -f='${Package}=${Version}\\n' loki grafana alloy 2>/dev/null || true"]
+      register: _centralized_logging_core_versions
+      changed_when: false
+
+    - name: Install pinned centralized logging packages
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - |
+            printf '%s\n' 'deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main' > /etc/apt/sources.list.d/grafana.list
+            policy=/usr/sbin/policy-rc.d
+            saved=$(mktemp -d)
+            if test -e "$policy" || test -L "$policy"; then mv "$policy" "$saved/policy"; fi
+            trap 'rm -f "$policy"; if test -e "$saved/policy" || test -L "$saved/policy"; then mv "$saved/policy" "$policy"; fi; rmdir "$saved"' EXIT
+            printf '#!/bin/sh\nexit 101\n' > "$policy"
+            chmod 0755 "$policy"
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+              "loki={{ centralized_logging_loki_version }}" \
+              "grafana={{ centralized_logging_grafana_version }}" \
+              "alloy={{ centralized_logging_alloy_version }}"
+            apt-mark hold loki grafana alloy
+      when: >-
+        ('loki=' ~ centralized_logging_loki_version) not in _centralized_logging_core_versions.stdout or
+        ('grafana=' ~ centralized_logging_grafana_version) not in _centralized_logging_core_versions.stdout or
+        ('alloy=' ~ centralized_logging_alloy_version) not in _centralized_logging_core_versions.stdout
+      changed_when: true
+
+    - name: Create Grafana admin password file
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - |
+            if test -s /etc/grafana/admin-password; then
+              echo unchanged
+            else
+              umask 007
+              openssl rand -base64 32 > /etc/grafana/admin-password
+              chown root:grafana /etc/grafana/admin-password
+              echo changed
+            fi
+      register: _centralized_logging_admin_password
+      changed_when: _centralized_logging_admin_password.stdout | trim == 'changed'
+
+    - name: Create Loki data directories
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - install
+          - -d
+          - -o
+          - loki
+          - -g
+          - nogroup
+          - -m
+          - "0750"
+          - /var/lib/loki
+          - /var/lib/loki/chunks
+          - /var/lib/loki/rules
+      changed_when: false
+
+    - name: Install centralized logging configuration
+      vars:
+        centralized_logging_agent_name: "{{ centralized_logging_hostname }}"
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - |
+            path="$1" owner="$2" mode="$3" tmp=$(mktemp)
+            cat > "$tmp"
+            if test -f "$path" && cmp -s "$tmp" "$path"; then
+              rm -f "$tmp"; echo unchanged
+            else
+              if test -f "$path"; then cp -a --backup=numbered "$path" "$path.pre-logging"; fi
+              install -D -o "${owner%:*}" -g "${owner#*:}" -m "$mode" "$tmp" "$path"
+              rm -f "$tmp"; echo changed
+            fi
+          - install-config
+          - "{{ item.path }}"
+          - "{{ item.owner }}"
+          - "{{ item.mode }}"
+        stdin: "{{ lookup('template', item.template) }}"
+        stdin_add_newline: false
+      loop:
+        - {path: /etc/loki/config.yml, owner: "loki:nogroup", mode: "0640", template: loki.yml.j2}
+        - {path: /etc/grafana/grafana.ini, owner: "root:grafana", mode: "0640", template: grafana.ini.j2}
+        - {path: /etc/grafana/provisioning/datasources/loki.yml, owner: "root:grafana", mode: "0640", template: loki-datasource.yml.j2}
+        - {path: /etc/grafana/provisioning/dashboards/homelab.yml, owner: "root:grafana", mode: "0640", template: dashboard-provider.yml.j2}
+        - {path: /etc/grafana/provisioning/alerting/homelab.yml, owner: "root:grafana", mode: "0640", template: alerts.yml.j2}
+        - {path: /var/lib/grafana/dashboards/homelab-logs.json, owner: "grafana:grafana", mode: "0640", template: homelab-logs.json.j2}
+        - {path: /etc/alloy/config.alloy, owner: "root:alloy", mode: "0640", template: alloy.config.j2}
+      register: _centralized_logging_core_config
+      changed_when: _centralized_logging_core_config.stdout | trim == 'changed'
+
+    - name: Disable core Alloy reporting
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - >-
+            printf '%s\n' 'CONFIG_FILE="/etc/alloy/config.alloy"'
+            'CUSTOM_ARGS="--disable-reporting"' 'RESTART_ON_UPGRADE=true'
+            > /etc/default/alloy
+      changed_when: false
+
+    - name: Start centralized logging services
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, systemctl, enable, --now, loki, grafana-server, alloy]
+      changed_when: false
+
+    - name: Restart changed centralized logging services
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, systemctl, restart, loki, grafana-server, alloy]
+      when: _centralized_logging_core_config.changed  # noqa no-handler
+      changed_when: true
+
+    - name: Wait for Loki readiness
+      ansible.builtin.uri:
+        url: "http://{{ centralized_logging_ip }}:3100/ready"
+      register: _centralized_logging_loki_ready
+      until: _centralized_logging_loki_ready.status == 200
+      retries: 24
+      delay: 5
+
+    - name: Wait for Grafana health
+      ansible.builtin.uri:
+        url: "http://{{ centralized_logging_ip }}:3000/api/health"
+      register: _centralized_logging_grafana_ready
+      until: _centralized_logging_grafana_ready.status == 200
+      retries: 24
+      delay: 5
+
+- name: Share centralized logging address with all nodes
+  ansible.builtin.set_fact:
+    centralized_logging_ip: "{{ hostvars[lxc_current_node].centralized_logging_ip }}"
+  when: inventory_hostname != lxc_current_node
+
+- name: Download pinned Grafana repository key for local agents
+  ansible.builtin.get_url:
+    url: "{{ centralized_logging_grafana_key_url }}"
+    dest: /var/cache/homelab-grafana.asc
+    checksum: "{{ centralized_logging_grafana_key_checksum }}"
+    mode: "0644"
+
+- name: Read local running LXCs
+  ansible.builtin.command: "pvesh get /nodes/{{ proxmox_node_name | default(inventory_hostname) }}/lxc --output-format json"
+  register: _centralized_logging_local_lxcs_raw
+  check_mode: false
+  changed_when: false
+
+- name: Select non-game LXCs for log collection
+  ansible.builtin.set_fact:
+    centralized_logging_local_lxcs: >-
+      {{ _centralized_logging_local_lxcs_raw.stdout | from_json
+         | selectattr('status', 'equalto', 'running')
+         | rejectattr('vmid', 'in', centralized_logging_excluded_vmids)
+         | rejectattr('name', 'equalto', centralized_logging_hostname) | list }}
+
+- name: Install Alloy in local LXCs
+  ansible.builtin.include_tasks: deploy_lxc_agent.yml
+  loop: "{{ centralized_logging_local_lxcs }}"
+  loop_control:
+    loop_var: centralized_logging_guest
+    label: "{{ centralized_logging_guest.name }}"
+  when: not ansible_check_mode
+
+- name: Install Grafana repository key on Proxmox host
+  ansible.builtin.copy:
+    src: /var/cache/homelab-grafana.asc
+    dest: /etc/apt/keyrings/grafana.asc
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: Install Grafana repository on Proxmox host
+  ansible.builtin.copy:
+    content: >-
+      deb [signed-by=/etc/apt/keyrings/grafana.asc]
+      https://apt.grafana.com stable main
+    dest: /etc/apt/sources.list.d/grafana.list
+    owner: root
+    group: root
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: Install pinned Alloy on Proxmox host
+  ansible.builtin.apt:
+    name: "alloy={{ centralized_logging_alloy_version }}"
+    state: present
+    update_cache: true
+    policy_rc_d: 101
+  register: _centralized_logging_host_alloy_package
+  when: not ansible_check_mode
+
+- name: Hold the pinned host Alloy package
+  ansible.builtin.dpkg_selections:
+    name: alloy
+    selection: hold
+  when: not ansible_check_mode
+
+- name: Configure Alloy on Proxmox host
+  vars:
+    centralized_logging_agent_name: "{{ inventory_hostname }}"
+  ansible.builtin.template:
+    src: alloy.config.j2
+    dest: /etc/alloy/config.alloy
+    owner: root
+    group: alloy
+    mode: "0640"
+    backup: true
+  register: _centralized_logging_host_alloy_config
+  when: not ansible_check_mode
+
+- name: Disable host Alloy reporting
+  ansible.builtin.copy:
+    content: |
+      CONFIG_FILE="/etc/alloy/config.alloy"
+      CUSTOM_ARGS="--disable-reporting"
+      RESTART_ON_UPGRADE=true
+    dest: /etc/default/alloy
+    owner: root
+    group: root
+    mode: "0644"
+  register: _centralized_logging_host_alloy_defaults
+  when: not ansible_check_mode
+
+- name: Grant host Alloy journal access
+  ansible.builtin.user:
+    name: alloy
+    groups: [adm, systemd-journal]
+    append: true
+  register: _centralized_logging_host_alloy_groups
+  when: not ansible_check_mode
+
+- name: Start host Alloy
+  ansible.builtin.systemd_service:
+    name: alloy
+    enabled: true
+    state: >-
+      {{ 'restarted' if
+         (_centralized_logging_host_alloy_package.changed or
+          _centralized_logging_host_alloy_config.changed or
+          _centralized_logging_host_alloy_defaults.changed or
+          _centralized_logging_host_alloy_groups.changed)
+         else 'started' }}
+  when: not ansible_check_mode
+
+- name: Configure internal Grafana proxy
+  ansible.builtin.include_tasks: configure_proxy.yml
+  loop: "{{ centralized_logging_local_lxcs | selectattr('name', 'equalto', 'npm-nash') | list }}"
+  loop_control:
+    loop_var: centralized_logging_proxy
+  when: not ansible_check_mode

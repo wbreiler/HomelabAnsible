@@ -219,6 +219,15 @@ install_diun: false
 #     max_tags: 3            # cap tracked tag history — keeps re-baselines quiet
 #   - name: "example/rolling-tag-app:latest"  # only detects digest changes on this tag
 
+install_centralized_logging: false
+# centralized_logging_node: "prometheus"
+# centralized_logging_vmid: "127"
+# centralized_logging_storage: "local-zfs"
+# centralized_logging_retention: "720h"
+# centralized_logging_grafana_hostname: "graf-nash"
+# Game servers are excluded initially. Remove a VMID after storage use is known.
+# centralized_logging_excluded_vmids: [113, 115, 116, 120, 121, 124]
+
 install_tailscale_router: false
 # tailscale_router_node: "atlas"
 # tailscale_router_vmid: ""  # empty selects the next available managed-app VMID
