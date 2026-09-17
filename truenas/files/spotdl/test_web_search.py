@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 
-from web_search import run_worker, search_items
+from web_search import link_items, run_worker, search_items, spotify_link
 
 
 async def check():
@@ -54,8 +54,46 @@ async def check():
     }]}})[0]
     assert result["url"] == "https://open.spotify.com/track/abc"
     assert result["artists"] == ["Artist"] and result["cover_url"] is None
+    identifier = "6xp0NBjMoWgRHKqYPG5Dl3"
+    assert spotify_link(f"https://open.spotify.com/intl-de/album/{identifier}?si=abc") == ("album", identifier)
+    assert spotify_link("kesha") is None
+    for url in ["https://example.com/album/" + identifier,
+                "https://open.spotify.com.evil.test/album/" + identifier,
+                "file:///etc/passwd", "https://open.spotify.com/album/invalid"]:
+        try:
+            spotify_link(url)
+            raise AssertionError("Invalid link accepted")
+        except ValueError:
+            pass
+
+    class Client:
+        def album(self, value):
+            assert value == identifier
+            return {"name": "Album", "images": [{"url": "cover"}]}
+
+        def album_tracks(self, value):
+            assert value == identifier
+            return {"items": [{"id": "a", "name": "One", "artists": [{"name": "Kesha"}]}], "next": "page2"}
+
+        def next(self, page):
+            return {"items": [{"id": "b", "name": "Two", "artists": [{"name": "Kesha"}]}], "next": None}
+
+        def playlist_items(self, value):
+            return {"items": [{"track": None}, {"track": {
+                "id": "a", "name": "One", "artists": [{"name": "Kesha"}],
+                "album": {"name": "Album", "images": []},
+            }}]}
+
+        def track(self, value):
+            return self.playlist_items(value)["items"][1]["track"]
+
+    cards = link_items(Client(), "album", identifier)
+    assert len(cards) == 2 and cards[1]["name"] == "Two"
+    assert all(card["album_name"] == "Album" and card["cover_url"] == "cover" for card in cards)
+    assert len(link_items(Client(), "playlist", identifier)) == 1
+    assert len(link_items(Client(), "track", identifier)) == 1
 
 
 if __name__ == "__main__":
     asyncio.run(check())
-    print("PASS: results, responsiveness, timeout cleanup, cancellation cleanup")
+    print("PASS: results, responsiveness, worker cleanup, URL validation, album pagination, track and playlist cards")

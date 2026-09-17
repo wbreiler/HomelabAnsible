@@ -52,3 +52,9 @@ the workaround in memory. Review it before upgrading spotDL. The read-only
 script mount and content label make deployment persistent and idempotent.
 Run `python3 files/spotdl/test_web_search.py` from `truenas/` to check response
 mapping, event-loop responsiveness, and worker cleanup.
+
+Direct Spotify track, album, and playlist URLs now display track cards on the
+search page. Use each card's download button. The original redirect abandoned
+the active request and sent album URLs to the single-track download handler.
+Album and playlist pagination remain inside the bounded worker. Download lookup
+failures replace the loading button with an error instead of leaving a spinner.
