@@ -1,0 +1,83 @@
+---
+- name: Deploy only the spotDL custom application
+  hosts: truenas
+  gather_facts: false
+  tasks:
+    - name: Require explicit deployment opt-in and local configuration
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode or truenas_allow_changes | bool
+          - spotdl_config_path is defined
+          - spotdl_music_path is defined
+          - spotdl_bind_address is defined
+          - spotdl_uid is defined
+          - spotdl_gid is defined
+          - spotdl_image is defined
+    - name: Create dedicated spotDL directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ spotdl_uid }}"
+        group: "{{ spotdl_gid }}"
+        mode: "0750"
+      loop:
+        - "{{ spotdl_config_path }}"
+        - "{{ spotdl_music_path }}"
+    - name: Read current spotDL application configuration
+      ansible.builtin.raw: >-
+        midclt call app.query '[["name","=","spotdl"]]'
+        '{"extra":{"retrieve_config":true}}'
+      check_mode: false
+      register: spotdl_query
+      changed_when: false
+    - name: Reconcile only spotDL
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
+      vars:
+        truenas_entities_apps: "{{ spotdl_query.stdout | from_json }}"
+        desired_app:
+          name: spotdl
+          custom_app: true
+          state: RUNNING
+          custom_compose_config:
+            services:
+              spotdl:
+                image: "{{ spotdl_image }}"
+                restart: unless-stopped
+                user: "{{ spotdl_uid }}:{{ spotdl_gid }}"
+                command:
+                  - web
+                  - --host
+                  - 0.0.0.0
+                  - --port
+                  - '8800'
+                  - --keep-alive
+                  - --web-use-output-dir
+                  - --output
+                  - /music/{artists} - {title}.{output-ext}
+                environment:
+                  TZ: "{{ spotdl_timezone | default('Etc/UTC') }}"
+                ports:
+                  - "{{ spotdl_bind_address }}:8800:8800"
+                volumes:
+                  - "{{ spotdl_config_path }}:/home/spotdl/.config/spotdl"
+                  - "{{ spotdl_music_path }}:/music"
+                healthcheck:
+                  test:
+                    - CMD
+                    - /app/.venv/bin/python
+                    - -c
+                    - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8800/', timeout=5)"
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+                  start_period: 60s
+    # The persistent config mount hides the image's bundled Deno binary.
+    - name: Install the YouTube JavaScript runtime in persistent configuration
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - ix-spotdl-spotdl-1
+          - /app/.venv/bin/spotdl
+          - --download-deno
+        creates: "{{ spotdl_config_path }}/deno"

@@ -224,6 +224,8 @@ to make it pass.
 
 ## Application guides
 
+- [spotDL](files/spotdl/SETUP.md) — scoped Spotify downloader with a LAN web interface.
+
 - [Lidarr](files/lidarr/SETUP.md) — scoped music-library application deployment.
 
 - [Tdarr on the RTX 5050](files/tdarr/SETUP.md) — single-container internal-node setup,

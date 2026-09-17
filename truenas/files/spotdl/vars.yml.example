@@ -1,0 +1,9 @@
+---
+spotdl_config_path: /mnt/tank/appdata/spotdl
+spotdl_music_path: /mnt/tank/media/spotdl
+spotdl_bind_address: 192.0.2.10
+spotdl_uid: 1000
+spotdl_gid: 1000
+spotdl_timezone: Etc/UTC
+# Resolve the release digest before deployment and retain it in local variables.
+spotdl_image: spotdl/spotify-downloader:v4.5.2

@@ -1,0 +1,38 @@
+# spotDL
+
+The scoped playbook installs the official spotDL Docker image as a TrueNAS
+custom app. It uses the built-in web interface on port 8800, runs as a non-root
+user, and stores configuration and downloads in dedicated host directories.
+
+## Deploy
+
+Run these commands from `truenas/`:
+
+1. Copy `files/spotdl/vars.yml.example` to the ignored
+   `artifacts/spotdl-vars.yml`. Set the existing storage paths, UID/GID, and LAN
+   address. Pin the release image by its registry digest.
+2. Create a protected configuration backup with `playbooks/backup.yml`.
+   Override `truenas_backup_local_path` and `truenas_backup_remote_path` with
+   fresh dated paths.
+3. Check and deploy only this app:
+
+   ```sh
+   ansible-playbook playbooks/spotdl.yml -e @artifacts/spotdl-vars.yml --check --diff
+   ansible-playbook playbooks/spotdl.yml -e @artifacts/spotdl-vars.yml -e truenas_allow_changes=true
+   ```
+
+4. Repeat the deployment command. Require `changed=0`, a healthy container,
+   and an HTTP 200 response from `http://<LAN-address>:8800/`.
+
+## Use
+
+Open `http://<LAN-address>:8800/` and enter a Spotify track or playlist URL.
+Downloads remain in the configured `spotdl_music_path`. Existing files are
+skipped by default. The app has no authentication, so use it only on a trusted
+LAN. Do not add a public port-forward.
+
+An HTTP health check proves the web server works. It does not prove downloads
+from Spotify or YouTube work. Those services can require account credentials
+or cookies. Keep credentials in the app's private configuration directory.
+
+Upstream: [spotDL v4.5.2 usage](https://github.com/spotDL/spotify-downloader/blob/v4.5.2/docs/usage.md).
