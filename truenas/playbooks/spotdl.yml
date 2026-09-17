@@ -23,6 +23,13 @@
       loop:
         - "{{ spotdl_config_path }}"
         - "{{ spotdl_music_path }}"
+    - name: Install bounded web metadata workaround
+      ansible.builtin.copy:
+        src: "{{ playbook_dir | dirname }}/files/spotdl/web_search.py"
+        dest: "{{ spotdl_config_path }}/web_search.py"
+        owner: "{{ spotdl_uid }}"
+        group: "{{ spotdl_gid }}"
+        mode: '0644'
     - name: Read current spotDL application configuration
       ansible.builtin.raw: >-
         midclt call app.query '[["name","=","spotdl"]]'
@@ -44,6 +51,12 @@
                 image: "{{ spotdl_image }}"
                 restart: unless-stopped
                 user: "{{ spotdl_uid }}:{{ spotdl_gid }}"
+                entrypoint:
+                  - /app/.venv/bin/python
+                  - /opt/spotdl/web_search.py
+                labels:
+                  local.spotdl.web-search-sha256: >-
+                    {{ lookup('file', (playbook_dir | dirname) + '/files/spotdl/web_search.py') | hash('sha256') }}
                 command:
                   - web
                   - --host
@@ -59,6 +72,7 @@
                 ports:
                   - "{{ spotdl_bind_address }}:8800:8800"
                 volumes:
+                  - "{{ spotdl_config_path }}/web_search.py:/opt/spotdl/web_search.py:ro"
                   - "{{ spotdl_config_path }}:/home/spotdl/.config/spotdl"
                   - "{{ spotdl_music_path }}:/music"
                 healthcheck:

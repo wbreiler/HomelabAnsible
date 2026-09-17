@@ -36,3 +36,19 @@ from Spotify or YouTube work. Those services can require account credentials
 or cookies. Keep credentials in the app's private configuration directory.
 
 Upstream: [spotDL v4.5.2 usage](https://github.com/spotDL/spotify-downloader/blob/v4.5.2/docs/usage.md).
+
+## Web search workaround
+
+The pinned 4.5.2 web handlers perform blocking Spotify metadata requests on the
+event loop. `web_search.py` moves search and download metadata lookups into
+short-lived subprocesses with a 30-second limit and kills them on timeout or
+cancellation. Search cards use the metadata already returned by Spotify instead
+of fetching complete track, artist, and album metadata for every result.
+Downloads still fetch complete metadata. A lookup timeout does not prove that
+Spotify or YouTube downloads work.
+
+The launcher checks the version and exact upstream statements before applying
+the workaround in memory. Review it before upgrading spotDL. The read-only
+script mount and content label make deployment persistent and idempotent.
+Run `python3 files/spotdl/test_web_search.py` from `truenas/` to check response
+mapping, event-loop responsiveness, and worker cleanup.
