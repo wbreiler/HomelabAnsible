@@ -70,3 +70,26 @@ retaining the compatible yt-dlp-ejs 0.8.0 already in the image. Keep its version
 download URL, and checksum together when updating it.
 Inside the image, `python test_web_search.py --upstream` additionally tests
 immediate queue registration, detached work, duplicate prevention, and errors.
+
+## Favorites CSV batches
+
+`import_favorites.py` consumes a private JSON manifest with `Song`, `Artist`,
+`Album`, and `Duration` fields, plus an optional verified Spotify `url`.
+Normalize and deduplicate CSV rows before creating the manifest. Store the
+manifest under the existing private app configuration directory, never in Git.
+
+Run it inside the container with the existing Python interpreter and dependency
+mount. It uses two independent workers, skips existing output through spotDL,
+and limits each track to four minutes. Search matching requires the same title,
+matching credited artists, and duration within five seconds. It prefers the
+same album and flags ambiguous results rather than selecting an arbitrary one.
+
+The manifest directory holds `status.json`, per-track logs, and an exclusive
+lock. Re-running the same command resumes unfinished work. Completed entries
+are skipped only while their files exist. Failed or uncertain entries remain
+for review; they are not silently retried. The manifest hash prevents resuming
+against a changed list. A container restart stops the batch, so resume it after
+the container returns. This batch is separate from the browser session queue.
+
+Run `python3 files/spotdl/test_import_favorites.py` to check conservative matching
+and checkpoint resume behavior.
