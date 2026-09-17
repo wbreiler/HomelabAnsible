@@ -58,3 +58,15 @@ search page. Use each card's download button. The original redirect abandoned
 the active request and sent album URLs to the single-track download handler.
 Album and playlist pagination remain inside the bounded worker. Download lookup
 failures replace the loading button with an error instead of leaving a spinner.
+
+Download buttons register a queue entry immediately and start a background task.
+Page navigation does not cancel that task. Repeated clicks do not duplicate an
+active track. Completed and failed results remain visible in the existing queue.
+Jobs are held in memory and do not survive a container restart.
+
+The image's yt-dlp 2026.07.04 returned HTTP 403 for audio transfers. The playbook
+installs the checksum-verified 2026.8.19 wheel in a read-only dependency mount,
+retaining the compatible yt-dlp-ejs 0.8.0 already in the image. Keep its version,
+download URL, and checksum together when updating it.
+Inside the image, `python test_web_search.py --upstream` additionally tests
+immediate queue registration, detached work, duplicate prevention, and errors.

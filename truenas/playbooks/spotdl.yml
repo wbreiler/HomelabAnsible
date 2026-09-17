@@ -2,6 +2,9 @@
 - name: Deploy only the spotDL custom application
   hosts: truenas
   gather_facts: false
+  vars:
+    spotdl_ytdlp_version: '2026.8.19'
+    spotdl_ytdlp_sha256: 1d57897e94c6665a0a6f9bc54b34e584284e32c034ffab3a7df25d8f7b24eedf
   tasks:
     - name: Require explicit deployment opt-in and local configuration
       ansible.builtin.assert:
@@ -23,6 +26,25 @@
       loop:
         - "{{ spotdl_config_path }}"
         - "{{ spotdl_music_path }}"
+        - "{{ spotdl_config_path }}/yt-dlp-{{ spotdl_ytdlp_version }}"
+    - name: Download pinned YouTube extractor wheel
+      ansible.builtin.get_url:
+        url: >-
+          https://files.pythonhosted.org/packages/69/b2/8cd1613f56eed7ceb64fbd4df3f1c01246bfb098e6f398228bafda22b80b/yt_dlp-2026.8.19-py3-none-any.whl
+        dest: "{{ spotdl_config_path }}/yt_dlp-{{ spotdl_ytdlp_version }}.whl"
+        checksum: "sha256:{{ spotdl_ytdlp_sha256 }}"
+        owner: "{{ spotdl_uid }}"
+        group: "{{ spotdl_gid }}"
+        mode: '0644'
+    - name: Extract verified YouTube extractor
+      ansible.builtin.unarchive:
+        src: "{{ spotdl_config_path }}/yt_dlp-{{ spotdl_ytdlp_version }}.whl"
+        dest: "{{ spotdl_config_path }}/yt-dlp-{{ spotdl_ytdlp_version }}"
+        remote_src: true
+        owner: "{{ spotdl_uid }}"
+        group: "{{ spotdl_gid }}"
+        creates: "{{ spotdl_config_path }}/yt-dlp-{{ spotdl_ytdlp_version }}/yt_dlp/version.py"
+      when: not ansible_check_mode
     - name: Install bounded web metadata workaround
       ansible.builtin.copy:
         src: "{{ playbook_dir | dirname }}/files/spotdl/web_search.py"
@@ -69,9 +91,11 @@
                   - /music/{artists} - {title}.{output-ext}
                 environment:
                   TZ: "{{ spotdl_timezone | default('Etc/UTC') }}"
+                  PYTHONPATH: /opt/spotdl/yt-dlp
                 ports:
                   - "{{ spotdl_bind_address }}:8800:8800"
                 volumes:
+                  - "{{ spotdl_config_path }}/yt-dlp-{{ spotdl_ytdlp_version }}:/opt/spotdl/yt-dlp:ro"
                   - "{{ spotdl_config_path }}/web_search.py:/opt/spotdl/web_search.py:ro"
                   - "{{ spotdl_config_path }}:/home/spotdl/.config/spotdl"
                   - "{{ spotdl_music_path }}:/music"

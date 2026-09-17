@@ -9,6 +9,62 @@ import tempfile
 from web_search import link_items, run_worker, search_items, spotify_link
 
 
+async def check_queue():
+    """Run inside the pinned image with --upstream to test request detachment."""
+    import logging
+    from types import SimpleNamespace
+    import web_search
+    from spotdl.download.progress_handler import ProgressHandler
+    from spotdl.types.song import Song
+    from spotdl.web import routes
+
+    web_search.install_workaround()
+    gate = asyncio.Event()
+    url = 'https://open.spotify.com/track/2wm3azqIMOl547jRjjtgLU'
+    song = Song.from_missing_data(name='Test', artist='Test', artists=['Test'], url=url)
+    progress = ProgressHandler(simple_tui=True, web_ui=True)
+    progress.progress_tracker.songs = {}
+
+    async def metadata(*args):
+        await gate.wait()
+        return song
+
+    async def download(value):
+        return value, Path('/music/test.mp3')
+
+    client = SimpleNamespace(
+        client_id='test', downloader_settings={'output': '/music/{title}.{output-ext}'},
+        downloader=SimpleNamespace(progress_handler=progress, settings={}, pool_download=download),
+    )
+    routes.Client.get_instance = staticmethod(lambda _: client)
+    routes.app_state.web_settings = {'web_use_output_dir': True}
+    routes.app_state.logger = logging.getLogger('queue-test')
+    web_search.lookup = metadata
+    signals = SimpleNamespace(client_id='test', song_url=url)
+    # A complete HTTP response must not wait for metadata or cancel the job.
+    response = [event async for event in web_search.queue_download(signals)]
+    assert 'Queued' in str(response)
+    task = web_search.DOWNLOAD_TASKS[url]
+    assert url in progress.progress_tracker.songs and not task.done()
+    response = [event async for event in web_search.queue_download(signals)]
+    assert web_search.DOWNLOAD_TASKS[url] is task, 'Duplicate job'
+    gate.set()
+    await task
+    entry = progress.progress_tracker.songs[url]
+    assert entry.message == 'Completed' and entry.progress == 100
+    assert not web_search.DOWNLOAD_TASKS
+
+    async def failed_download(value):
+        return value, None
+
+    client.downloader.pool_download = failed_download
+    response = [event async for event in web_search.queue_download(signals)]
+    await web_search.DOWNLOAD_TASKS[url]
+    assert entry.message.startswith('Error:') and entry.progress == 0
+    assert entry.path is None
+    print('PASS: immediate queue, detached job, duplicate prevention, completion and visible failure')
+
+
 async def check():
     assert await run_worker(
         [sys.executable, "-c", "import sys; print(sys.stdin.read())"], {"ok": True}
@@ -96,4 +152,6 @@ async def check():
 
 if __name__ == "__main__":
     asyncio.run(check())
+    if '--upstream' in sys.argv:
+        asyncio.run(check_queue())
     print("PASS: results, responsiveness, worker cleanup, URL validation, album pagination, track and playlist cards")

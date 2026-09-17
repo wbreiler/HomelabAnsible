@@ -9,6 +9,68 @@ import sys
 from urllib.parse import urlsplit
 
 SPOTIFY_SETTINGS = {}
+DOWNLOAD_TASKS = {}
+
+
+async def queued_download(client, url):
+    """Own the job independently of the browser's request lifetime."""
+    from spotdl.utils.web import app_state
+
+    tracker = client.downloader.progress_handler.progress_tracker
+    try:
+        tracker.songs[url].message = "Loading metadata"
+        song = await lookup("track", url)
+        tracker.songs[url].song = song
+        tracker.songs[url].message = "Queued"
+        client.downloader.progress_handler.add_song(song)
+        if app_state.web_settings.get("web_use_output_dir", False):
+            client.downloader.settings["output"] = client.downloader_settings["output"]
+        else:
+            from spotdl.utils.config import get_spotdl_path
+            client.downloader.settings["output"] = str(
+                get_spotdl_path() / "web/sessions" / client.client_id
+            )
+        _, path = await client.downloader.pool_download(song)
+        if path is None:
+            raise RuntimeError("Audio download failed. See the container log.")
+        tracker.songs[url].path = str(path)
+        tracker.songs[url].progress = 100
+        tracker.songs[url].message = "Completed"
+    except Exception as error:
+        tracker.songs[url].message = f"Error: {error}"
+        tracker.songs[url].progress = 0
+        app_state.logger.error("Download failed for %s: %s", url, error)
+    finally:
+        DOWNLOAD_TASKS.pop(url, None)
+
+
+async def queue_download(signals):
+    from html import escape
+    from spotdl.types.song import Song
+    from spotdl.web.routes import Client, SSE
+
+    client = Client.get_instance(signals.client_id)
+    try:
+        link = spotify_link(signals.song_url)
+    except ValueError:
+        link = None
+    if client is None or not link or link[0] != "track":
+        yield SSE.patch_elements('<div id="status" role="alert">Reconnect and select a Spotify track.</div>')
+        return
+    url = "https://open.spotify.com/track/" + link[1]
+    if url not in DOWNLOAD_TASKS:
+        tracker = client.downloader.progress_handler.progress_tracker
+        song = Song.from_missing_data(name="Loading metadata", artist=url,
+                                      artists=[], album_name="", cover_url="", url=url)
+        tracker.add(song)
+        tracker.songs[url].message = "Queued"
+        tracker.songs[url].progress = 0
+        tracker.songs[url].path = None
+        DOWNLOAD_TASKS[url] = asyncio.create_task(queued_download(client, url))
+    yield SSE.patch_elements(
+        f'<button id="download-{escape(signals.song_url, quote=True)}" '
+        'class="btn btn-primary" disabled>Queued</button>'
+    )
 
 
 async def run_worker(command, payload, timeout=30):
@@ -117,6 +179,8 @@ def install_workaround():
 
     replacements = {
         routes: {
+            "    async for update in gen_download(signals):\n        yield update":
+                "    async for update in queue_download(signals):\n        yield update",
             '''    is_valid_url = validate_search_term(signals.search_term)
 
     if is_valid_url:
@@ -162,6 +226,7 @@ def install_workaround():
                 raise RuntimeError(f"Unexpected upstream code in {module.__name__}")
             source = source.replace(old, new)
         module.bounded_lookup = lookup
+        module.queue_download = queue_download
         exec(compile(source, module.__file__, "exec"), module.__dict__)
 
 
