@@ -5,7 +5,7 @@
 # Runs on the Ansible controller (not the LXC — unlike update-modpack.sh).
 # Accepts either:
 #   - a CurseForge/ServerPackCreator-style server pack zip (mods/, config/,
-#     defaultconfigs/, datapacks/ at the zip root), or
+#     defaultconfigs/, kubejs/, datapacks/ at the zip root), or
 #   - a Modrinth .mrpack file (modrinth.index.json + overrides/), which is
 #     assembled into the same shape by downloading each server-side file
 #     from its index URL and layering overrides/ (then server-overrides/) on top.
@@ -81,7 +81,7 @@ else
 fi
 
 log "Assembled pack contents:"
-for d in mods config defaultconfigs datapacks; do
+for d in mods config defaultconfigs kubejs datapacks; do
   if [[ -d "$SERVERPACK/$d" ]]; then
     log "  $d/: $(find "$SERVERPACK/$d" -type f | wc -l | tr -d ' ') file(s)"
   fi
@@ -93,16 +93,17 @@ ssh "$REMOTE" "
   svc=\$(systemctl list-units 'minecraft@*' --no-legend | awk '{print \$1}')
   [[ -n \"\$svc\" ]] && systemctl stop \"\$svc\"
   cd /opt/minecraft
-  for d in mods config defaultconfigs; do
+  for d in mods config defaultconfigs kubejs; do
     [[ -d \"\$d\" ]] && mv \"\$d\" \"\${d}.pre-zip-recreate.${TS}\"
   done
-  mkdir -p mods config defaultconfigs world/datapacks
+  mkdir -p mods config defaultconfigs kubejs world/datapacks
 "
 
-log "Syncing mods/config/defaultconfigs/datapacks to $REMOTE..."
+log "Syncing mods/config/defaultconfigs/kubejs/datapacks to $REMOTE..."
 rsync -az "$SERVERPACK/mods/" "$REMOTE:/opt/minecraft/mods/"
 [[ -d "$SERVERPACK/config" ]] && rsync -az "$SERVERPACK/config/" "$REMOTE:/opt/minecraft/config/"
 [[ -d "$SERVERPACK/defaultconfigs" ]] && rsync -az "$SERVERPACK/defaultconfigs/" "$REMOTE:/opt/minecraft/defaultconfigs/"
+[[ -d "$SERVERPACK/kubejs" ]] && rsync -az "$SERVERPACK/kubejs/" "$REMOTE:/opt/minecraft/kubejs/"
 [[ -d "$SERVERPACK/datapacks" ]] && rsync -az "$SERVERPACK/datapacks/" "$REMOTE:/opt/minecraft/world/datapacks/"
 
 ssh "$REMOTE" "chown -R minecraft:minecraft /opt/minecraft"

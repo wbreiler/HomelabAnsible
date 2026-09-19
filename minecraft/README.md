@@ -132,8 +132,9 @@ For a broken auto-reconstructed pack, prefer the official server pack:
 3. Reconcile the guest with `site.yml -e server_filter=HOSTNAME`.
 
 Manual mode disables/removes the automatic update timer. The deployment script
-backs up existing `mods`, `config`, and `defaultconfigs`, then deploys fresh
-content (including world datapacks). If `run.sh` already exists, reconciliation
+backs up existing `mods`, `config`, `defaultconfigs`, and `kubejs`, then deploys
+fresh content (including KubeJS scripts/data/assets and world datapacks).
+If `run.sh` already exists, reconciliation
 does not verify its loader version, so replace or verify loader files when the
 version changes.
 
@@ -160,6 +161,7 @@ cd minecraft/ansible
 ansible-lint
 ansible-playbook site.yml --syntax-check --ask-vault-pass
 bash -n ../update-script/update-modpack.sh ../update-script/apply-manual-pack.sh
+python3 ../update-script/test_apply_manual_pack.py
 ```
 
 Syntax/lint checks do not prove live convergence or service health.

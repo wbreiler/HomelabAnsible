@@ -89,7 +89,7 @@ servers:
   # config bug. Disables update-modpack.sh entirely (no auto-fetch, no update
   # timer). Requires loader_version (exact Forge/NeoForge version — from the
   # zip's variables.txt/manifest.json, or auto-reported by apply-manual-pack.sh
-  # when using a .mrpack). Deploy mods/config/defaultconfigs/datapacks with
+  # when using a .mrpack). Deploy mods/config/defaultconfigs/kubejs/datapacks with
   # update-script/apply-manual-pack.sh <pack.zip|pack.mrpack> root@<ansible_host>
   # — it handles both CurseForge server-pack zips and Modrinth .mrpack files.
   # See minecraft/AGENTS.md for the full procedure.
