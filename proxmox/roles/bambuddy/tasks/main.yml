@@ -37,6 +37,7 @@
           - curl
           - ffmpeg
           - npm
+          - nodejs
           - python3
           - python3-venv
           - tar
@@ -102,6 +103,7 @@
             cd {{ bambuddy_install_dir }}/frontend;
             runuser -u bambuddy -- npm ci;
             runuser -u bambuddy -- npm run build;
+            install -d -o bambuddy -g bambuddy {{ bambuddy_install_dir }}/data {{ bambuddy_install_dir }}/logs;
             printf '%s\n' {{ bambuddy_version }} > {{ bambuddy_install_dir }}/.ansible-version;
             chown bambuddy:bambuddy {{ bambuddy_install_dir }}/.ansible-version;
             rm -f /tmp/bambuddy-release.tar.gz
@@ -120,8 +122,9 @@
           dest: bambuddy.env
         - src: bambuddy.service.j2
           dest: bambuddy.service
+      register: bambuddy_config_render
 
-    - name: Push Bambuddy configuration artifacts into container
+    - name: Push Bambuddy configuration artifacts into container # noqa: no-handler
       ansible.builtin.command:
         argv:
           - pct
@@ -140,6 +143,7 @@
           mode: "0644"
       register: bambuddy_config_push
       changed_when: true
+      when: bambuddy_config_render.changed
 
     - name: Initialize Bambuddy environment without replacing local settings
       ansible.builtin.command:
@@ -170,6 +174,39 @@
           - -ceu
           - systemctl daemon-reload; systemctl enable bambuddy; systemctl restart bambuddy
       changed_when: true
+      when: >-
+        bambuddy_managed_version.rc != 0 or
+        bambuddy_managed_version.stdout | trim != bambuddy_version or
+        bambuddy_config_push.changed | default(false) or
+        bambuddy_env_init.changed
+
+    - name: Check Bambuddy service state
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - is-active
+          - --quiet
+          - bambuddy
+      register: bambuddy_service_state
+      changed_when: false
+      failed_when: false
+
+    - name: Start Bambuddy if stopped
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - systemctl
+          - start
+          - bambuddy
+      changed_when: true
+      when: bambuddy_service_state.rc != 0
 
     - name: Verify Bambuddy web service
       ansible.builtin.command:

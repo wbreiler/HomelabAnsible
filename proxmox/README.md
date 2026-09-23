@@ -477,7 +477,7 @@ spoolman_version: "0.26.1"
 install_bambuddy: true
 bambuddy_node: "atlas"
 bambuddy_vmid: ""  # selects the next available managed-app VMID
-bambuddy_version: "1.2.5"
+bambuddy_version: "1.2.5.5"
 
 install_gitea_mirror: true
 gitea_mirror_node: "atlas"  # fresh-install fallback; the role finds the current host itself

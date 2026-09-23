@@ -142,7 +142,7 @@ install_bambuddy: false
 # bambuddy_node: "atlas"
 # bambuddy_vmid: ""  # empty selects the next available managed-app VMID
 # bambuddy_hostname: "bambuddy-nash"
-# bambuddy_version: "1.2.5"
+# bambuddy_version: "1.2.5.5"
 
 install_gitea_mirror: false
 # gitea_mirror_node: "atlas"
