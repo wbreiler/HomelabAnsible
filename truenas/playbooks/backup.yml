@@ -5,14 +5,14 @@
   vars:
     truenas_backup_remote_path: /tmp/erebus-config-backup.tar
     truenas_backup_local_path: >-
-      {{ playbook_dir }}/../artifacts/erebus-config-2026-07-18.tar
+      {{ playbook_dir }}/../artifacts/erebus-config-2026-09-24.tar
 
   tasks:
     - name: Start buffered TrueNAS configuration export
       ansible.builtin.raw: >-
         midclt call core.download config.save
         '[{"secretseed":true,"pool_keys":false,"root_authorized_keys":true}]'
-        erebus-config-2026-07-18.tar true
+        erebus-config-2026-09-24.tar true
       changed_when: true
       register: truenas_backup_download
       no_log: true

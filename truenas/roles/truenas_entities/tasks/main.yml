@@ -13,7 +13,10 @@
   tags: [storage]
 
 - name: Reconcile datasets
-  ansible.builtin.include_tasks: dataset.yml
+  ansible.builtin.include_tasks:
+    file: dataset.yml
+    apply:
+      tags: [storage]
   loop: "{{ truenas_datasets }}"
   loop_control:
     loop_var: desired_dataset
@@ -34,7 +37,10 @@
   tags: [shares]
 
 - name: Reconcile SMB shares
-  ansible.builtin.include_tasks: smb.yml
+  ansible.builtin.include_tasks:
+    file: smb.yml
+    apply:
+      tags: [shares]
   loop: "{{ truenas_smb_shares }}"
   loop_control:
     loop_var: desired_smb
@@ -55,7 +61,10 @@
   tags: [shares]
 
 - name: Reconcile NFS shares
-  ansible.builtin.include_tasks: nfs.yml
+  ansible.builtin.include_tasks:
+    file: nfs.yml
+    apply:
+      tags: [shares]
   loop: "{{ truenas_nfs_shares }}"
   loop_control:
     loop_var: desired_nfs
