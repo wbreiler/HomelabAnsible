@@ -1,0 +1,58 @@
+---
+- name: Deploy only the FastChannels custom application
+  hosts: truenas
+  gather_facts: false
+  vars:
+    fastchannels_appdata: /mnt/gaia/appdata/fastchannels
+  tasks:
+    - name: Require explicit deployment opt-in
+      ansible.builtin.assert:
+        that: ansible_check_mode or truenas_allow_changes | bool
+      tags: apps
+
+    - name: Create dedicated FastChannels appdata directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - "{{ fastchannels_appdata }}"
+        - "{{ fastchannels_appdata }}/data"
+        - "{{ fastchannels_appdata }}/android"
+      tags: apps
+
+    - name: Read current FastChannels application configuration
+      ansible.builtin.raw: >-
+        midclt call app.query '[["name","=","fastchannels"]]'
+        '{"extra":{"retrieve_config":true}}'
+      check_mode: false
+      register: fastchannels_query
+      changed_when: false
+      tags: apps
+
+    - name: Reconcile only FastChannels
+      ansible.builtin.include_tasks:
+        file: ../roles/truenas_entities/tasks/app.yml
+        apply:
+          tags: apps
+      vars:
+        truenas_entities_apps: "{{ fastchannels_query.stdout | from_json }}"
+        desired_app:
+          name: fastchannels
+          custom_app: true
+          state: RUNNING
+          custom_compose_config:
+            services:
+              fastchannels:
+                image: ghcr.io/kineticman/fastchannels:v5.3.2
+                restart: unless-stopped
+                environment:
+                  PUBLIC_BASE_URL: http://10.10.20.3:5523
+                ports:
+                  - 10.10.20.3:5523:5523
+                volumes:
+                  - "{{ fastchannels_appdata }}/data:/data"
+                  - "{{ fastchannels_appdata }}/android:/root/.android"
+      tags: apps

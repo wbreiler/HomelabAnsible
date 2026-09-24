@@ -224,6 +224,8 @@ to make it pass.
 
 ## Application guides
 
+- [FastChannels](files/fastchannels/SETUP.md) — LAN channel aggregator with dedicated appdata bind mounts.
+
 - [spotDL](files/spotdl/SETUP.md) — scoped Spotify downloader with a LAN web interface.
 
 - [Lidarr](files/lidarr/SETUP.md) — scoped music-library application deployment.
