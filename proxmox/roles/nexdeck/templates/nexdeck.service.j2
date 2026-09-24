@@ -1,0 +1,18 @@
+[Unit]
+Description=NexDeck homelab dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nexdeck
+Group=nexdeck
+WorkingDirectory=/opt/nexdeck/app/backend
+Environment=NEXDECK_DATA_DIR=/var/lib/nexdeck
+Environment=NEXDECK_STATIC_DIR=/opt/nexdeck/app/frontend/dist
+ExecStart=/opt/nexdeck/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port {{ nexdeck_port }} --workers 1 --no-proxy-headers --timeout-graceful-shutdown 5
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+---
+nexdeck_node: "atlas"
+nexdeck_vmid: "129"
+nexdeck_hostname: "nexdeck-nash"
+nexdeck_storage: "local-zfs"
+nexdeck_template: ""
+nexdeck_cores: 2
+nexdeck_memory: 2048
+nexdeck_disk: 12
+nexdeck_bridge: "vmbr0"
+nexdeck_vlan: 40
+nexdeck_tags:
+  - "dashboard"
+
+nexdeck_version: "0.19.1"
+nexdeck_release_url: "https://api.github.com/repos/DerKezorm/nexdeck/tarball/v{{ nexdeck_version }}"
+nexdeck_release_checksum: "sha256:12594f1d5b3059685e999655473ec2a6dcb1aa9a02e441003a7f6abe735abd0d"
+nexdeck_port: 8000

@@ -39,6 +39,7 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
   * `homebridge`: Creates or adopts the Homebridge LXC with a pinned Debian package.
   * `spoolman`: Creates or adopts the Spoolman LXC with pinned application and uv releases.
   * `bambuddy`: Creates or adopts the Bambuddy LXC with a pinned release.
+  * `nexdeck`: Creates or adopts the NexDeck LXC with a pinned source release.
   * `gitea_mirror`: Creates or adopts the Gitea Mirror LXC with pinned application and Bun releases.
   * `seerr`: Creates or adopts the Seerr LXC with pinned application and pnpm releases.
   * `pocket_id`: Creates or adopts the Pocket ID LXC with a pinned release binary.

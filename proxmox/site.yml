@@ -64,6 +64,10 @@
       when: install_bambuddy | default(false) | bool
       tags: ['bambuddy', 'bambulab', 'lxc']
 
+    - role: nexdeck
+      when: install_nexdeck | default(false) | bool
+      tags: ['nexdeck', 'lxc']
+
     - role: gitea_mirror
       when: install_gitea_mirror | default(false) | bool
       tags: ['gitea_mirror', 'lxc']

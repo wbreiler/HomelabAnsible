@@ -1,0 +1,184 @@
+---
+- name: Validate NexDeck release and port
+  ansible.builtin.assert:
+    that:
+      - nexdeck_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - nexdeck_version | length > 0
+      - nexdeck_port | int >= 1
+      - nexdeck_port | int <= 65535
+
+- name: Resolve node currently hosting NexDeck
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ nexdeck_hostname }}"
+    lxc_fallback_node: "{{ nexdeck_node }}"
+
+- name: Set up NexDeck on its hosting node
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap NexDeck LXC
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ nexdeck_hostname }}"
+        lxc_vmid: "{{ nexdeck_vmid }}"
+        lxc_storage: "{{ nexdeck_storage }}"
+        lxc_template: "{{ nexdeck_template }}"
+        lxc_cores: "{{ nexdeck_cores }}"
+        lxc_memory: "{{ nexdeck_memory }}"
+        lxc_disk: "{{ nexdeck_disk }}"
+        lxc_bridge: "{{ nexdeck_bridge }}"
+        lxc_vlan: "{{ nexdeck_vlan }}"
+        lxc_tags: "{{ nexdeck_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+          - curl
+          - nodejs
+          - npm
+          - python3
+          - python3-venv
+          - tar
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Read installed NexDeck version
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, cat, /opt/nexdeck/.ansible-version]
+      register: nexdeck_installed_version
+      changed_when: false
+      failed_when: nexdeck_installed_version.rc not in [0, 1]
+
+    - name: Download pinned NexDeck source
+      ansible.builtin.get_url:
+        url: "{{ nexdeck_release_url }}"
+        dest: "/tmp/nexdeck-{{ nexdeck_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+        checksum: "{{ nexdeck_release_checksum }}"
+        mode: "0600"
+      when: nexdeck_installed_version.stdout | trim != nexdeck_version
+
+    - name: Push NexDeck source into LXC
+      ansible.builtin.command:
+        argv:
+          - pct
+          - push
+          - "{{ lxc_resolved_vmid }}"
+          - "/tmp/nexdeck-{{ nexdeck_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+          - /tmp/nexdeck-release.tar.gz
+          - --perms
+          - "0600"
+      changed_when: true
+      when: nexdeck_installed_version.stdout | trim != nexdeck_version
+
+    - name: Back up NexDeck data before an upgrade
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - >-
+            install -d -m 0700 /var/backups/nexdeck;
+            systemctl stop nexdeck;
+            tar -C /var/lib -czf /var/backups/nexdeck/pre-upgrade-$(date -u +%Y%m%dT%H%M%SZ).tar.gz nexdeck ||
+            { systemctl start nexdeck; exit 1; }
+      changed_when: true
+      when: >-
+        nexdeck_installed_version.rc == 0 and
+        nexdeck_installed_version.stdout | trim != nexdeck_version
+
+    - name: Install pinned NexDeck release
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - >-
+            id nexdeck >/dev/null 2>&1 || useradd --system --home-dir /var/lib/nexdeck --shell /usr/sbin/nologin nexdeck;
+            systemctl stop nexdeck 2>/dev/null || true;
+            install -d -o nexdeck -g nexdeck -m 0700 /var/lib/nexdeck;
+            install -d -o nexdeck -g nexdeck /opt/nexdeck/app;
+            tar -xzf /tmp/nexdeck-release.tar.gz -C /opt/nexdeck/app --strip-components=1;
+            chown -R nexdeck:nexdeck /opt/nexdeck;
+            runuser -u nexdeck -- python3 -m venv /opt/nexdeck/venv;
+            runuser -u nexdeck -- /opt/nexdeck/venv/bin/pip install --disable-pip-version-check -r /opt/nexdeck/app/backend/requirements.txt;
+            cd /opt/nexdeck/app/frontend;
+            runuser -u nexdeck -- npm ci;
+            runuser -u nexdeck -- npm run build;
+            printf '%s\n' {{ nexdeck_version | quote }} > /opt/nexdeck/.ansible-version;
+            chown nexdeck:nexdeck /opt/nexdeck/.ansible-version;
+            rm -f /tmp/nexdeck-release.tar.gz
+      changed_when: true
+      when: nexdeck_installed_version.stdout | trim != nexdeck_version
+
+    - name: Render NexDeck service file
+      ansible.builtin.template:
+        src: nexdeck.service.j2
+        dest: "/tmp/nexdeck.service-{{ lxc_resolved_vmid }}"
+        mode: "0600"
+      register: nexdeck_service_render
+
+    - name: Push NexDeck service file # noqa: no-handler
+      ansible.builtin.command:
+        argv:
+          - pct
+          - push
+          - "{{ lxc_resolved_vmid }}"
+          - "/tmp/nexdeck.service-{{ lxc_resolved_vmid }}"
+          - /etc/systemd/system/nexdeck.service
+          - --perms
+          - "0644"
+      changed_when: true
+      when: nexdeck_service_render.changed
+
+    - name: Enable and restart NexDeck
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - systemctl daemon-reload; systemctl enable nexdeck; systemctl restart nexdeck
+      changed_when: true
+      when: >-
+        nexdeck_installed_version.stdout | trim != nexdeck_version or
+        nexdeck_service_render.changed
+
+    - name: Check NexDeck service
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, systemctl, is-active, --quiet, nexdeck]
+      register: nexdeck_service_state
+      changed_when: false
+      failed_when: false
+
+    - name: Start NexDeck if stopped
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, systemctl, start, nexdeck]
+      changed_when: true
+      when: nexdeck_service_state.rc != 0
+
+    - name: Verify NexDeck API health
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - "http://127.0.0.1:{{ nexdeck_port }}/api/health"
+      register: nexdeck_health
+      retries: 12
+      delay: 5
+      until: >-
+        nexdeck_health.rc == 0 and
+        (nexdeck_health.stdout | from_json).version == nexdeck_version
+      changed_when: false
