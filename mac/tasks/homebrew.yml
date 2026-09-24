@@ -239,15 +239,10 @@
   loop:
     # Browsers
     - google-chrome
-    - google-chrome@canary
-    - orion
-    - zen
 
     # Communication
     - discord
-    - signal
     - whatsapp
-    - slack
 
     # Dev tools
     - visual-studio-code
@@ -259,6 +254,7 @@
     - temurin@21
     - codex
     - codexbar
+    - chatgpt
     - zed
 
     # Terminals & system
@@ -280,6 +276,7 @@
     # Gaming / 3D printing / emulation
     - curseforge
     - modrinth
+    - prismlauncher
     - prusaslicer
     - bambu-studio
     - cemu
@@ -287,6 +284,7 @@
 
     # Utilities
     - bitwarden
+    - logi-options+
     - coconutbattery
     - istat-menus
     - istatistica-core

@@ -47,12 +47,11 @@
   command: >
     /opt/homebrew/bin/dockutil --add "{{ item.path }}" --no-restart
   loop:
-    - { path: "/Applications/Google Chrome.app" }
+    - { path: "/Applications/Safari.app" }
     - { path: "/System/Applications/Messages.app" }
     - { path: "/Applications/Discord.app" }
     - { path: "/System/Applications/Music.app" }
-    - { path: "/Applications/iTerm.app" }
-    - { path: "/Applications/Claude.app" }
+    - { path: "/System/Applications/Utilities/Terminal.app" }
   changed_when: true
   environment:
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
