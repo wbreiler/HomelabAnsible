@@ -1,0 +1,60 @@
+---
+- name: Deploy only the Threadfin custom application
+  hosts: truenas
+  gather_facts: false
+  vars:
+    threadfin_appdata: /mnt/gaia/appdata/threadfin
+  tasks:
+    - name: Require explicit deployment opt-in
+      ansible.builtin.assert:
+        that: ansible_check_mode or truenas_allow_changes | bool
+      tags: apps
+
+    - name: Create dedicated Threadfin appdata directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - "{{ threadfin_appdata }}"
+        - "{{ threadfin_appdata }}/conf"
+        - "{{ threadfin_appdata }}/temp"
+      tags: apps
+
+    - name: Read current Threadfin application configuration
+      ansible.builtin.raw: >-
+        midclt call app.query '[["name","=","threadfin"]]'
+        '{"extra":{"retrieve_config":true}}'
+      check_mode: false
+      register: threadfin_query
+      changed_when: false
+      tags: apps
+
+    - name: Reconcile only Threadfin
+      ansible.builtin.include_tasks:
+        file: ../roles/truenas_entities/tasks/app.yml
+        apply:
+          tags: apps
+      vars:
+        truenas_entities_apps: "{{ threadfin_query.stdout | from_json }}"
+        desired_app:
+          name: threadfin
+          custom_app: true
+          state: RUNNING
+          custom_compose_config:
+            services:
+              threadfin:
+                image: fyb3roptik/threadfin:1.2.37
+                restart: unless-stopped
+                environment:
+                  PUID: '0'
+                  PGID: '0'
+                  TZ: America/Chicago
+                ports:
+                  - 10.10.20.3:34400:34400
+                volumes:
+                  - "{{ threadfin_appdata }}/conf:/home/threadfin/conf"
+                  - "{{ threadfin_appdata }}/temp:/tmp/threadfin"
+      tags: apps

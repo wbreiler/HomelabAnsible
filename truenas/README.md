@@ -226,6 +226,8 @@ to make it pass.
 
 - [FastChannels](files/fastchannels/SETUP.md) — LAN channel aggregator with dedicated appdata bind mounts.
 
+- [Threadfin](files/threadfin/SETUP.md) — FastChannels tuner bridge for Plex.
+
 - [spotDL](files/spotdl/SETUP.md) — scoped Spotify downloader with a LAN web interface.
 
 - [Lidarr](files/lidarr/SETUP.md) — scoped music-library application deployment.
