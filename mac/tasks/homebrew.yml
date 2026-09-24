@@ -26,10 +26,7 @@
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
   loop:
     - artginzburg/tap            # sudo-touchid
-    - izyuumi/xcode-discord-rpc
-    - metafates/mangal
     - minacle/chntpw
-    - scouzi1966/afm
     - teamookla/speedtest
 
 # --- Trust third-party taps (required by Homebrew 4.5+) ---
@@ -39,10 +36,7 @@
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
   loop:
     - artginzburg/tap
-    - izyuumi/xcode-discord-rpc
-    - metafates/mangal
     - minacle/chntpw
-    - scouzi1966/afm
     - teamookla/speedtest
   register: trust_result
   changed_when: trust_result.rc == 0
@@ -80,10 +74,8 @@
     # System monitoring
     - btop
     - bmon
-    - ifstat
     - ncdu
     - macmon
-    - asitop
     - nvtop
     - iperf3
     - ipmitool
@@ -94,9 +86,6 @@
 
     # Terminal fun/info
     - fastfetch
-    - fortune
-    - cowsay
-    - c2048
     - thefuck
     - cpufetch
     - hyfetch
@@ -192,8 +181,6 @@
 
     # Terminal tools & editors
     - neovim
-    - weechat
-    - stormy
     - terminal-notifier
     - tree-sitter
 
@@ -201,17 +188,11 @@
     - lnav
     - mas
     - xcodes
-    - xcode-discord-rpc
     - ipatool
     - chntpw
     - container-compose
-    - mangal
-    - mailsy
     - ccusage
     - sudo-touchid
-    - afm
-    - merve
-    - ata
     - cliproxyapi
     - dylibbundler
     - wxwidgets
