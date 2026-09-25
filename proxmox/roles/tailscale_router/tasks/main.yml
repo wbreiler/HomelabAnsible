@@ -43,6 +43,12 @@
         lxc_nfs_export: ""
         lxc_nfs_mountpoint: ""
 
+    - name: Start Tailscale router automatically with its host
+      ansible.builtin.lineinfile:
+        path: "/etc/pve/lxc/{{ lxc_resolved_vmid }}.conf"
+        regexp: '^onboot:'
+        line: 'onboot: 1'
+
     - name: Allow the TUN device in the container's cgroup
       ansible.builtin.lineinfile:
         path: "/etc/pve/lxc/{{ lxc_resolved_vmid }}.conf"

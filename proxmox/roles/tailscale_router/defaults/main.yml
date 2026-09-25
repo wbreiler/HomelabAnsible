@@ -17,7 +17,7 @@ tailscale_router_tags:
 # release, since Tailscale ships static binaries with no libc dependency.
 tailscale_router_repo_key_url: "https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg"
 tailscale_router_repo_key_checksum: "sha256:3e03dacf222698c60b8e2f990b809ca1b3e104de127767864284e6c228f1fb39"
-tailscale_router_version: "1.102.2"
+tailscale_router_version: "1.102.4"
 
 # Reusable auth key from the Tailscale admin console (Settings -> Keys).
 # Store the real value in vault-encrypted group_vars.
