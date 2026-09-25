@@ -102,7 +102,7 @@
             runuser -u bambuddy -- {{ bambuddy_install_dir }}/venv/bin/pip install --disable-pip-version-check -r {{ bambuddy_install_dir }}/requirements.txt;
             cd {{ bambuddy_install_dir }}/frontend;
             runuser -u bambuddy -- npm ci;
-            runuser -u bambuddy -- npm run build;
+            runuser -u bambuddy -- env NODE_OPTIONS=--max-old-space-size=3072 npm run build;
             install -d -o bambuddy -g bambuddy {{ bambuddy_install_dir }}/data {{ bambuddy_install_dir }}/logs;
             printf '%s\n' {{ bambuddy_version }} > {{ bambuddy_install_dir }}/.ansible-version;
             chown bambuddy:bambuddy {{ bambuddy_install_dir }}/.ansible-version;

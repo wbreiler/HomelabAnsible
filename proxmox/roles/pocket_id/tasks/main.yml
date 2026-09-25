@@ -187,7 +187,7 @@
     - name: Install pinned Pocket ID release
       when: >-
         pocket_id_installed_version.rc != 0 or
-        pocket_id_installed_version.stdout | trim | split | last != pocket_id_version
+        (pocket_id_installed_version.stdout | default('') | trim | split | last | default('')) != pocket_id_version
       block:
         - name: Download pinned Pocket ID release
           ansible.builtin.get_url:

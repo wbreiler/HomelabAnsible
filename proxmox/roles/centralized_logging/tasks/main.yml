@@ -92,7 +92,7 @@
             printf '#!/bin/sh\nexit 101\n' > "$policy"
             chmod 0755 "$policy"
             apt-get update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -q --allow-change-held-packages \
               "loki={{ centralized_logging_loki_version }}" \
               "grafana={{ centralized_logging_grafana_version }}" \
               "alloy={{ centralized_logging_alloy_version }}"

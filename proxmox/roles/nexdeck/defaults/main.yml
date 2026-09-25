@@ -12,7 +12,7 @@ nexdeck_vlan: 40
 nexdeck_tags:
   - "dashboard"
 
-nexdeck_version: "0.19.1"
+nexdeck_version: "0.19.2"
 nexdeck_release_url: "https://api.github.com/repos/DerKezorm/nexdeck/tarball/v{{ nexdeck_version }}"
-nexdeck_release_checksum: "sha256:12594f1d5b3059685e999655473ec2a6dcb1aa9a02e441003a7f6abe735abd0d"
+nexdeck_release_checksum: "sha256:b7979c356a4cabb416182371506be7dca93df875a8a6a2424933daf241c5de3e"
 nexdeck_port: 8000

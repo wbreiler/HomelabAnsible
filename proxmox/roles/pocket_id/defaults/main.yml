@@ -12,11 +12,11 @@ pocket_id_vlan: 40
 pocket_id_tags:
   - "identity-provider"
 
-pocket_id_version: "2.13.0"
+pocket_id_version: "2.16.0"
 pocket_id_release_url: >-
   https://github.com/pocket-id/pocket-id/releases/download/v{{ pocket_id_version
   }}/pocket-id_linux_amd64
-pocket_id_release_checksum: "sha256:45b39df9f6d685dee3caa379933f72bbb41428944ee8292853fb9e0b7e8e8b56"
+pocket_id_release_checksum: "sha256:4ba26810e8d2c2d46aea42d8e960cb457cf8bc36cc009446a18d7d856abd3aa7"
 pocket_id_install_dir: "/opt/pocket-id"
 pocket_id_backup_dir: "/opt/pocket-id-backups"
 pocket_id_user: "pocketid"

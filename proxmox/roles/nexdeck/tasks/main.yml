@@ -176,6 +176,7 @@
           - --show-error
           - "http://127.0.0.1:{{ nexdeck_port }}/api/health"
       register: nexdeck_health
+      when: not ansible_check_mode
       retries: 12
       delay: 5
       until: >-

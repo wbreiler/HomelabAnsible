@@ -13,8 +13,8 @@ centralized_logging_tags: [logging, monitoring]
 
 centralized_logging_retention: "720h"
 centralized_logging_grafana_hostname: "graf-nash"
-centralized_logging_loki_version: "3.7.7"
-centralized_logging_grafana_version: "13.2.1"
+centralized_logging_loki_version: "3.7.8"
+centralized_logging_grafana_version: "13.2.2"
 centralized_logging_alloy_version: "1.19.2-1"
 centralized_logging_grafana_key_url: "https://apt.grafana.com/gpg-full.key"
 centralized_logging_grafana_key_checksum: "sha256:d8f5f6f4c174c3b9184cb6ebbf691a2ee69831a109425de4e821f5b43c53a2f8"

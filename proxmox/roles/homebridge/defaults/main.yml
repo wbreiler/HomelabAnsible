@@ -12,7 +12,7 @@ homebridge_vlan: 40
 homebridge_tags:
   - smarthome
 
-homebridge_version: "2.0.5"
+homebridge_version: "2.0.19"
 homebridge_repository_url: "https://repo.homebridge.io"
 homebridge_repository_key_url: "https://repo.homebridge.io/KEY.gpg"
 homebridge_repository_key_checksum: "sha256:1932a64468cdba913cb8818e934262fdbdfc5f86193bb2d293256d8d246baabe"

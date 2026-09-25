@@ -12,10 +12,10 @@ spoolman_vlan: 40
 spoolman_tags:
   - "3d-printing"
 
-spoolman_version: "0.26.1"
+spoolman_version: "0.27.0"
 spoolman_release_url: >-
   https://github.com/Donkie/Spoolman/releases/download/v{{ spoolman_version }}/spoolman.zip
-spoolman_release_checksum: "sha256:c8104ac4089fb6cfb4ab2e4723315502d75f3b5045b982d9d5787a5db84bc969"
+spoolman_release_checksum: "sha256:bcc961af4c20d7ad7f1740f5609cd3efd94c4556baafaeba5036122dd7e46704"
 spoolman_install_dir: "/opt/spoolman"
 spoolman_user: "spoolman"
 spoolman_data_dir: "/var/lib/spoolman"
