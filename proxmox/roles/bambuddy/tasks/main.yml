@@ -45,6 +45,12 @@
         lxc_nfs_export: ""
         lxc_nfs_mountpoint: ""
 
+    - name: Start Bambuddy automatically with its host
+      ansible.builtin.lineinfile:
+        path: "/etc/pve/lxc/{{ lxc_resolved_vmid }}.conf"
+        regexp: '^onboot:'
+        line: 'onboot: 1'
+
     - name: Read managed Bambuddy version
       ansible.builtin.command:
         argv:
