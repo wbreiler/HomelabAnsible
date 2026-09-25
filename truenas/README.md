@@ -224,6 +224,8 @@ to make it pass.
 
 ## Application guides
 
+- [LANCache](files/lancache/SETUP.md) — scoped game-download cache and DNS service.
+
 - [FastChannels](files/fastchannels/SETUP.md) — LAN channel aggregator with dedicated appdata bind mounts.
 
 - [Threadfin](files/threadfin/SETUP.md) — FastChannels tuner bridge for Plex.

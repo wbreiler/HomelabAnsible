@@ -1,0 +1,84 @@
+---
+- name: Deploy only the LANCache custom application
+  hosts: truenas
+  gather_facts: false
+  tags: [apps]
+  tasks:
+    - name: Require deployment opt-in and local configuration
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode or truenas_allow_changes | bool
+          - lancache_bind_address is defined
+          - lancache_root is defined
+          - lancache_upstream_dns is defined
+          - lancache_upstream_dns != lancache_bind_address
+          - lancache_root.startswith('/mnt/')
+    - name: Read current LANCache application configuration
+      ansible.builtin.raw: >-
+        midclt call app.query '[["name","=","lancache"]]'
+        '{"extra":{"retrieve_config":true}}'
+      check_mode: false
+      register: lancache_query
+      changed_when: false
+    - name: Verify TCP ports are unused before first deployment
+      ansible.builtin.wait_for:
+        host: "{{ lancache_bind_address }}"
+        port: "{{ item }}"
+        state: stopped
+        timeout: 3
+      loop: [53, 80, 443]
+      check_mode: false
+      when: lancache_query.stdout | from_json | length == 0
+    - name: Create dedicated LANCache directories
+      ansible.builtin.file:
+        path: "{{ lancache_root }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop: [cache, logs]
+    - name: Reconcile only LANCache
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
+      vars:
+        truenas_entities_apps: "{{ lancache_query.stdout | from_json }}"
+        desired_app:
+          name: lancache
+          custom_app: true
+          state: RUNNING
+          custom_compose_config:
+            services:
+              dns:
+                image: lancachenet/lancache-dns@sha256:cec61382a3b4b8ef6dfc4ff44eefd4028ea48662ff5930097bb366b69e22296c
+                restart: unless-stopped
+                environment:
+                  USE_GENERIC_CACHE: 'true'
+                  LANCACHE_IP: "{{ lancache_bind_address }}"
+                  UPSTREAM_DNS: "{{ lancache_upstream_dns }}"
+                  TZ: "{{ lancache_timezone | default('Etc/UTC') }}"
+                ports:
+                  - "{{ lancache_bind_address }}:53:53/udp"
+                  - "{{ lancache_bind_address }}:53:53/tcp"
+                logging:
+                  driver: json-file
+                  options:
+                    max-size: 10m
+                    max-file: '3'
+              monolithic:
+                image: lancachenet/monolithic@sha256:37f28b362c939a333f3e4f12aa8ca80604cf75050b2f190d0ad972b2fedce00e
+                restart: unless-stopped
+                environment:
+                  UPSTREAM_DNS: "{{ lancache_upstream_dns }}"
+                  CACHE_DISK_SIZE: "{{ lancache_disk_size | default('1000g') }}"
+                  CACHE_INDEX_SIZE: 250m
+                  MIN_FREE_DISK: 100g
+                  CACHE_MAX_AGE: 3650d
+                  TZ: "{{ lancache_timezone | default('Etc/UTC') }}"
+                ports:
+                  - "{{ lancache_bind_address }}:80:80/tcp"
+                  - "{{ lancache_bind_address }}:443:443/tcp"
+                volumes:
+                  - "{{ lancache_root }}/cache:/data/cache"
+                  - "{{ lancache_root }}/logs:/data/logs"
+                logging:
+                  driver: json-file
+                  options:
+                    max-size: 10m
+                    max-file: '3'
