@@ -27,13 +27,16 @@ volume() {
 source /etc/os-release
 host=$(hostname -f 2>/dev/null || hostname)
 host=${host%.}
-read -r client_ip _ machine_ip _ <<< "${SSH_CONNECTION:-}"
-if [[ -z $machine_ip ]]; then
-    machine_ip=$(ip -o -4 addr show scope global 2>/dev/null |
-        awk '$2 !~ /^(docker|veth|br-|virbr)/ {split($4, a, "/"); print a[1]; exit}')
+read -r client_ip _ ssh_server _ <<< "${SSH_CONNECTION:-}"
+machine_ips=$(ip -o -4 addr show scope global 2>/dev/null |
+    awk '$2 !~ /^(docker|veth|br-|virbr)/ {split($4, a, "/"); print a[1]}')
+machine_ip=${machine_ips%%$'\n'*}
+if [[ -n $ssh_server ]] && grep -Fxq "$ssh_server" <<< "$machine_ips"; then
+    machine_ip=$ssh_server
+else
+    client_ip='Not connected'
 fi
 machine_ip=${machine_ip:-Unavailable}
-client_ip=${client_ip:-Not\ connected}
 
 platform=''
 if command -v pveversion >/dev/null 2>&1; then
@@ -46,8 +49,11 @@ fi
 cpu_model=$(lscpu | awk -F: '/^Model name:/ {sub(/^[[:space:]]+/, "", $2); print $2; exit}' |
     sed -E 's/\(R\)//g; s/ CPU / /; s/ @.*//')
 cpu_sockets=$(lscpu | awk -F: '/^Socket\(s\):/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')
-cpu_cores=$(nproc --all)
+cpu_cores=$(nproc)
 cpu_freq=$(awk -F: '/^cpu MHz/ {printf "%.2f", $2 / 1000; exit}' /proc/cpuinfo)
+if [[ $(systemd-detect-virt --container 2>/dev/null) == lxc ]]; then
+    cpu_sockets=''
+fi
 read -r load_1 load_5 load_15 _ < /proc/loadavg
 
 read -r mem_total mem_available < <(awk '
@@ -105,7 +111,9 @@ row 'IP' "$machine_ip"
 row 'CLIENT' "$client_ip"
 divider
 row 'CPU' "$cpu_model"
-row 'CORES' "$cpu_cores CPU(s) / ${cpu_sockets:-?} socket(s) / ${cpu_freq:-?} GHz"
+cpu_detail="$cpu_cores CPU(s)"
+[[ -n $cpu_sockets ]] && cpu_detail+=" / $cpu_sockets socket(s)"
+row 'CORES' "$cpu_detail / ${cpu_freq:-?} GHz"
 row 'LOAD 1/5/15m' "$load_1 / $load_5 / $load_15"
 divider
 row 'ROOT' "$root_volume"

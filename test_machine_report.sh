@@ -15,4 +15,6 @@ done <<< "$report"
 [[ $report == *'│ ROOT         │ '*' GiB ('* ]]
 [[ $report == *'│ MEMORY       │ '*' GiB ('* ]]
 [[ $report == *'│ LOAD 1/5/15m │ '* ]]
+[[ -z ${REPORT_EXPECT_IP:-} || $report == *"│ IP           │ $REPORT_EXPECT_IP"* ]]
+[[ -z ${REPORT_EXPECT_CORES:-} || $report == *"│ CORES        │ $REPORT_EXPECT_CORES CPU(s)"* ]]
 printf 'Report rows aligned; root, memory, and load populated.\n'
