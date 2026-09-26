@@ -1,0 +1,23 @@
+# One-shot workers. Use `docker compose run --rm`, never `up`.
+services:
+  steam:
+    image: tpill90/steam-lancache-prefill@sha256:4c940d040ef422abec322a7b5afabe4adcf052f62d39eca5c2d336ffab0eaccc
+    dns: ["${LANCACHE_IP:?Set LANCACHE_IP}"]
+    volumes:
+      - steam-config:/Config
+    entrypoint: [/bin/sh, -c, 'umask 077; exec /app/SteamPrefill "$$@"', SteamPrefill]
+    command: [prefill, --os, windows]
+    logging:
+      driver: none
+  epic:
+    image: tpill90/epic-lancache-prefill@sha256:cbfe7a172b8606efe8511319817745dba3681bacdd6c91f2eb0028d1ceb91c65
+    dns: ["${LANCACHE_IP:?Set LANCACHE_IP}"]
+    volumes:
+      - epic-config:/Config
+    entrypoint: [/bin/sh, -c, 'umask 077; exec /EpicPrefill "$$@"', EpicPrefill]
+    command: [prefill]
+    logging:
+      driver: none
+volumes:
+  steam-config:
+  epic-config:

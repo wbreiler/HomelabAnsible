@@ -90,3 +90,68 @@ or cache directories as part of ordinary troubleshooting.
 
 Upstream: [LANCache documentation](https://lancache.net/docs/) and
 [official Compose configuration](https://github.com/lancachenet/docker-compose).
+
+## Prefill selected games
+
+`prefill.compose.yml` provides optional, one-shot SteamPrefill and EpicPrefill
+workers. Both use pinned image digests and route DNS through LANCache without
+changing appliance DNS. Run them with `docker compose run --rm`, not `up`.
+
+Copy that file as `compose.yml` into a private directory such as
+`/root/.config/lancache-prefill` (mode `0700`). In the same directory, create
+a mode-`0600` `.env` with the local cache address:
+
+```dotenv
+LANCACHE_IP=192.0.2.10
+```
+
+Each worker reads `selectedAppsToPrefill.json` from its private Docker volume. The
+format is a JSON array: numeric Steam app IDs, or string Epic app names.
+An example selection for Overwatch and Schedule I is `[2357570,3164500]`.
+Fortnite's Epic selection is `["Fortnite"]`. Keep actual selections local.
+Alternatively, use each worker's `select-apps` command to select owned games.
+
+Validate the configuration and cache DNS from that directory:
+
+```sh
+docker compose config --quiet
+docker compose run --rm steam --help
+docker compose run --rm epic --help
+docker compose run --rm --entrypoint getent steam hosts lancache.steamcontent.com
+docker compose run --rm --entrypoint getent epic hosts epicgames-download1.akamaized.net
+```
+
+Both DNS checks must return the configured LANCache IP. Initialize private
+permissions before login (new volumes only):
+
+```sh
+docker compose run --rm --entrypoint sh steam -c 'chmod 700 /Config'
+docker compose run --rm --entrypoint sh epic -c 'chmod 700 /Config'
+```
+
+Use Docker volumes rather than bind mounts inside datasets with shared inherited
+ACLs. Confirm `/Config` is mode `0700` and newly created files are mode `0600`.
+Never print saved account files. Do not use `docker compose down --volumes`,
+which deletes saved sessions and selections.
+
+Then run interactively
+in your own terminal, one launcher at a time:
+
+```sh
+docker compose run --rm epic
+docker compose run --rm steam
+```
+
+Steam prompts for your login and Steam Guard. The account must own Schedule I
+and have access to Overwatch. Epic prompts for browser login and an authorization
+code. Enter credentials and codes only into your terminal, never chat or command
+arguments. Saved sessions remain in the Docker volumes. The workers
+use `umask 077` and disable Docker log capture to protect authentication data.
+
+These commands begin downloads after authentication. Steam targets Windows.
+The workers consume bandwidth and fill LANCache without retaining separate game
+installations. Keep the terminal open until completion. Verify the final game
+summary and LANCache access logs before treating a game as fully cached.
+
+References: [SteamPrefill](https://github.com/tpill90/steam-lancache-prefill) and
+[EpicPrefill](https://github.com/tpill90/epic-lancache-prefill).
