@@ -1067,3 +1067,30 @@ ssh root@10.10.30.9 'pct exec 130 -- sed -n "s/^ADMIN_PASSWORD=//p" /opt/speedte
 That command assumes VMID 130 still resides on Atlas. Resolve its current node
 with `pvesh get /cluster/resources --type vm` if the container has moved.
 The role preserves the encryption key, password, and database on repeat runs.
+
+Discord notifications use an optional digest-pinned Apprise container inside
+this same LXC. No extra LXC or published Apprise port is needed. Set
+`speedtest_tracker_discord_enabled: true` and
+`speedtest_tracker_discord_webhook_url` in ignored or Vault-encrypted variables,
+then apply the `speedtest_tracker` tag. The webhook passes through stdin with
+`no_log`, never through process arguments or tracked files.
+
+The role sends Discord alerts only when scheduled tests fall below 1000 Mbps
+download or 250 Mbps upload (either condition). Override these with
+`speedtest_tracker_download_threshold` and `speedtest_tracker_upload_threshold`.
+Routine successful results and ping alerts are disabled. Each below-threshold
+hourly test can produce an alert. Existing settings are preserved before the
+first managed change in `/var/lib/speedtest-tracker/.*-before-ansible.json`.
+Repeat deployments do not send test messages. To stop delivery, disable Apprise
+in the application and set the Ansible gate false. The gate controls configuration
+management and does not erase saved settings.
+
+Verify threshold boundaries and notification triggers without sending messages:
+
+```bash
+ssh root@10.10.30.9 'pct exec 130 -- docker exec -i -u abc -w /app/www speedtest-tracker php' \
+  < roles/speedtest_tracker/files/verify-notifications.php
+```
+
+Run this from `proxmox/` after enabling notifications. Resolve current LXC
+placement before using the example host and VMID.

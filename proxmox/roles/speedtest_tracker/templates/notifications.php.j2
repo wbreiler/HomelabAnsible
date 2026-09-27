@@ -1,0 +1,55 @@
+<?php
+// Configure through Laravel's settings API so its cache stays consistent.
+require 'vendor/autoload.php';
+$app = require 'bootstrap/app.php';
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+try {
+    $webhook = json_decode(base64_decode('{{ speedtest_tracker_discord_webhook_url | to_json | b64encode }}'), true, 512, JSON_THROW_ON_ERROR);
+    if (!preg_match('~^https://discord\.com/api/webhooks/([0-9]+)/([A-Za-z0-9_-]+)$~D', $webhook, $parts)) {
+        throw new RuntimeException('Invalid Discord webhook');
+    }
+    $desired = [
+        'apprise_enabled' => true,
+        'apprise_server_url' => 'http://apprise:8000/notify/',
+        'apprise_verify_ssl' => true,
+        'apprise_on_speedtest_run' => false,
+        'apprise_on_threshold_failure' => true,
+        'apprise_channel_urls' => [['channel_url' => "discord://{$parts[1]}/{$parts[2]}?avatar=no"]],
+        'discord_enabled' => false,
+    ];
+    $groups = [
+        App\Settings\NotificationSettings::class => $desired,
+        App\Settings\ThresholdSettings::class => [
+            'absolute_enabled' => true,
+            'absolute_download' => (float) {{ speedtest_tracker_download_threshold | float }},
+            'absolute_upload' => (float) {{ speedtest_tracker_upload_threshold | float }},
+            'absolute_ping' => null,
+        ],
+    ];
+    $changed = false;
+    foreach ($groups as $class => $values) {
+        $settings = app($class);
+        $groupChanged = false;
+        foreach ($values as $key => $value) {
+            if ($settings->$key !== $value) {
+                $groupChanged = true;
+            }
+        }
+        $changed = $changed || $groupChanged;
+        if ($groupChanged && !{{ ansible_check_mode | ternary('true', 'false') }}) {
+            umask(0077);
+            $backup = '/config/.'.$settings::group().'-before-ansible.json';
+            if (!file_exists($backup)) {
+                if (file_put_contents($backup, json_encode($settings->toArray(), JSON_THROW_ON_ERROR)) === false) {
+                    throw new RuntimeException('Cannot back up settings');
+                }
+            }
+            $settings->fill($values)->save();
+        }
+    }
+    echo $changed ? "changed\n" : "unchanged\n";
+} catch (Throwable $error) {
+    // Do not print exceptions that could contain a webhook credential.
+    fwrite(STDERR, "Notification configuration failed.\n");
+    exit(1);
+}

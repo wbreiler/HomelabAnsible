@@ -450,3 +450,9 @@ install_speedtest_tracker: false
 speedtest_tracker_node: "atlas"
 speedtest_tracker_vmid: "130"
 speedtest_tracker_schedule: "17 * * * *"
+# Optional Discord delivery through a private Apprise container in the same LXC.
+speedtest_tracker_discord_enabled: false
+# Keep the real webhook in ignored or Vault-encrypted variables.
+# speedtest_tracker_discord_webhook_url: "{{ diun_discord_webhook_url }}"
+speedtest_tracker_download_threshold: 1000  # Mbps
+speedtest_tracker_upload_threshold: 250     # Mbps

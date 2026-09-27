@@ -6,6 +6,16 @@
       - speedtest_tracker_port | int > 0
       - speedtest_tracker_port | int < 65536
 
+- name: Validate Discord configuration
+  ansible.builtin.assert:
+    that:
+      - speedtest_tracker_download_threshold | float > 0
+      - speedtest_tracker_upload_threshold | float > 0
+      - speedtest_tracker_apprise_image is match('^docker.io/caronc/apprise:[^@]+@sha256:[0-9a-f]{64}$')
+      - speedtest_tracker_discord_webhook_url is match('^https://discord\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$')
+  no_log: true
+  when: speedtest_tracker_discord_enabled | bool
+
 - name: Resolve Speedtest Tracker node
   ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
   vars:
@@ -160,3 +170,72 @@
       retries: 30
       delay: 5
       when: not ansible_check_mode
+
+    - name: Verify private Apprise API
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - docker
+          - exec
+          - speedtest-tracker
+          - curl
+          - --fail
+          - --silent
+          - http://apprise:8000/status
+      register: speedtest_tracker_apprise_health
+      changed_when: false
+      until: speedtest_tracker_apprise_health.rc == 0
+      retries: 24
+      delay: 5
+      when:
+        - speedtest_tracker_discord_enabled | bool
+        - not ansible_check_mode
+
+    - name: Configure Discord notifications through application settings
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - docker
+          - exec
+          - -i
+          - -u
+          - abc
+          - -w
+          - /app/www
+          - speedtest-tracker
+          - php
+        stdin: "{{ lookup('template', 'notifications.php.j2') }}"
+      register: speedtest_tracker_notifications
+      changed_when: speedtest_tracker_notifications.stdout | trim == 'changed'
+      check_mode: false
+      no_log: true
+      when: speedtest_tracker_discord_enabled | bool
+
+    - name: Reload notification settings in queue workers # noqa: no-handler
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - docker
+          - exec
+          - -u
+          - abc
+          - -w
+          - /app/www
+          - speedtest-tracker
+          - php
+          - artisan
+          - queue:restart
+      changed_when: true
+      when:
+        - speedtest_tracker_discord_enabled | bool
+        - speedtest_tracker_notifications.changed
+        - not ansible_check_mode

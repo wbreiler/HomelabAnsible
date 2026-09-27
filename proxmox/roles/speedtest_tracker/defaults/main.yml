@@ -15,3 +15,9 @@ speedtest_tracker_port: 80
 speedtest_tracker_schedule: "17 * * * *"
 speedtest_tracker_timezone: America/Chicago
 speedtest_tracker_admin_email: admin@example.com
+speedtest_tracker_discord_enabled: false
+speedtest_tracker_discord_webhook_url: ""
+speedtest_tracker_apprise_image: >-
+  docker.io/caronc/apprise:v2.0.0@sha256:cc5ef662ad2a4a25958f1eddbf87f2e95f9bf637ea481f1adcec18312ad262f5
+speedtest_tracker_download_threshold: 1000
+speedtest_tracker_upload_threshold: 250
