@@ -506,3 +506,13 @@ management, LXC installation, system updates, and PBS restores.
   first use but rejects a changed key afterward.
 * **SSH Pipelining**: Enabled for performance.
 * **Privilege Escalation**: `become = true` is set globally.
+
+### speedtest_tracker
+
+* Deploys a digest-pinned LinuxServer Speedtest Tracker image through Docker
+  Compose inside an unprivileged Debian 13 LXC. Uses the shared bootstrap.
+* Opt in with `install_speedtest_tracker: true` and the `speedtest_tracker` tag.
+* The initial fallback is Atlas, VMID 130. Verify live placement before operations.
+* Secrets are generated inside the LXC and stored in a root-only file. Preserve
+  `/opt/speedtest-tracker/secrets.env` with `/var/lib/speedtest-tracker` backups.
+* Tests run hourly. A speed test can temporarily consume the Internet connection.

@@ -100,6 +100,10 @@
       when: install_gallery_dl | default(false) | bool
       tags: ['gallery_dl', 'lxc']
 
+    - role: speedtest_tracker
+      when: install_speedtest_tracker | default(false) | bool
+      tags: ['speedtest_tracker', 'monitoring', 'lxc']
+
     - role: gatus
       when: install_gatus | default(false) | bool
       tags: ['gatus', 'monitoring', 'lxc']

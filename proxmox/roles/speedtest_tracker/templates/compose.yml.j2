@@ -1,0 +1,25 @@
+services:
+  speedtest-tracker:
+    image: {{ speedtest_tracker_image }}
+    container_name: speedtest-tracker
+    restart: unless-stopped
+    env_file: secrets.env
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: UTC
+      DISPLAY_TIMEZONE: {{ speedtest_tracker_timezone | to_json }}
+      APP_URL: "http://{{ speedtest_tracker_ip.stdout | trim }}:{{ speedtest_tracker_port }}"
+      DB_CONNECTION: sqlite
+      ADMIN_EMAIL: {{ speedtest_tracker_admin_email | to_json }}
+      SPEEDTEST_SCHEDULE: {{ speedtest_tracker_schedule | to_json }}
+      PRUNE_RESULTS_OLDER_THAN: "0"
+    ports:
+      - "{{ speedtest_tracker_port }}:80"
+    volumes:
+      - /var/lib/speedtest-tracker:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1035,3 +1035,35 @@ To extend this playbook:
 ## License
 
 This playbook is provided as-is for managing Proxmox infrastructure.
+
+### Speedtest Tracker
+
+Deploy only this service with:
+
+```bash
+ansible-playbook site.yml --tags speedtest_tracker -e install_speedtest_tracker=true
+```
+
+The `speedtest_tracker` role creates an unprivileged Debian 13 LXC on VLAN 40,
+then runs the official LinuxServer image through Debian's Docker Compose package.
+This LXC uses direct Debian repositories because the local APT proxy returned
+missing Release-file errors during deployment.
+The image version and SHA-256 manifest digest are pinned together in role defaults.
+Tests run hourly at minute 17, with automatic server selection and unlimited
+SQLite result retention. The display timezone is America/Chicago.
+
+The dashboard listens on port 80 at the container's DHCP address. Reserve its
+DHCP lease for a stable URL. No public proxy or router forwarding is configured.
+Data lives at `/var/lib/speedtest-tracker` inside the LXC. Back up that directory
+and `/opt/speedtest-tracker/secrets.env` together before image upgrades.
+
+The initial login is `admin@example.com`. Retrieve the randomly generated
+password in your own terminal (do not paste it into chat or commit it):
+
+```bash
+ssh root@10.10.30.9 'pct exec 130 -- sed -n "s/^ADMIN_PASSWORD=//p" /opt/speedtest-tracker/secrets.env'
+```
+
+That command assumes VMID 130 still resides on Atlas. Resolve its current node
+with `pvesh get /cluster/resources --type vm` if the container has moved.
+The role preserves the encryption key, password, and database on repeat runs.

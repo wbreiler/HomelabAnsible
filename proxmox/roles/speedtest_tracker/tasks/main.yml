@@ -1,0 +1,162 @@
+---
+- name: Validate immutable Speedtest Tracker image
+  ansible.builtin.assert:
+    that:
+      - speedtest_tracker_image is match('^ghcr.io/linuxserver/speedtest-tracker:[^@]+@sha256:[0-9a-f]{64}$')
+      - speedtest_tracker_port | int > 0
+      - speedtest_tracker_port | int < 65536
+
+- name: Resolve Speedtest Tracker node
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ speedtest_tracker_hostname }}"
+    lxc_fallback_node: "{{ speedtest_tracker_node }}"
+
+- name: Deploy Speedtest Tracker on its hosting node
+  when: proxmox_node_name | default(inventory_hostname) == lxc_current_node
+  block:
+    - name: Bootstrap Speedtest Tracker LXC
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        configure_apt_proxy: false
+        lxc_hostname: "{{ speedtest_tracker_hostname }}"
+        lxc_vmid: "{{ speedtest_tracker_vmid }}"
+        lxc_storage: "{{ speedtest_tracker_storage }}"
+        lxc_template: "{{ speedtest_tracker_template }}"
+        lxc_cores: "{{ speedtest_tracker_cores }}"
+        lxc_memory: "{{ speedtest_tracker_memory }}"
+        lxc_disk: "{{ speedtest_tracker_disk }}"
+        lxc_bridge: "{{ speedtest_tracker_bridge }}"
+        lxc_vlan: "{{ speedtest_tracker_vlan }}"
+        lxc_tags: monitoring
+        lxc_packages: [ca-certificates, curl, docker.io, docker-compose, openssl, sqlite3]
+
+    - name: Enable container boot and Docker
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          if ! pct config {{ lxc_resolved_vmid }} | grep -qx 'onboot: 1'; then
+            pct set {{ lxc_resolved_vmid }} --onboot 1
+            echo changed
+          fi
+          pct exec {{ lxc_resolved_vmid }} -- bash -ceu '
+            if ! systemctl is-enabled --quiet docker; then
+              systemctl enable docker
+              echo changed
+            fi
+            if ! systemctl is-active --quiet docker; then
+              systemctl start docker
+              echo changed
+            fi'
+        executable: /bin/bash
+      register: speedtest_tracker_boot
+      changed_when: "'changed' in speedtest_tracker_boot.stdout"
+
+    - name: Create persistent data and secrets once
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - |
+            install -d -m 0700 /opt/speedtest-tracker
+            if ! test -d /var/lib/speedtest-tracker; then
+              install -d -o 1000 -g 1000 -m 0750 /var/lib/speedtest-tracker
+              echo changed
+            fi
+            if ! test -f /opt/speedtest-tracker/secrets.env; then
+              umask 077
+              { printf 'APP_KEY=base64:'; openssl rand -base64 32;
+                printf 'ADMIN_PASSWORD='; openssl rand -hex 24;
+              } > /opt/speedtest-tracker/secrets.env
+              echo changed
+            fi
+            test -s /opt/speedtest-tracker/secrets.env
+            chmod 0600 /opt/speedtest-tracker/secrets.env
+      register: speedtest_tracker_secrets
+      changed_when: "'changed' in speedtest_tracker_secrets.stdout"
+      no_log: true
+
+    - name: Read container IPv4 address
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - "ip -4 -o addr show dev eth0 scope global | awk '{split($4,a,\"/\"); print a[1]; exit}'"
+      register: speedtest_tracker_ip
+      changed_when: false
+      check_mode: false
+      until: speedtest_tracker_ip.stdout | trim | length > 0
+      retries: 12
+      delay: 5
+
+    - name: Render Speedtest Tracker Compose configuration
+      ansible.builtin.template:
+        src: compose.yml.j2
+        dest: "/tmp/speedtest-tracker-{{ lxc_resolved_vmid }}.yml"
+        mode: "0600"
+      register: speedtest_tracker_compose
+
+    - name: Read deployed Compose checksum
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, sha1sum, /opt/speedtest-tracker/compose.yml]
+      register: speedtest_tracker_deployed
+      changed_when: false
+      failed_when: speedtest_tracker_deployed.rc not in [0, 1]
+      check_mode: false
+
+    - name: Copy Compose configuration into container
+      ansible.builtin.command:
+        argv:
+          - pct
+          - push
+          - "{{ lxc_resolved_vmid }}"
+          - "/tmp/speedtest-tracker-{{ lxc_resolved_vmid }}.yml"
+          - /opt/speedtest-tracker/compose.yml
+          - --perms
+          - "0600"
+      when: speedtest_tracker_compose.checksum | default('') != speedtest_tracker_deployed.stdout.split(' ')[0]
+      changed_when: true
+
+    - name: Reconcile Speedtest Tracker container
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - docker
+          - compose
+          - --project-directory
+          - /opt/speedtest-tracker
+          - up
+          - -d
+      register: speedtest_tracker_up
+      changed_when: "speedtest_tracker_up.stderr is search('(?i)creat|start|pull')"
+
+    - name: Verify Speedtest Tracker HTTP health
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --output
+          - /dev/null
+          - "http://127.0.0.1:{{ speedtest_tracker_port }}/api/healthcheck"
+      changed_when: false
+      register: speedtest_tracker_health
+      until: speedtest_tracker_health.rc == 0
+      retries: 30
+      delay: 5
+      when: not ansible_check_mode

@@ -1,0 +1,17 @@
+---
+speedtest_tracker_node: atlas
+speedtest_tracker_vmid: "130"
+speedtest_tracker_hostname: speedtest-nash
+speedtest_tracker_storage: local-zfs
+speedtest_tracker_template: debian-13-standard_13.1-2_amd64.tar.zst
+speedtest_tracker_cores: 2
+speedtest_tracker_memory: 1024
+speedtest_tracker_disk: 8
+speedtest_tracker_bridge: vmbr0
+speedtest_tracker_vlan: 40
+speedtest_tracker_image: >-
+  ghcr.io/linuxserver/speedtest-tracker:v1.15.0-ls173@sha256:dc439a8bbadd3d0d4a4af4ee64bf30a6db9ced425c00ac12ea2ff04e15669ed1
+speedtest_tracker_port: 80
+speedtest_tracker_schedule: "17 * * * *"
+speedtest_tracker_timezone: America/Chicago
+speedtest_tracker_admin_email: admin@example.com

@@ -444,3 +444,9 @@ vm_deploy_vms:
     disk_size: 20
     disk_bus: virtio
     net_model: virtio
+
+# Hourly Internet speed tests with persistent history.
+install_speedtest_tracker: false
+speedtest_tracker_node: "atlas"
+speedtest_tracker_vmid: "130"
+speedtest_tracker_schedule: "17 * * * *"
