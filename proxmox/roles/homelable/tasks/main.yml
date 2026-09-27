@@ -1,0 +1,209 @@
+---
+- name: Validate Homelable release and port
+  ansible.builtin.assert:
+    that:
+      - homelable_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - homelable_version | length > 0
+      - homelable_port | int >= 1
+      - homelable_port | int <= 65535
+
+- name: Resolve node currently hosting Homelable
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ homelable_hostname }}"
+    lxc_fallback_node: "{{ homelable_node }}"
+
+- name: Set up Homelable on its hosting node
+  when:
+    - proxmox_node_name | default(inventory_hostname) == lxc_current_node
+    - not ansible_check_mode
+  block:
+    - name: Bootstrap Homelable LXC
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/create_lxc.yml"
+      vars:
+        lxc_hostname: "{{ homelable_hostname }}"
+        lxc_vmid: "{{ homelable_vmid }}"
+        lxc_storage: "{{ homelable_storage }}"
+        lxc_template: "{{ homelable_template }}"
+        lxc_cores: "{{ homelable_cores }}"
+        lxc_memory: "{{ homelable_memory }}"
+        lxc_disk: "{{ homelable_disk }}"
+        lxc_bridge: "{{ homelable_bridge }}"
+        lxc_vlan: "{{ homelable_vlan }}"
+        lxc_tags: "{{ homelable_tags | join(';') }}"
+        lxc_packages:
+          - ca-certificates
+          - curl
+          - nodejs
+          - npm
+          - python3
+          - python3-venv
+          - tar
+          - caddy
+          - nmap
+          - iputils-ping
+        lxc_nfs_server: ""
+        lxc_nfs_export: ""
+        lxc_nfs_mountpoint: ""
+
+    - name: Enable container startup at node boot
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          if ! pct config {{ lxc_resolved_vmid }} | grep -qx 'onboot: 1'; then
+            pct set {{ lxc_resolved_vmid }} --onboot 1
+            echo changed
+          fi
+        executable: /bin/bash
+      register: homelable_onboot
+      changed_when: "'changed' in homelable_onboot.stdout"
+
+    - name: Read installed Homelable version
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, cat, /opt/homelable/.ansible-version]
+      register: homelable_installed_version
+      changed_when: false
+      failed_when: homelable_installed_version.rc not in [0, 1]
+
+    - name: Require a reviewed migration before changing an existing release
+      ansible.builtin.assert:
+        that:
+          - homelable_installed_version.rc == 1 or homelable_installed_version.stdout | trim == homelable_version
+        fail_msg: "Existing Homelable release differs. Back up and review migrations before upgrading."
+
+    - name: Download pinned Homelable source
+      ansible.builtin.get_url:
+        url: "{{ homelable_release_url }}"
+        dest: "/tmp/homelable-{{ homelable_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+        checksum: "{{ homelable_release_checksum }}"
+        mode: "0600"
+      when: homelable_installed_version.stdout | trim != homelable_version
+
+    - name: Push Homelable source into LXC
+      ansible.builtin.command:
+        argv:
+          - pct
+          - push
+          - "{{ lxc_resolved_vmid }}"
+          - "/tmp/homelable-{{ homelable_version }}-{{ lxc_resolved_vmid }}.tar.gz"
+          - /tmp/homelable-release.tar.gz
+          - --perms
+          - "0600"
+      changed_when: true
+      when: homelable_installed_version.stdout | trim != homelable_version
+
+    - name: Install pinned Homelable release
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - |
+            id homelable >/dev/null 2>&1 || useradd --system --home-dir /var/lib/homelable --shell /usr/sbin/nologin homelable
+            install -d -o homelable -g homelable -m 0700 /var/lib/homelable
+            install -d -o homelable -g homelable /opt/homelable/app
+            tar -xzf /tmp/homelable-release.tar.gz -C /opt/homelable/app --strip-components=1
+            chown -R homelable:homelable /opt/homelable
+            runuser -u homelable -- python3 -m venv /opt/homelable/venv
+            runuser -u homelable -- /opt/homelable/venv/bin/pip install --disable-pip-version-check -r /opt/homelable/app/backend/requirements.txt
+            cd /opt/homelable/app/frontend
+            runuser -u homelable -- npm ci
+            runuser -u homelable -- npm run build
+            chmod -R a+rX /opt/homelable/app/frontend/dist
+            printf '%s\n' {{ homelable_version | quote }} > /opt/homelable/.ansible-version
+            rm -f /tmp/homelable-release.tar.gz
+      changed_when: true
+      when: homelable_installed_version.stdout | trim != homelable_version
+
+    - name: Initialize private credentials and persistent configuration
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, /opt/homelable/venv/bin/python, -]
+        stdin: "{{ lookup('template', 'initialize.py.j2') }}"
+      register: homelable_initialize
+      changed_when: "'created' in homelable_initialize.stdout"
+      no_log: true
+
+    - name: Render service configuration
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "/tmp/homelable-{{ lxc_resolved_vmid }}-{{ item.name }}"
+        mode: "0600"
+      loop:
+        - {src: homelable.service.j2, name: service}
+        - {src: Caddyfile.j2, name: caddy}
+
+    - name: Compare and install service configuration
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          source_file=/tmp/homelable-{{ lxc_resolved_vmid }}-{{ item.name }}
+          local_hash=$(sha256sum "$source_file" | cut -d ' ' -f 1)
+          remote_hash=$(pct exec {{ lxc_resolved_vmid }} -- sha256sum {{ item.dest }} 2>/dev/null | cut -d ' ' -f 1 || true)
+          if test "$local_hash" != "$remote_hash"; then
+            pct push {{ lxc_resolved_vmid }} "$source_file" {{ item.dest }} --perms 0644
+            echo changed
+          fi
+        executable: /bin/bash
+      loop:
+        - {name: service, dest: /etc/systemd/system/homelable.service}
+        - {name: caddy, dest: /etc/caddy/Caddyfile}
+      register: homelable_configuration
+      changed_when: "'changed' in homelable_configuration.stdout"
+
+    - name: Validate Caddy configuration
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, caddy, validate, --config, /etc/caddy/Caddyfile, --adapter, caddyfile]
+      changed_when: false
+
+    - name: Restart configured services # noqa: no-handler
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - systemctl daemon-reload; systemctl enable homelable caddy; systemctl restart homelable caddy
+      changed_when: true
+      when: >-
+        homelable_installed_version.stdout | trim != homelable_version or
+        homelable_configuration.changed or homelable_initialize.changed
+
+    - name: Ensure services are running
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - |
+            for service in homelable caddy; do
+              if ! systemctl is-active --quiet "$service"; then
+                systemctl start "$service"
+                echo changed
+              fi
+            done
+      register: homelable_running
+      changed_when: "'changed' in homelable_running.stdout"
+
+    - name: Verify Homelable health through Caddy
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, curl, --fail, --silent, --show-error, "http://127.0.0.1:{{ homelable_port }}/api/v1/health"]
+      register: homelable_health
+      retries: 12
+      delay: 5
+      until: homelable_health.rc == 0 and (homelable_health.stdout | from_json).status == 'ok'
+      changed_when: false
+
+    - name: Verify login and persistent database
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, /opt/homelable/venv/bin/python, -, "{{ homelable_port | string }}"]
+        stdin: "{{ lookup('file', 'verify.py') }}"
+      changed_when: false
+      no_log: true

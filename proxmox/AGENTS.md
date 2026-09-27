@@ -516,3 +516,13 @@ management, LXC installation, system updates, and PBS restores.
 * Secrets are generated inside the LXC and stored in a root-only file. Preserve
   `/opt/speedtest-tracker/secrets.env` with `/var/lib/speedtest-tracker` backups.
 * Tests run hourly. A speed test can temporarily consume the Internet connection.
+
+### homelable
+
+* Deploys checksum-pinned Homelable source with Python and Caddy in an
+  unprivileged Debian 13 LXC. Opt in with `install_homelable` and tag `homelable`.
+* Fresh-install defaults: Atlas, VMID 131, VLAN 40, port 3000. Confirm live state.
+* Preserve `/var/lib/homelable`, the backend `.env`, and the root-only bootstrap
+  password. Existing different releases require a reviewed migration.
+* Check mode skips container operations. Verify live API/login/database health
+  and repeat-run idempotency before declaring a deployment complete.

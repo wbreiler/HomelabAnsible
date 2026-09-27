@@ -1,0 +1,26 @@
+[Unit]
+Description=Homelable network inventory
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=homelable
+Group=homelable
+WorkingDirectory=/opt/homelable/app/backend
+EnvironmentFile=/opt/homelable/app/backend/.env
+ExecStart=/opt/homelable/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+# ICMP discovery needs raw sockets inside the unprivileged LXC.
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/homelable
+
+[Install]
+WantedBy=multi-user.target

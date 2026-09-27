@@ -1,0 +1,22 @@
+---
+homelable_node: "atlas"
+homelable_vmid: "131"
+homelable_hostname: "homelable-nash"
+homelable_storage: "local-zfs"
+homelable_template: ""
+homelable_cores: 2
+homelable_memory: 4096
+homelable_disk: 12
+homelable_bridge: "vmbr0"
+homelable_vlan: 40
+homelable_tags:
+  - "monitoring"
+
+homelable_version: "3.5.1"
+homelable_release_url: "https://api.github.com/repos/Pouzor/homelable/tarball/v{{ homelable_version }}"
+homelable_release_checksum: "sha256:e00decf4d4436e57a63c882b12e3f1b16ad99f1ba9d7a831f285d8723f23d269"
+homelable_port: 3000
+
+# Used on first installation; subsequent changes belong in the application settings.
+homelable_scanner_ranges:
+  - "10.10.40.0/24"

@@ -64,6 +64,10 @@
       when: install_bambuddy | default(false) | bool
       tags: ['bambuddy', 'bambulab', 'lxc']
 
+    - role: homelable
+      when: install_homelable | default(false) | bool
+      tags: ['homelable', 'lxc']
+
     - role: nexdeck
       when: install_nexdeck | default(false) | bool
       tags: ['nexdeck', 'lxc']

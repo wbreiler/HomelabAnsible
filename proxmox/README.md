@@ -1094,3 +1094,33 @@ ssh root@10.10.30.9 'pct exec 130 -- docker exec -i -u abc -w /app/www speedtest
 
 Run this from `proxmox/` after enabling notifications. Resolve current LXC
 placement before using the example host and VMID.
+
+### Homelable
+
+The opt-in `homelable` role installs checksum-pinned Homelable 3.5.1 in an
+unprivileged Debian 13 LXC. Its initial placement is Atlas, VMID 131, VLAN 40,
+with DHCP, 2 cores, 4 GiB RAM, and a 12 GiB root disk. Verify live placement
+before operations. The role reuses an existing container by hostname.
+
+```bash
+ansible-playbook site.yml --tags homelable --vault-password-file ~/.vaultpass
+```
+
+Set `install_homelable: true` in the ignored group variables. Caddy serves the
+UI and API on port 3000. The backend listens on loopback port 8000 and runs as
+`homelable` with only `CAP_NET_RAW` for ICMP discovery. Login is `admin`; retrieve the generated password with
+`pct exec 131 -- cat /root/homelable-admin-password` on its hosting node.
+The password is never printed by Ansible.
+
+Preserve `/var/lib/homelable` (SQLite, uploads, and saved settings),
+`/opt/homelable/app/backend/.env` (signing key and password hash), and
+`/root/homelable-admin-password`. Full-container PBS backups include these.
+`homelable_scanner_ranges` supplies initial ranges; change saved ranges in the
+application afterward. Proxmox, OIDC, and other credentialed integrations
+require separate configuration. No remote installer or updater is executed.
+
+Check mode validates inputs and resolves placement only; it skips container
+operations. Live verification checks the UI, API version, authentication,
+unauthenticated rejection, credential permissions, and SQLite integrity.
+A repeat run must report `changed=0`. The role refuses a different installed
+release until its migration and backup procedure have been reviewed.

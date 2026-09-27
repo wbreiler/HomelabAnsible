@@ -1,0 +1,13 @@
+:{{ homelable_port }} {
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+    handle /ws/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+    handle {
+        root * /opt/homelable/app/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
