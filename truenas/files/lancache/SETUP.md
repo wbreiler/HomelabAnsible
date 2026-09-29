@@ -150,7 +150,22 @@ use `umask 077` and disable Docker log capture to protect authentication data.
 
 These commands begin downloads after authentication. Steam targets Windows.
 The workers consume bandwidth and fill LANCache without retaining separate game
-installations. Keep the terminal open until completion. Verify the final game
+installations. For background operation, run both workers in a persistent tmux
+session from the private Compose directory:
+
+```sh
+tmux new-session -d -s lancache-prefill 'docker compose run --rm epic; docker compose run --rm steam'
+tmux set-option -t lancache-prefill remain-on-exit on
+tmux attach -t lancache-prefill
+```
+
+Authenticate interactively when prompted. Press `Ctrl+B`, then `D` to detach
+without stopping downloads. Reattach with the same command for the Steam login
+after Epic finishes. This runs once and survives SSH disconnection, but not a
+host reboot. `remain-on-exit` preserves the final terminal output for review.
+Do not start another session while an existing prefill worker is active.
+
+Verify the final game
 summary and LANCache access logs before treating a game as fully cached.
 
 References: [SteamPrefill](https://github.com/tpill90/steam-lancache-prefill) and
