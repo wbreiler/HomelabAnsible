@@ -5,6 +5,19 @@ the two local, ignored handoff files. This report is the 30th tracked Markdown
 file. Checks were read-only on the infrastructure. Documentation corrections
 did not change packages, configuration, services, storage, or reboot any host.
 
+## Follow-up: SSH access and retired Kuma
+
+Later on 2026-10-02, the user confirmed Kuma is retired. Its stale inventory
+entry is not an active outage. The user also added the cluster public key to
+Arista's `admin` account. Key login now succeeds; the Mac's host-specific SSH
+profile was changed from password-only to key-first with password fallback.
+This follow-up did not modify switch configuration or reboot any host.
+
+Live Arista checks confirm EOS 4.28.12M, hostname `arista-nash`, the documented
+VLAN interfaces/routes, a connected 10G Et1 uplink, and disconnected Nyx Et4.
+Full running/startup configuration drift and Ansible authentication remain
+unverified.
+
 ## Coverage
 
 | Project | Documents reviewed | Validation |
@@ -14,8 +27,8 @@ did not change packages, configuration, services, storage, or reboot any host.
 | PBS | `README.md` | Live product/kernel, services, datastore/pools, sync-job presence, and implementation review |
 | Minecraft | `README.md`, `AGENTS.md` | Five live guests, pack/version markers, timer states, updater implementation, public DNS SRV records, and SSH selector |
 | TrueNAS | `AGENTS.md`, `README.md`, `REVIEW.md`; `files/{cobalt,fastchannels,lancache,lidarr,spotdl,tdarr,threadfin}/SETUP.md` | Middleware inventory, pool health, app state, seven HTTP endpoints, and implementation review |
-| Kuma | `README.md` | Inventory and implementation checked; live host unreachable |
-| Arista | `README.md` | Implementation checked; live device authentication failed |
+| Kuma | `README.md` | Inventory and implementation checked; user later confirmed deployment retired |
+| Arista | `README.md` | Implementation checked; key login and read-only device checks subsequently passed |
 | Desktop | `README.md`, `ISO_GAP_REPORT.md`, `roles/gaming_pc/README.md` | Implementation checked; fresh WinRM connection timed out |
 | Mac | `README.md`, `AGENTS.md` | Local OS/toolchain, four managed user files, SSH configuration and agent socket |
 | Local handoffs | `proxmox/HANDOFF.md`, `kuma/HANDOFF.md` | Both read; Proxmox handoff corrected locally, Kuma design history preserved. Both remain ignored. |
@@ -75,9 +88,9 @@ to be live merely because a role declares them.
 
 | Item | Limit |
 |---|---|
-| Arista | Fresh SSH authentication failed; current EOS, port links, VLANs/routes, and running/startup drift remain unverified. |
+| Arista | Initial authentication failure resolved by the user-installed key and client profile correction. EOS, links, VLAN interfaces, and routes verified; full running/startup drift remains unverified. |
 | Windows | Fresh WinRM timed out at the configured address/port. Earlier maintenance reached it but failed authentication. Current installed software/hardware and SMB mapping remain unverified. |
-| Kuma | The sole locally configured TX host was unreachable. Running image, monitor configuration, and relay state remain unverified. |
+| Kuma | Retired, as confirmed by the user. The previous unreachable-host result came from stale inventory. |
 | Minecraft external access | All six documented SRV records matched. Router forwards and end-to-end player connections were not tested. Cobbleverse still has DNS but no matching live cluster guest. |
 | TrueNAS applications | HTTP/app-state checks do not prove feed/tuner settings, provider downloads, LANCache prefill, GPU encoding, HDR, or client playback. Historical functional tests were not repeated. |
 

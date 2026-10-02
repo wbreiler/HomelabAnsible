@@ -19,7 +19,7 @@ remain historical records. Role defaults and examples are not live inventory.
 | [`minecraft/`](minecraft/) | Minecraft server LXC provisioning via the Proxmox API + nightly Modrinth/CurseForge modpack update script | [README](minecraft/README.md) |
 | [`truenas/`](truenas/) | TrueNAS host `erebus`: full desired-state config (users, datasets, shares, services, apps) via middleware APIs, with read-only discovery and audit playbooks | [README](truenas/README.md) |
 | [`arista/`](arista/) | Core switch (Arista DCS-7050SX-64): incremental, explicitly scoped desired-state management | [README](arista/README.md) |
-| [`kuma/`](kuma/) | Uptime Kuma on one or more sites: Docker deployment, Tailscale, optional API reconciliation/quorum relay, and apt auto-update | [README](kuma/README.md) |
+| [`kuma/`](kuma/) | Retired deployment; retained reference automation for Uptime Kuma: Docker deployment, Tailscale, optional API reconciliation/quorum relay, and apt auto-update | [README](kuma/README.md) |
 | [`desktop/`](desktop/) | Windows 11 gaming PC (`gaming-pc`) over WinRM: apps, updates, SMB mapping | [README](desktop/README.md) |
 | [`mac/`](mac/) | macOS fresh-install provisioning: Homebrew, Mac App Store apps, dotfiles, system defaults | [README](mac/README.md) |
 
