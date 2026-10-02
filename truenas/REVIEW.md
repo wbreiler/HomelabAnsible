@@ -1,7 +1,11 @@
-# Discovery Review
+# Historical Discovery Review — 2026-07-18
 
 Read-only discovery was performed against `erebus` on 2026-07-18. Subsequent
-approved changes are recorded below.
+approved changes are recorded below. This is a dated record, not a complete
+current inventory.
+
+A read-only check on 2026-10-02 reconfirmed the pool topology and security
+settings listed below. Current object and app counts are in [README.md](README.md).
 
 ## High Priority
 
@@ -21,7 +25,7 @@ approval.
 
 ## Security Hardening Decisions
 
-The current configuration is faithfully represented, but the following choices
+The July discovery recorded the following choices, which
 should be reviewed rather than normalized automatically:
 
 - SSH password authentication is enabled.

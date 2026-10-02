@@ -6,6 +6,14 @@ its internal Tdarr node, the RTX 5050, and the existing media paths on
 original audio/subtitles/chapters, no resolution change, and manual validation
 before processing a whole library.
 
+## Live snapshot — 2026-10-02
+
+The app is RUNNING and its web interface responds on port 8265. The live image
+reference is untagged `ghcr.io/haveagitgat/tdarr`; the tracked Compose file pins
+`2.86.01`. Confirm the running binary version before reapplying that file, since
+it can select a different release. This read-only check did not repeat the
+GPU, encoding, HDR, or client-playback tests below.
+
 ## Encoding policy
 
 - AV1 transcodes use Matroska (`mkv`). Dynamic-HDR video-copy jobs preserve the

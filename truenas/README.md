@@ -9,8 +9,8 @@ Ansible-managed desired state for the TrueNAS host `erebus`.
 | Address | `10.10.10.7` |
 | SSH port | `2747` |
 | SSH user | `root` |
-| Reported release | TrueNAS Community Edition `25.10.4` |
-| Authentication | SSH key via the local 1Password SSH agent |
+| Verified release (2026-10-02) | TrueNAS Community Edition `25.10.4` |
+| Authentication | SSH key via the configured local SSH agent |
 
 The exact platform and release are verified by read-only discovery rather than
 assumed from the reported product name.
@@ -31,26 +31,33 @@ A protected configuration backup was captured before the approved cleanup.
 The complete convergence playbook subsequently passed twice with
 `ok=283`, `changed=0`, and no failures.
 
-The repository currently:
+The repository provides these management paths:
 
 - audits singleton system settings and service enablement for drift;
-- models the pool's root and all 25 child datasets;
-- manages the remaining SMB share and seven NFS exports, plus explicit
+- models the datasets listed in the local desired-state file;
+- manages desired SMB shares and NFS exports, plus explicit
   `state: absent` guards for the removed legacy shares;
-- models both configured network interfaces;
+- models the network interfaces listed in local desired state;
 - reconciles NTP servers, cron jobs, init scripts, snapshot tasks, and pool
   scrub schedules;
 - models the local non-built-in accounts without their non-retrievable
   passwords;
-- models Docker settings and manages the `ollama`, `sabnzbd`, and `plex`
+- models Docker settings and catalog apps, with separate playbooks for custom
   applications;
 - idempotently reconciles singleton settings, service enablement, storage,
   sharing, identity, applications, network interfaces, and schedules;
 - never deletes objects merely because they are absent from desired state.
 
+A read-only check on 2026-10-02 found one healthy ONLINE data pool (`gaia`),
+28 dataset entries, three SMB shares, seven NFS exports, and four interface
+entries. Nine apps were RUNNING: `plex`, `sabnzbd`, `tdarr`, `lancache`,
+`threadfin`, `fastchannels`, `spotdl`, `lidarr`, and `cobalt`. `ollama` was absent.
+These observations do not establish that the older local desired-state file
+matches every current object. Audit and review that file before convergence.
+
 The explicitly approved disabled legacy shares and periodic snapshot task
-under `/mnt/pool` are recorded with `state: absent` and continuously audited so
-that accidental recreation is detected.
+under `/mnt/pool` are recorded with `state: absent`. Running the audit checks
+for accidental recreation; this repository does not schedule that audit.
 
 The former `bldrbackup` home was replaced with the managed
 `gaia/backups/storage-bldr-1` dataset. Existing SSH/password settings were
@@ -60,7 +67,7 @@ Mutation remains deliberately disabled by default. Each run must opt in with
 `truenas_allow_changes=true`; destructive changes and management-access
 changes have separate gates.
 
-The local backup is stored as the ignored mode-`0600` artifact
+The July 18 configuration backup was recorded as the ignored mode-`0600` artifact
 `artifacts/erebus-config-2026-07-18.tar`. It includes the configuration
 database, secret seed, and administrator/root authorized keys and must be
 handled as a credential-bearing file.
@@ -87,8 +94,9 @@ access—remain explicitly gated.
 ## Authentication
 
 The public key is available locally as `~/.ssh/erebus.pub`; the corresponding
-private key is provided by the 1Password SSH agent. Do not copy the private key
-or any API credential into this repository.
+private key is provided by the configured local SSH agent. The controller
+uses Bitwarden as of 2026-10-02. Do not copy the private key or any API
+credential into this repository.
 
 Ansible will use the agent:
 
@@ -96,7 +104,7 @@ Ansible will use the agent:
 ssh -p 2747 root@10.10.10.7
 ```
 
-1Password may ask for biometric approval when the key is first used.
+The SSH agent can require approval when the key is first used.
 
 ## Local Configuration
 
@@ -140,7 +148,7 @@ remain local.
 Run commands from this directory so `ansible.cfg` supplies the ignored local
 inventory, roles, filter plugins, and SSH settings. Its control path matches
 the user's SSH configuration, allowing Ansible to reuse an already approved
-1Password-agent connection.
+agent-authenticated connection.
 
 If no reusable connection exists and a headless Ansible process cannot trigger
 the biometric prompt, establish one in a separate Terminal using the socket
