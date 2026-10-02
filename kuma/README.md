@@ -1,5 +1,9 @@
 # Uptime Kuma Mini PC Ansible Configuration
 
+**Retired:** the user confirmed on 2026-10-02 that Kuma no longer exists.
+This project is retained as reference automation, not an active deployment.
+Ignored inventory entries are stale and must not be treated as live hosts.
+
 Configures a Debian/Ubuntu host — a Mini PC or a Raspberry Pi, whatever's on
 hand when a new site gets deployed — to run
 [Uptime Kuma](https://github.com/louislam/uptime-kuma) in Docker, reachable
@@ -91,8 +95,8 @@ own IP.
 The tracked inventory and host-variable files are examples only. The real
 site list, addresses, deployment state, and per-site variables are gitignored;
 inspect those local files and verify reachability before targeting a host.
-A read-only check on 2026-10-02 could not reach the sole locally configured
-Kuma host. Its running image, monitors, and relay state remain unverified.
+The 2026-10-02 connection attempt used a stale local inventory entry. The user
+subsequently confirmed the deployment is retired; this is not an active outage.
 
 ## Proxmox-hosted sites
 
