@@ -5,18 +5,18 @@ IPMI, and Proxmox VLANs and is the L3 gateway for all of them.
 
 ## Recorded target
 
-The device details and port tables below come from earlier discovery and local
-desired state. They are not a fresh live inventory. The 2026-10-02 review
-verified the playbook's scope, but SSH authentication blocked device
-verification. EOS version, links, VLANs, routes, and running/startup drift
-remain unverified for that date.
+Key authentication as `admin` was verified on 2026-10-02 after the user added
+`~/.ssh/cluster.pub`. Live checks confirmed the model, EOS release, hostname,
+interface state, VLAN interfaces, and routes below. Full running/startup drift
+has not been compared. The client profile tries the agent-held key first and
+retains password fallback.
 
 | Setting | Value |
 | --- | --- |
 | Address | `192.168.1.222` (SVI Vlan1; Management1 port is unused/down) |
 | Model | Arista DCS-7050SX-64 (48x SFP+ + 4x QSFP+) |
 | EOS | `4.28.12M` |
-| Auth | `admin` with password (SSH) |
+| Auth | `admin` with agent-held cluster SSH key; password fallback retained |
 | Hostname | `arista-nash` (managed by `site.yml`) |
 
 ## Status
@@ -64,19 +64,28 @@ The switch is the gateway (SVI) for each VLAN:
 | 30 | proxmox-hosts | 10.10.30.1/26 | Et2–4 |
 | 40 | proxmox-guests | 10.10.40.1/24 | Et2–4 |
 
-## Port map (recorded connections)
+## Port map (live status, 2026-10-02)
 
 | Port | Device | Mode | Speed |
 |---|---|---|---|
-| Et1 | uplink-ucg (AccessPanel) | trunk | 1G |
+| Et1 | uplink-ucg (AccessPanel) | trunk | 10G, connected |
 | Et2 | atlas | trunk | 10G |
 | Et3 | prometheus | trunk | 10G |
-| Et4 | nyx | trunk | 10G |
+| Et4 | nyx | trunk | 10G configured, disconnected |
 | Et5 | erebus (TrueNAS) | vlan 20 | 10G |
 | Et6 | mnemosyne (PBS) | vlan 20 | 10G |
 | Et7–11 | atlas-idrac, prometheus-ilo, nyx-idrac, mnemosyne-idrac, erebus-ipmi | vlan 10 | 1G |
 
+The active routing table has a default route via `192.168.1.1` on Vlan1 and
+connected routes for VLANs 1, 10, 20, 30, and 40. The VLAN port column above
+includes configured ports; disconnected Et4 is absent from active membership.
+
 ## Usage
+
+Test the installed key from the current Mac with `ssh admin@192.168.1.222`.
+Other controllers must select their corresponding agent-held key. These SSH
+checks do not establish Ansible `network_cli` authentication or configuration
+convergence.
 
 ```bash
 python3 -m pip install -r requirements.txt
