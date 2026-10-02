@@ -41,16 +41,25 @@ Run from `ansible/`:
 
 ```bash
 # Reconcile existing servers only (no Proxmox mutations)
-ansible-playbook site.yml --ask-vault-pass --check --diff
+ansible-playbook site.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub --check --diff
 
-# Provision all servers (spawns a fresh SSH agent so ForwardAgent works for migration rsync)
-ssh-agent bash -c 'ssh-add ~/.ssh/lxc_nash && ansible-playbook provision.yml --ask-vault-pass'
+# Provision all servers using the configured SSH agent
+ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub
 
 # Provision a single server
-ssh-agent bash -c 'ssh-add ~/.ssh/lxc_nash && ansible-playbook provision.yml --ask-vault-pass -e server_filter=cobbleverse-nash'
+ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub -e server_filter=cobbleverse-nash
 ```
 
-The `ssh-agent bash -c '...'` wrapper is required whenever any server has `migrate_from` defined. The migration rsync delegates to the source host and SSHes onward to the new LXC; without an agent carrying `lxc_nash`, that second hop fails with publickey denied.
+Use the configured Bitwarden agent. The public selector `~/.ssh/lxc.pub`
+identifies the guest key held by that agent. Pass `--private-key` to override
+the legacy `~/.ssh/lxc_nash` setting in `ansible.cfg`; that private file is
+absent on the audited controller. Do not replace the configured agent with
+a fresh empty agent.
+
+For `migrate_from`, rsync runs on the source and opens a second SSH connection
+to the destination. Ansible requests `ForwardAgent=yes`, unlike direct SSH
+defaults. Verify forwarded-agent authentication through the source before
+migration. Direct guest authentication alone does not validate the second hop.
 
 **Two-play architecture**: Play 1 runs on `localhost` against the Proxmox API to create LXCs and waits for SSH. Play 2 runs on the `newly_provisioned` dynamic group (populated by `add_host`) to apply the `minecraft_server` role. Re-running is idempotent.
 
@@ -77,7 +86,7 @@ migration paths remain local.
 **`pack_source: manual` — recommended fallback for broken auto-fetched packs**: Some CurseForge/Modrinth-side reconstructions of a modpack (via `update-modpack.sh`'s API-driven fetch) can differ subtly from the pack's official server-pack download — e.g. mismatched mod jar builds — in ways that cause runtime bugs the auto-fetch path can't detect (a client "Connection Lost" `ResourceLocationException` on `bettermc-nash`/`bettermc2-nash` traced back to exactly this: the auto-fetched mod set corrupted a large network sync packet; rebuilding from the official ServerPackCreator/CurseForge server-pack zip fixed it immediately). When a pack is misbehaving and the cause isn't an obvious single-mod config issue, prefer recreating from the official server pack over continuing to debug the auto-fetched version:
 
 1. Get the official server pack onto the controller (e.g. `~/Downloads/<name>.zip` or `.mrpack`) — either a CurseForge/ServerPackCreator-style zip (mods/config/etc. at the zip root) or a Modrinth `.mrpack` file.
-2. Set `pack_source: "manual"` on the server entry. For CurseForge-style zips also add `loader_version: "X.Y.Z"` (check `variables.txt`/`manifest.json` in the zip); for `.mrpack` files the exact loader version is read from `modrinth.index.json`'s `dependencies` automatically by the script in step 3 — set `loader_version` in `servers.yml` to match what it reports. This disables `update-modpack.sh` entirely for that server: no auto-fetch during provisioning, and `minecraft-update.timer` is not deployed (or is disabled if converting an existing server).
+2. Set `pack_source: "manual"` on the server entry. For CurseForge-style zips also add `loader_version: "X.Y.Z"` (check `variables.txt`/`manifest.json` in the zip); for `.mrpack` files the exact loader version is read from `modrinth.index.json`'s `dependencies` automatically by the script in step 3 — set `loader_version` in `servers.yml` to match what it reports. This disables `update-modpack.sh` entirely for that server: no auto-fetch during provisioning, and `minecraft-update.timer` is disabled or removed for a manually managed server.
 3. Run `minecraft/update-script/apply-manual-pack.sh <path-to-zip-or-mrpack> root@<ansible_host>`. It runs on the controller (not the LXC), detects the format, and for `.mrpack` assembles a full server pack first — downloading each server-required file from `modrinth.index.json` and layering `overrides/` then `server-overrides/` on top — before deploying the same way as a plain zip: stops the service, backs up the existing `mods/`, `config/`, `defaultconfigs/`, `kubejs/` (e.g. `mods.pre-zip-recreate.<timestamp>`, never deleted outright), and rsyncs the fresh `mods/`, `config/`, `defaultconfigs/`, `kubejs/`, `datapacks/` (→ remote `world/datapacks/`) into `/opt/minecraft`.
 4. Run `site.yml` (`-e server_filter=<hostname>`) to reconcile everything else
    (JVM env, systemd unit, server.properties, timer state). If `run.sh` is
@@ -142,8 +151,9 @@ The router (outside this repo — not Ansible-managed) forwards
 reachable server needs a unique external port both forwarded on the router
 and published in its SRV record.
 
-Last documented assignments (the DNS and router configuration are outside this
-repo, so verify them live before relying on or changing this table):
+Last documented assignments. Public DNS SRV answers matched all six ports on
+2026-10-02. Router forwards were not verified. A DNS record does not prove that
+its guest exists or that its server is reachable. Check both before use:
 
 | Server | Subdomain | External port |
 |---|---|---|
@@ -164,18 +174,21 @@ briefly stop the service → atomically swap the staged content → restart and
 verify that it remains active, rolling back the mod directory and service on
 failure. The updater records the version successfully started in
 `/opt/minecraft/.running_version`; if the installed and running markers differ,
-the next update check performs one corrective restart. The latest three backups
-are retained.
+the next update check performs one corrective restart. The latest three mod-directory backups
+are retained. The manual-pack script has different behavior: it stops the
+service and preserves old directories, but does not restart or automatically
+roll back. Check players and announce the outage before invoking it.
 
 `--no-wait` is used by the Ansible role for initial provisioning.
 
 ## Server services and idle controllers
 
 Uses a template unit `minecraft@.service` with
-`EnvironmentFile=/etc/minecraft/%i.env` for per-instance JVM heap. Start or
-stop a server with `systemctl start minecraft@<instance_name>`. Automatic
-modpack updates run nightly via `minecraft-update.timer` (4AM,
-`Persistent=true`) except when `pack_source: manual` disables the updater.
+`EnvironmentFile=/etc/minecraft/%i.env` for per-instance JVM heap. Start a server with `systemctl start minecraft@<instance_name>`.
+Stop it with `systemctl stop minecraft@<instance_name>`. Automatic
+modpack updates run nightly via `minecraft-update.timer` (4 AM local time,
+`Persistent=true`, with up to five minutes of random delay), except when
+`pack_source: manual` disables the updater.
 
 BlueMap rendering, Distant Horizons LOD pre-generation, and Chunky real-chunk
 generation are optional, independent cron-launched controllers. They use RCON

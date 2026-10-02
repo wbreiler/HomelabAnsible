@@ -67,9 +67,9 @@ Minecraft LXCs are unprivileged and use `nesting=1`.
 
 ```bash
 cd minecraft/ansible
-ansible-playbook site.yml --ask-vault-pass --check --diff
-ansible-playbook site.yml --ask-vault-pass
-ansible-playbook site.yml --ask-vault-pass -e server_filter=yabu-nash
+ansible-playbook site.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub --check --diff
+ansible-playbook site.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub
+ansible-playbook site.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub -e server_filter=yabu-nash
 ```
 
 `site.yml` validates that selected addresses are unique VLAN 40 addresses and
@@ -79,12 +79,22 @@ configures guests serially. Check mode is a dry run, not runtime verification.
 
 ```bash
 cd minecraft/ansible
-ssh-agent bash -c 'ssh-add ~/.ssh/lxc_nash && ansible-playbook provision.yml --ask-vault-pass'
-ssh-agent bash -c 'ssh-add ~/.ssh/lxc_nash && ansible-playbook provision.yml --ask-vault-pass -e server_filter=yabu-nash'
+ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub
+ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub -e server_filter=yabu-nash
 ```
 
-The SSH-agent wrapper is required when any selected server uses `migrate_from`,
-because delegated migration needs the key on its second SSH hop. Provisioning
+Use the configured Bitwarden SSH agent. The public file `~/.ssh/lxc.pub`
+selects its guest key. `--private-key` overrides the legacy `lxc_nash` path
+still present in `ansible.cfg`; it does not require a private key on disk.
+Apply this override to existing-server commands too. Do not create an empty
+agent or run `ssh-add` against a nonexistent private-key file.
+
+When a selected server uses `migrate_from`, delegated rsync needs agent
+forwarding from the controller through the source host to the destination.
+The Ansible configuration requests `ForwardAgent=yes`; ordinary direct SSH
+does not. Verify the forwarded agent can authenticate the second hop before
+migration. A working direct guest connection does not prove that path.
+Provisioning
 creates/starts guests, discovers their DHCP addresses, waits for SSH, configures
 them, and then updates the backup job whose comment is exactly
 `Minecraft Server Backups`. A new job is hourly, snapshot mode, zstd-compressed,
@@ -113,12 +123,15 @@ preserves other members and uses the API digest guard.
 
 For Modrinth and CurseForge sources, the role deploys
 `/usr/local/bin/update-modpack.sh`, its config under `/etc/minecraft/`, and a
-nightly persistent timer at 4 AM. The updater stages and validates content while
-the server remains online, announces/counts down, briefly stops the service,
-swaps content, verifies restart, and rolls back on failure. `--no-wait` is used
+nightly persistent timer at 4 AM local time, with up to five minutes of random
+delay. The updater announces and counts down first, then stages and validates
+content while the server remains online. It briefly stops the service, swaps
+content, verifies restart, and restores the prior mod directory and service
+on failure. This rollback does not restore non-mod overrides or loader files. `--no-wait` is used
 during initial provisioning. Manual invocations support `--dry-run`, `--no-wait`,
 and `--config PATH`; logs are written to `/var/log/minecraft-update.log` and the
-latest three backups are retained.
+latest three mod-directory backups are retained. `--dry-run` can still send a
+Discord notification. It does not apply the pack.
 
 `extra_modrinth_mods` can layer standalone Modrinth releases onto either kind of
 automatically managed pack. It does not apply to `pack_source: manual`.
@@ -134,6 +147,12 @@ For a broken auto-reconstructed pack, prefer the official server pack:
 Manual mode disables/removes the automatic update timer. The deployment script
 backs up existing `mods`, `config`, `defaultconfigs`, and `kubejs`, then deploys
 fresh content (including KubeJS scripts/data/assets and world datapacks).
+The manual script stops Minecraft and leaves it stopped. It does not announce
+an outage, check player counts, restart the service, or provide automatic
+rollback. Complete those checks before deployment. Preserve custom mods and
+configuration separately, then reconcile and verify startup. Existing world
+datapacks are overlaid without deleting files absent from the new pack.
+
 If `run.sh` already exists, reconciliation
 does not verify its loader version, so replace or verify loader files when the
 version changes.
