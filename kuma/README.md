@@ -3,9 +3,10 @@
 Configures a Debian/Ubuntu host — a Mini PC or a Raspberry Pi, whatever's on
 hand when a new site gets deployed — to run
 [Uptime Kuma](https://github.com/louislam/uptime-kuma) in Docker, reachable
-over Tailscale, kept up to date via `unattended-upgrades`, and provisioned
-with an admin user, monitors, monitor groups, and a Discord notification
-through Kuma's (unofficial) API.
+over Tailscale. `unattended-upgrades` maintains OS packages. Optional API
+reconciliation provisions an admin user, monitors, groups, and Discord
+notifications for compatible Kuma 1.x deployments. The default Kuma 2 image
+requires configuration through its UI.
 Designed to run on more than one host at different physical locations at
 once — see below. "Mini PC" throughout this doc just means "one of these
 hosts"; the roles don't care which architecture it's running on.
@@ -14,8 +15,8 @@ hosts"; the roles don't care which architecture it's running on.
   going forward.
 - `tailscale` — installs and authenticates Tailscale.
 - `quorum_relay` — off by default; a small local relay service that lets 3+
-  sites vote on shared-monitor outages instead of one static site always
-  deciding. See "Three or more sites: quorum instead of static primary"
+  sites vote on shared-monitor outages. A single designated primary still
+  receives votes and sends notifications. See "Three or more sites: quorum instead of static primary"
   below.
 - `uptime_kuma` — installs Docker, runs Uptime Kuma in a container, then
   can drive admin-user setup, notification providers, monitor groups, and
@@ -90,6 +91,8 @@ own IP.
 The tracked inventory and host-variable files are examples only. The real
 site list, addresses, deployment state, and per-site variables are gitignored;
 inspect those local files and verify reachability before targeting a host.
+A read-only check on 2026-10-02 could not reach the sole locally configured
+Kuma host. Its running image, monitors, and relay state remain unverified.
 
 ## Proxmox-hosted sites
 
@@ -184,7 +187,7 @@ plain rules, plus quorum voting once there are 3+ sites:
      - name: "TN Mini PC (Greenbrier)"
        location: "TN"           # must match that peer's own uptime_kuma_location
        tailscale_ip: "100.x.x.x"
-       is_primary: false        # true on exactly one peer fleet-wide
+       is_primary: false        # true only when this peer is the designated primary
    ```
 
    The role turns each entry into a `<name> (peer)` HTTP monitor (checking
@@ -195,8 +198,8 @@ plain rules, plus quorum voting once there are 3+ sites:
    off the network entirely — the other sites notice `tx` is unreachable and
    page about *that*. You'll get "TX Pi is down" instead of the
    specific service alert, which is enough to know to go look. It doesn't by
-   itself make another site start paging on `tx`'s behalf — that's what
-   quorum voting (below) is for, once there are 3+ sites to vote with.
+   itself make another site send shared-service alerts on `tx`'s behalf.
+   Quorum voting below also requires its designated primary to remain available.
 
 ## Three or more sites: quorum instead of static primary
 
@@ -214,7 +217,7 @@ uptime_kuma_peers:
   - name: "TN Mini PC (Greenbrier)"
     location: "TN"
     tailscale_ip: "100.x.x.x"
-    is_primary: false   # true on exactly one site fleet-wide
+    is_primary: false   # true only when this peer is the designated primary
   - name: "TX Pi"
     location: "TX"
     tailscale_ip: "100.x.x.x"
@@ -223,13 +226,17 @@ uptime_kuma_peers:
 
 With this on, every quorum site's copy of `uptime_kuma_shared_monitors`
 notifies through a small local relay service instead of Discord directly.
-Kuma calls the relay locally (`127.0.0.1`, no network exposure); the relay
-tags the event with its own site name and forwards it to the primary's
-relay over Tailscale; the primary only pages Discord once a majority of
+The notification template uses `127.0.0.1`, but the role runs Kuma in a
+Docker bridge container and the relay on the host. Container loopback does not
+reach the host relay. Configure and verify a reachable endpoint before use.
+The relay listens on `0.0.0.0`, so its port is not loopback-only. Peer access
+must follow the intended network policy. The relay tags the event with its
+own site name and forwards it to the primary's relay over Tailscale; the primary only pages Discord once a majority of
 sites currently agree the target is down, and only once per down/up
 transition (not once per site's report). One flaky path on one site can no
 longer page alone, and it can no longer stay silently wrong either — the
-other sites outvote it. See `HANDOFF.md` for the full design notes and
+other sites outvote it. The relay does not elect a replacement primary when
+the configured primary fails. See `HANDOFF.md` for historical design notes and
 `roles/quorum_relay/test_quorum_relay.py` for the vote-tallying logic's
 tests (run it directly: `python3 roles/quorum_relay/test_quorum_relay.py`).
 
@@ -241,7 +248,8 @@ observation, not a disputed one).
 These monitor/notification wiring steps are produced by the optional API
 reconciliation path. With the default Kuma 2 configuration, create the
 equivalent providers and monitor associations in the UI; enabling the relay
-service alone does not modify Kuma's configuration.
+service alone does not modify Kuma's configuration. Setting the relay flag
+to false stops and removes an existing relay service on the next apply.
 
 ## Monitors and groups
 
@@ -310,8 +318,8 @@ entirely — no providers get created either way.
 ## Docker image updates
 
 `uptime_kuma_version` defaults to the official rolling v2 image tag, `2`.
-This follows current Uptime Kuma v2 releases without using Docker's deprecated
-`latest` tag. To track image updates, add it to `diun_watch_images` in
+The role pulls this tag when it runs. OS `unattended-upgrades` does not
+refresh the Docker image. To track image updates, add it to `diun_watch_images` in
 `proxmox/group_vars/proxmox_cluster.yml` (the central Diun instance polls
 image registries directly, so it doesn't matter that these hosts run outside
 Proxmox):
