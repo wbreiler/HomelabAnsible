@@ -1,6 +1,8 @@
 # Ponytail Audit TODO
 
-Findings from `/ponytail-audit`, biggest cut first.
+Historical findings from `/ponytail-audit`, biggest cut first. Checked items
+record prior work, not a fresh validation of every historical assertion.
+Current operational checks are in [LIVE_AUDIT.md](../LIVE_AUDIT.md).
 
 ## Bug review — priority order
 
@@ -21,10 +23,10 @@ Findings from `/ponytail-audit`, biggest cut first.
 
 ## Remote installer migration — complete
 
-All apps migrated to repository-owned managed roles: IP-Tag, Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, and Radarr. The generic remote-installer path has been removed.
+The listed apps migrated to repository-owned managed roles: IP-Tag, Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, and Radarr. The generic remote-installer path has been removed. Other live apps can still use the separate `update_apps` wrapper; this list is not the complete live fleet.
 
 The Forgejo follow-up is complete: it was advanced one major at a time and is
-now pinned at 16.0.2. Continue reviewing release notes and changing the pinned
+now pinned at 16.0.5. Continue reviewing release notes and changing the pinned
 version and checksum together for future upgrades.
 
 ## Completed ponytail audit items

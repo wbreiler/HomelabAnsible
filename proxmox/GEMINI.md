@@ -1,6 +1,6 @@
 # Gemini Context: Proxmox Ansible Automation
 
-This project manages the three-node `cluster-nash` Proxmox VE 9 cluster and
+This project manages the two-node `cluster-nash` Proxmox VE 9 cluster and
 its PBS integration. The canonical implementation and operating guidance is
 in [`AGENTS.md`](AGENTS.md); read it before making changes. Human-oriented
 setup and role documentation is in [`README.md`](README.md). Role-specific
@@ -9,7 +9,7 @@ implementation notes are consolidated in [`AGENTS.md`](AGENTS.md).
 ## Current architecture
 
 - Run Ansible from this directory so `ansible.cfg`, the ignored inventory,
-  and the `~/.ssh/cluster-nash` identity are used.
+  and the configured SSH-agent identity are used (`~/.ssh/cluster.pub` on the current controller).
 - `site.yml` first configures `proxmox_cluster`, then applies
   `network_tuning` to `proxmox_cluster:pbs_nodes`.
 - The repository has no Ceph automation. Tailscale exists only as the opt-in

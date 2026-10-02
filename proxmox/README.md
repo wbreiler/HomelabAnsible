@@ -6,6 +6,13 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
 **PBS Server**: mnemosyne (10.10.20.2, `pbs_nodes` inventory group)
 **Second play**: `site.yml` also applies network tuning to both proxmox_cluster and pbs_nodes groups
 
+## Live verification
+
+See the [2026-10-02 repository audit](../LIVE_AUDIT.md) for verified state and
+blocked checks. Deployment examples and role defaults are not live placement.
+The cluster currently has two nodes. All 29 LXCs are on Prometheus while Atlas
+is in HA maintenance mode; guest placement must be checked again before use.
+
 ## Features
 
 - **Repository Configuration**: Disables enterprise repositories (`.sources` format for PVE 9+) and configures the APT caching proxy
@@ -31,7 +38,7 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
    ansible-galaxy collection install -r requirements.yml
    ```
 
-2. **SSH access** to all Proxmox nodes using `~/.ssh/cluster-nash` through the 1Password SSH agent and user SSH configuration
+2. **SSH access** to all Proxmox nodes through the configured SSH agent and user SSH configuration (`~/.ssh/cluster.pub` selects the agent-held key on the current controller)
 
 3. **PBS server** configured and accessible
 
@@ -237,7 +244,7 @@ The `pbs_backup_job` role creates or reconciles a scheduled backup job (`/cluste
 
 ```yaml
 configure_pbs_backup_job: true
-pbs_backup_job_schedule: "0/6:30"  # every 6h30m starting at 00:00
+pbs_backup_job_schedule: "0/6:30"  # 00:30, 06:30, 12:30, and 18:30 daily
 pbs_backup_job_mode: "snapshot"
 pbs_backup_job_compress: "zstd"
 pbs_backup_job_vmids: ""  # empty = all guests
@@ -362,24 +369,36 @@ Together: `healthcheck_reminder` catches "is the node/guest even up" (Proxmox-na
 
 ### Standalone App LXCs
 
-Fifteen repository-owned roles in this section manage a single-purpose LXC; the Tailscale router is documented separately below. Each is opt-in and defaults off. All bootstrap through the shared `tasks/create_lxc.yml` and adopt existing containers by hostname. Because adopted containers can be HA-managed and move between nodes, each role resolves the node currently hosting its container at run time (`tasks/resolve_lxc_node.yml`); the configured `<role>_node` is only the fresh-install fallback. Names, VMIDs, sizes, nodes, and versions below are tracked defaults, not assertions about live state.
+Repository-owned roles in this section manage single-purpose LXCs; the Tailscale router is documented separately below. Each is opt-in and defaults off. All bootstrap through the shared `tasks/create_lxc.yml` and adopt existing containers by hostname. Because adopted containers can be HA-managed and move between nodes, each role resolves the node currently hosting its container at run time (`tasks/resolve_lxc_node.yml`); the configured `<role>_node` is only the fresh-install fallback. Names, VMIDs, sizes, nodes, and versions below are tracked defaults, not assertions about live state.
 
 - **`apt_cacher_ng`** — Apt-Cacher NG package cache with HTTPS pass-through and self-proxy configuration. Its defaults identify `apt-nash`, VMID 106, `atlas` as the fresh-install fallback, and a 2 CPU/512 MB/25 GB container. It removes the legacy remote update hook.
-- **`prowlarr`** — Prowlarr indexer manager. Its defaults identify `prowlarr-nash`, VMID 104, and `atlas` as the fresh-install fallback. It pins version 2.5.2.5491 and its release checksum, removes the remote update hook, and verifies the web interface.
-- **`homebridge`** — HomeKit bridge. Its defaults identify `homebridge-nash`, VMID 105, and `prometheus` as the fresh-install fallback. It pins package version 2.0.5, checksum-verifies the Homebridge repository key, removes the remote update hook, and verifies Homebridge and Avahi.
-- **`spoolman`** — 3D-printer spool inventory. Its defaults identify `spoolman-nash`, VMID 102, and `atlas` as the fresh-install fallback. It pins and verifies Spoolman 0.26.1 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
+- **`prowlarr`** — Prowlarr indexer manager. Its defaults identify `prowlarr-nash`, VMID 104, and `atlas` as the fresh-install fallback. It pins version 2.6.5.5623 and its release checksum, removes the remote update hook, and verifies the web interface.
+- **`homebridge`** — HomeKit bridge. Its defaults identify `homebridge-nash`, VMID 105, and `prometheus` as the fresh-install fallback. It pins package version 2.0.19, checksum-verifies the Homebridge repository key, removes the remote update hook, and verifies Homebridge and Avahi.
+- **`spoolman`** — 3D-printer spool inventory. Its defaults identify `spoolman-nash`, VMID 102, and `atlas` as the fresh-install fallback. It pins and verifies Spoolman 0.27.0 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
 - **`bambuddy`** — Bambu Lab printer management. It creates or adopts an unprivileged Debian LXC, installs a pinned and checksum-verified Bambuddy release using the sizing recommended by the Community Scripts installer, preserves local environment and data files, and verifies the web interface on port 8000. The pinned `nils_ost.bambuddy` collection is also installed for future API-driven printer and settings management; its Docker installer is not used.
-- **`gitea_mirror`** — Gitea Mirror repository mirroring service. Its defaults identify `git-mirror-nash`, VMID 119, and `atlas` as the fresh-install fallback. It pins and verifies Gitea Mirror 3.26.2 and Bun 1.3.14, preserves the existing environment file and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the installed version.
-- **`seerr`** — Seerr media-request manager. Its defaults identify `seerr-nash`, VMID 117, and `atlas` as the fresh-install fallback. It pins and verifies Seerr 3.4.1 and pnpm 10.34.4, requires Node.js 22, preserves `/etc/seerr/seerr.conf` and the SQLite config data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the API-reported version.
-- **`pocket_id`** — Pocket ID OIDC identity provider. Its defaults identify `pocketid-nash`, VMID 100, and `atlas` as the fresh-install fallback. It pins and verifies the Pocket ID 2.13.0 binary, preserves the `.env` and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
-- **`vaultwarden`** — Vaultwarden password manager. Its defaults identify `vaultwarden-nash`, VMID 125, and `atlas` as the fresh-install fallback. Based on the Community Scripts design without executing its installer, it builds pinned Vaultwarden 1.37.2 source with pinned Rust 1.97.1, installs the pinned matching web vault, preserves and verifies SQLite data, uses a hardened non-root systemd service, and rolls back failed upgrades.
-- **`forgejo`** — Forgejo Git hosting. Its defaults identify `forgejo-nash`, VMID 103, and `prometheus` as the fresh-install fallback. It pins and verifies the Forgejo 16.0.2 release binary, refuses downgrades and skipped major versions, preserves `app.ini` and repository data, checks SQLite integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
-- **`sonarr`** — Sonarr TV manager. Its defaults identify `sonarr-nash`, VMID 110, and `atlas` as the fresh-install fallback. It pins and verifies Sonarr 4.0.19.2979, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
-- **`radarr`** — Radarr movie manager. Its defaults identify `radarr-nash`, VMID 111, and `prometheus` as the fresh-install fallback. It pins and verifies Radarr 6.3.0.10514, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
+- **`nexdeck`** — Infrastructure dashboard. The tracked release is 0.29.1; the
+  role resolves existing placement and serves port 8000.
+- **`homelable`** — Topology UI and discovery. See [Homelable](#homelable).
+- **`speedtest_tracker`** — Scheduled Internet speed checks. See [Speedtest Tracker](#speedtest-tracker).
+- **`gitea_mirror`** — Gitea Mirror repository mirroring service. Its defaults identify `git-mirror-nash`, VMID 119, and `atlas` as the fresh-install fallback. It pins and verifies Gitea Mirror 3.40.3 and Bun 1.3.14, preserves the existing environment file and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the installed version.
+- **`seerr`** — Seerr media-request manager. Its defaults identify `seerr-nash`, VMID 117, and `atlas` as the fresh-install fallback. It pins and verifies Seerr 3.5.0 and pnpm 10.34.4, requires Node.js 22, preserves `/etc/seerr/seerr.conf` and the SQLite config data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the API-reported version.
+- **`pocket_id`** — Pocket ID OIDC identity provider. Its defaults identify `pocketid-nash`, VMID 100, and `atlas` as the fresh-install fallback. It pins and verifies the Pocket ID 2.17.0 binary, preserves the `.env` and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
+- **`vaultwarden`** — Vaultwarden password manager. Its defaults identify `vaultwarden-nash`, VMID 125, and `atlas` as the fresh-install fallback. Based on the Community Scripts design without executing its installer, it builds pinned Vaultwarden 1.37.3 source with pinned Rust 1.97.1, installs the pinned matching web vault, preserves and verifies SQLite data, uses a hardened non-root systemd service, and rolls back failed upgrades.
+- **`forgejo`** — Forgejo Git hosting. Its defaults identify `forgejo-nash`, VMID 103, and `prometheus` as the fresh-install fallback. It pins and verifies the Forgejo 16.0.5 release binary, refuses downgrades and skipped major versions, preserves `app.ini` and repository data, checks SQLite integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
+- **`sonarr`** — Sonarr TV manager. Its defaults identify `sonarr-nash`, VMID 110, and `atlas` as the fresh-install fallback. It pins and verifies Sonarr 4.0.20.3014, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
+- **`radarr`** — Radarr movie manager. Its defaults identify `radarr-nash`, VMID 111, and `prometheus` as the fresh-install fallback. It pins and verifies Radarr 6.4.4.10685, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`gallery_dl`** — gallery-dl on a cron schedule, NFS-mounted to the vault share. Configure `gallery_dl_profiles` (usernames to archive) and optionally `gallery_dl_cookies_file`.
 - **`gatus`** — Uptime monitoring/status page. See [Monitoring](#monitoring) above for details.
 - **`diun`** — Docker image update watcher. See [Monitoring](#monitoring) above for details.
 - **`centralized_logging`** — Loki, Grafana, and Alloy. See [Centralized logging](#centralized-logging).
+
+### Sonarr and Radarr storage startup
+
+The separate [arr storage playbook](docs/arr-storage.md) orders DHCP completion
+before NFS mounts and requires all configured media/download mounts before
+application startup. Native timers retry failed starts. Both LXCs passed
+separate reboot, mount-order, HTTP, and media-user read/write tests on 2026-10-02.
+Application roles preserve these systemd drop-ins but do not deploy them.
 
 ### Centralized logging
 
@@ -424,7 +443,8 @@ a time after the 30-day storage rate is known. The main PBS job includes VMID
 127 because that job backs up all non-game guests. Its root disk contains
 all Loki data, Grafana data, and configuration. Diun (121) is also excluded
 until its 256 MiB RAM allocation can be increased safely. The router's Alloy
-package is installed, and its agent runs within the existing 256 MiB limit.
+package is installed. Guest 123 now has 512 MiB RAM after the 2026-10-02
+update exposed an out-of-memory failure at 256 MiB.
 
 The addresses above are the deployment snapshot. Reserve the DHCP leases
 in the existing DHCP server to keep them stable. If an address changes,
@@ -462,37 +482,37 @@ apt_cacher_ng_vlan: 40
 install_prowlarr: true
 prowlarr_node: "atlas"
 prowlarr_vmid: "104"
-prowlarr_version: "2.5.2.5491"
+prowlarr_version: "2.6.5.5623"
 
 install_homebridge: true
 homebridge_node: "prometheus"
 homebridge_vmid: "105"
-homebridge_version: "2.0.5"
+homebridge_version: "2.0.19"
 
 install_spoolman: true
 spoolman_node: "atlas"
 spoolman_vmid: "102"
-spoolman_version: "0.26.1"
+spoolman_version: "0.27.0"
 
 install_bambuddy: true
 bambuddy_node: "atlas"
 bambuddy_vmid: ""  # selects the next available managed-app VMID
-bambuddy_version: "1.2.5.5"
+bambuddy_version: "1.2.5.7"
 
 install_gitea_mirror: true
 gitea_mirror_node: "atlas"  # fresh-install fallback; the role finds the current host itself
 gitea_mirror_vmid: "119"
-gitea_mirror_version: "3.26.2"
+gitea_mirror_version: "3.40.3"
 
 install_seerr: true
 seerr_node: "atlas"  # fresh-install fallback; the role finds the current host itself
 seerr_vmid: "117"
-seerr_version: "3.4.1"
+seerr_version: "3.5.0"
 
 install_pocket_id: true
 pocket_id_node: "atlas"
 pocket_id_vmid: "100"
-pocket_id_version: "2.13.0"
+pocket_id_version: "2.17.0"
 
 install_vaultwarden: true
 vaultwarden_node: "atlas"
@@ -503,17 +523,17 @@ vaultwarden_domain: "https://vault.wbreiler.com"
 install_forgejo: true
 forgejo_node: "prometheus"
 forgejo_vmid: "103"
-forgejo_version: "16.0.2"  # never skip a major; upgrade one major at a time
+forgejo_version: "16.0.5"  # never skip a major; upgrade one major at a time
 
 install_sonarr: true
 sonarr_node: "atlas"
 sonarr_vmid: "110"
-sonarr_version: "4.0.19.2979"
+sonarr_version: "4.0.20.3014"
 
 install_radarr: true
 radarr_node: "prometheus"
 radarr_vmid: "111"
-radarr_version: "6.3.0.10514"
+radarr_version: "6.4.4.10685"
 
 install_gallery_dl: true
 
@@ -700,22 +720,24 @@ journalctl -u homelab-healthcheck-reminder.service
 
 ### PBS Restore
 
-The `pbs_restore` role restores LXC containers from Proxmox Backup Server. It supports restoring to different VMIDs, storage locations, and can optionally start containers after restore.
+The `pbs_restore` role restores LXC or QEMU backups. It supports different target
+VMIDs and storage, and optional startup after restore. Set `restore_from_pbs=true`
+to enable it. Select an existing target storage; this cluster has no `local-lvm`.
 
 **Usage:**
 
 ```bash
 # Restore a specific container from latest backup
-ansible-playbook site.yml --tags restore \
+ansible-playbook site.yml --tags restore -e 'restore_from_pbs=true' \
   -e '{"pbs_restore_containers": [{"vmid": 100}]}' --ask-vault-pass
 
 # Restore to a different VMID and start after restore
-ansible-playbook site.yml --tags restore \
+ansible-playbook site.yml --tags restore -e 'restore_from_pbs=true' \
   -e '{"pbs_restore_containers": [{"vmid": 100, "target_vmid": 200, "start_after_restore": true}]}' \
   --ask-vault-pass
 
 # Force restore (overwrite existing container)
-ansible-playbook site.yml --tags restore \
+ansible-playbook site.yml --tags restore -e 'restore_from_pbs=true' \
   -e '{"pbs_restore_containers": [{"vmid": 100, "force": true}]}' --ask-vault-pass
 ```
 
@@ -724,7 +746,7 @@ ansible-playbook site.yml --tags restore \
 ```yaml
 restore_from_pbs: true
 pbs_restore_node: "atlas"
-pbs_restore_storage: "local-lvm"
+pbs_restore_storage: "helios"
 ```
 
 ### IP Tagging
@@ -788,7 +810,7 @@ partitions VMIDs 100-199 across the two nodes.
 ```yaml
 deploy_vms: true
 vm_deploy_node: "random" # or a specific node name
-vm_deploy_storage: "local-lvm"
+vm_deploy_storage: "helios"
 
 vm_deploy_vms:
   - name: debian-12
@@ -872,7 +894,7 @@ ansible-playbook -i inventory.yml site.yml --limit newnode --skip-tags cluster,i
 If you already have a cluster and want to add the new node:
 
 ```bash
-ansible-playbook -i inventory.yml site.yml --limit newnode --tags cluster
+ansible-playbook -i inventory.yml site.yml --limit newnode --tags cluster -e setup_cluster=true
 ```
 
 ### 5. Verify
@@ -898,7 +920,7 @@ See [Contributing](#contributing) for the high-level workflow. Follow the patter
 If you get SSH connection errors:
 
 ```bash
-# Test SSH using the user configuration and 1Password SSH agent
+# Test SSH using the user configuration and configured SSH agent
 ssh root@10.10.30.9
 
 # Inspect the effective SSH configuration without connecting
@@ -962,7 +984,7 @@ Verify PBS storage manually:
 ```bash
 # On a Proxmox node
 pvesm status
-pvesm list pbs-backup
+pvesm list mnemosyne
 ```
 
 ### ISO Download Issues
@@ -1014,12 +1036,15 @@ Control how many nodes run simultaneously:
 ansible-playbook site.yml --forks 10
 ```
 
+Use `mnemosyne` for the current cluster storage ID. Its PBS datastore is
+`mneme`, namespace `cluster-nash`; these are different identifiers.
+
 ## Maintenance
 
 ### Checking PBS Backups
 
 ```bash
-ansible proxmox_cluster -m shell -a "pvesm list pbs-backup" --become
+ansible proxmox_cluster -m shell -a "pvesm list mnemosyne" --become
 ```
 
 ## Contributing
@@ -1061,10 +1086,10 @@ The initial login is `admin@example.com`. Retrieve the randomly generated
 password in your own terminal (do not paste it into chat or commit it):
 
 ```bash
-ssh root@10.10.30.9 'pct exec 130 -- sed -n "s/^ADMIN_PASSWORD=//p" /opt/speedtest-tracker/secrets.env'
+ssh root@10.10.30.3 'pct exec 130 -- sed -n "s/^ADMIN_PASSWORD=//p" /opt/speedtest-tracker/secrets.env'
 ```
 
-That command assumes VMID 130 still resides on Atlas. Resolve its current node
+That command uses its 2026-10-02 placement on Prometheus. Resolve its current node
 with `pvesh get /cluster/resources --type vm` if the container has moved.
 The role preserves the encryption key, password, and database on repeat runs.
 
@@ -1088,7 +1113,7 @@ management and does not erase saved settings.
 Verify threshold boundaries and notification triggers without sending messages:
 
 ```bash
-ssh root@10.10.30.9 'pct exec 130 -- docker exec -i -u abc -w /app/www speedtest-tracker php' \
+ssh root@10.10.30.3 'pct exec 130 -- docker exec -i -u abc -w /app/www speedtest-tracker php' \
   < roles/speedtest_tracker/files/verify-notifications.php
 ```
 

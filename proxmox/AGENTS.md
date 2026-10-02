@@ -17,9 +17,9 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
 * Gatus and Diun are opt-in monitoring roles; Discord update and health
   reminders are also managed here.
 * The main playbook `site.yml` has two plays: the first sets up Proxmox nodes, the second runs `network_tuning` on both `proxmox_cluster` and `pbs_nodes` groups.
-* The SSH key `~/.ssh/cluster-nash` is served by the 1Password SSH agent and
-  selected through the user's SSH configuration. The old `private_key_file`
-  setting remains commented out in `ansible.cfg`.
+* SSH uses the agent selected by the user's SSH configuration. On the current
+  controller this is Bitwarden, with `~/.ssh/cluster.pub` selecting the PVE/PBS
+  key. The old `private_key_file` setting in `ansible.cfg` is commented out.
 
 ## Project Structure
 
@@ -107,28 +107,32 @@ local variable files before changing behavior.
 10. **homebridge**: Manages the Homebridge LXC.
 11. **spoolman**: Manages the Spoolman LXC.
 12. **bambuddy**: Manages the Bambuddy LXC.
-13. **gitea_mirror**: Manages the Gitea Mirror LXC.
-14. **seerr**: Manages the Seerr LXC.
-15. **pocket_id**: Manages the Pocket ID LXC.
-16. **vaultwarden**: Manages the Vaultwarden LXC.
-17. **forgejo**: Manages the Forgejo LXC with strict upgrade guards.
-18. **sonarr**: Manages the Sonarr LXC.
-19. **radarr**: Manages the Radarr LXC.
-20. **gallery_dl**: Manages the privileged, NFS-mounting gallery-dl LXC.
-21. **gatus**: Manages the Gatus status-page LXC.
-22. **diun**: Manages the Diun image-update watcher LXC.
-23. **centralized_logging**: Creates Loki and Grafana and deploys Alloy.
-24. **tailscale_router**: Manages the Tailscale subnet-router LXC.
-25. **update_all**: Updates Proxmox nodes and LXC operating systems.
-26. **update_reminder**: Installs per-node Discord update reminders.
-27. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
-28. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
-29. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
-30. **vm_deploy**: Deploys full VMs from ISOs.
+13. **homelable**: Creates or adopts the topology and discovery LXC.
+14. **nexdeck**: Creates or adopts the infrastructure dashboard LXC.
+15. **gitea_mirror**: Manages the Gitea Mirror LXC.
+16. **seerr**: Manages the Seerr LXC.
+17. **pocket_id**: Manages the Pocket ID LXC.
+18. **vaultwarden**: Manages the Vaultwarden LXC.
+19. **forgejo**: Manages the Forgejo LXC with strict upgrade guards.
+20. **sonarr**: Manages the Sonarr LXC.
+21. **radarr**: Manages the Radarr LXC.
+22. **gallery_dl**: Manages the privileged, NFS-mounting gallery-dl LXC.
+23. **speedtest_tracker**: Creates or adopts the Internet monitoring LXC.
+24. **gatus**: Manages the Gatus status-page LXC.
+25. **diun**: Manages the Diun image-update watcher LXC.
+26. **centralized_logging**: Creates Loki and Grafana and deploys Alloy.
+27. **tailscale_router**: Manages the Tailscale subnet-router LXC.
+28. **update_apps**: Installs the wrapper for eligible unmanaged application updates.
+29. **update_all**: Updates Proxmox nodes and LXC operating systems.
+30. **update_reminder**: Installs per-node Discord update reminders.
+31. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
+32. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
+33. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
+34. **vm_deploy**: Deploys full VMs from ISOs.
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-31. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
+35. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
 
 ### PBS Storage Pattern
 
@@ -376,6 +380,14 @@ management, LXC installation, system updates, and PBS restores.
 * Pins and checksum-verifies the release tarball, backs up config and databases before atomically swapping the install directory, rolls back automatically when the upgraded service fails its `/ping` check, removes the remote updater, and verifies the API-reported version.
 * Skipped by default unless `install_sonarr: true`.
 
+### arr_storage.yml
+
+* Standalone guest-targeted playbook; see `docs/arr-storage.md`.
+* Orders ifupdown completion before network readiness, requires existing NFS
+  mounts before Sonarr/Radarr, and retries failed starts with systemd timers.
+* Separate from the application roles and `site.yml`. It does not reboot guests.
+* Both guests passed explicit reboot verification on 2026-10-02.
+
 ### radarr
 
 * Manages Radarr with repository-owned Ansible tasks.
@@ -465,7 +477,7 @@ management, LXC installation, system updates, and PBS restores.
 ### pbs_restore
 
 * Restores LXC containers from PBS.
-* Runs on a single target node (`pbs_restore_node`).
+* Runs on a single target node (`pbs_restore_node`). LXC and QEMU backups are supported.
 
 ### iptag
 
