@@ -4,6 +4,12 @@ Monorepo for independently operated Ansible projects covering the Proxmox/PBS
 core, Minecraft and application LXCs, TrueNAS, the core switch, multi-site
 monitoring, and workstation provisioning.
 
+## Documentation verification
+
+See [LIVE_AUDIT.md](LIVE_AUDIT.md) for the 2026-10-02 live check, documentation
+corrections, and checks blocked by access. Historical audit and handoff files
+remain historical records. Role defaults and examples are not live inventory.
+
 ## Projects
 
 | Directory | What it manages | Docs |
@@ -33,7 +39,7 @@ cd pbs && ansible-playbook site.yml --vault-password-file .vault_pass
 
 # Minecraft servers
 cd minecraft/ansible && \
-  ssh-agent bash -c 'ssh-add ~/.ssh/lxc_nash && ansible-playbook provision.yml --ask-vault-pass'
+  ansible-playbook provision.yml --private-key ~/.ssh/lxc.pub --ask-vault-pass
 
 # TrueNAS (audit first; convergence is site.yml)
 cd truenas && ansible-playbook playbooks/audit.yml

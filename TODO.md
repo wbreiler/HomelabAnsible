@@ -1,7 +1,10 @@
 # Security Sweep TODO
 
 Completed findings from the repo-wide security sweep performed on 2026-08-13.
-Every recorded item below is fixed; this file remains as the audit record.
+The checkmarks record the original remediation work. Finding text and line
+numbers describe that historical sweep, not the current live state. This is
+not a fresh security assessment; see [LIVE_AUDIT.md](LIVE_AUDIT.md) for the
+2026-10-02 documentation and operational checks.
 
 ## Good news first
 

@@ -90,10 +90,10 @@ Commit style: `role_name: brief description` (see `proxmox/AGENTS.md`).
 
 - Cluster `cluster-nash`: prometheus (10.10.30.3) and atlas (10.10.30.9) —
   PVE 9 / Debian trixie.
-- PBS: mnemosyne (10.10.20.2), local-ZFS-backed `MainStore` datastore.
-- TrueNAS: erebus (10.10.10.7, SSH port 2747), key auth via 1Password agent.
-- SSH keys: `~/.ssh/cluster-nash` (proxmox, via 1Password agent),
-  `~/.ssh/lxc_nash` (minecraft LXCs).
+- PBS: mnemosyne (10.10.20.2), local-ZFS-backed `mneme` datastore (`MainStore` is a role default).
+- TrueNAS: erebus (10.10.10.7, SSH port 2747), key auth via the configured SSH agent (Bitwarden on the current controller).
+- SSH public-key selectors: `~/.ssh/cluster.pub` (PVE/PBS),
+  `~/.ssh/lxc.pub` (LXCs). Private keys remain in the configured SSH agent.
 - Proxmox, PBS, Minecraft, and Kuma explicitly use
   `StrictHostKeyChecking=accept-new` (trust on first use); Arista, desktop, and
   TrueNAS keep host-key checking enabled. If a host is legitimately
