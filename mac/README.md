@@ -5,6 +5,18 @@ Command Line Tools, Homebrew software, App Store apps, shell and editor files,
 Git/SSH configuration, homelab hosts, Dock layout, and macOS defaults. It uses
 `/opt/homebrew` paths and has no inventory or `ansible.cfg`.
 
+## Read-only verification: 2026-10-02
+
+The local Mac reported macOS 27.0.1 (26A434), arm64, Homebrew 7.0.7, and
+Command Line Tools at `/Library/Developer/CommandLineTools`. The four managed
+user files listed below matched their tracked sources. The Bitwarden agent
+socket existed, and `~/.config/1Password` was absent.
+
+These checks do not establish package, Dock, defaults, or host-entry
+convergence. The task lists define desired state, not a live inventory. Review
+static host entries against current guest addresses before applying `hosts`.
+This verification did not apply the playbook.
+
 ## Bootstrap and run
 
 Install Ansible first. The playbook can install Xcode Command Line Tools and
@@ -41,7 +53,7 @@ alter the current session.
 | Tag | Current behavior |
 | --- | --- |
 | `xcode` | Detects and installs Xcode Command Line Tools through `softwareupdate` when absent |
-| `homebrew` | Installs/updates Homebrew, taps, formulae, casks, `dockutil`, and sudo Touch ID support |
+| `homebrew` | Updates Homebrew metadata and ensures taps, formulae, casks, `dockutil`, and sudo Touch ID support are present; package tasks use `state: present`, not `latest` |
 | `mas` | Installs IDs in `tasks/mas.yml`; requires a signed-in, entitled account and runs installs as root |
 | `shell` | Installs Oh My Zsh, replaces `.zshrc`/`.zprofile` with backups, manages pyenv Python 3.14 and selected pip/npm packages, and selects zsh |
 | `git` | Sets the global name/email and installs Git LFS hooks; it does not configure commit signing |

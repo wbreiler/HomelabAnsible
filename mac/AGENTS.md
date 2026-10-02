@@ -42,7 +42,7 @@ post-change checks.
 | `tasks/mas.yml` | `mas` | Installs App Store apps as root with `mas`; the user must already be signed in and some apps depend on account entitlement. |
 | `tasks/shell.yml` | `shell` | Installs Oh My Zsh, deploys `zshrc`/`zprofile`, manages pyenv Python and selected global pip/npm packages, and sets zsh as the login shell. |
 | `tasks/git.yml` | `git` | Sets the global Git name/email and installs Git LFS hooks; commit signing is not configured. |
-| `tasks/ssh.yml` | `ssh` | Deploys SSH and 1Password SSH-agent configuration; it does not manage private keys. |
+| `tasks/ssh.yml` | `ssh` | Deploys SSH configuration for the Bitwarden agent and removes obsolete 1Password agent configuration; it does not manage private keys. |
 | `tasks/vscode.yml` | `vscode` | Deploys VS Code settings and installs extensions through `code`. |
 | `tasks/hosts.yml` | `hosts` | Replaces the Ansible-managed block in `/etc/hosts`; requires privilege escalation. |
 | `tasks/dock.yml` | `dock` | Destructively replaces the user's Dock layout, then restarts Dock. |
@@ -54,12 +54,13 @@ Files under `files/` are copied into the user's home directory:
 
 - `zshrc` and `zprofile` provide the shell environment, aliases, Homebrew and
   pyenv setup.
-- `ssh_config` contains homelab host/network rules and 1Password agent wiring.
-- `1password-agent.toml` configures the 1Password SSH agent.
+- `ssh_config` contains homelab host/network rules and Bitwarden agent wiring.
 - `vscode_settings.json` is the complete managed VS Code settings file.
 
 Do not add private keys, tokens, passwords, or machine-local secrets. Private
 SSH keys must remain outside this project.
+The `ssh` tasks also remove `~/.config/1Password`; review that removal before
+applying the tag. No `1password-agent.toml` is deployed.
 
 ## Dependencies and ordering
 
