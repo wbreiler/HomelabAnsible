@@ -10,13 +10,31 @@ PBS product or create/reconfigure the underlying ZFS pool.
 - ✅ Uses an existing local ZFS pool of any size or vdev topology
 - ✅ Creates a dedicated ZFS dataset with `atime=off`
 - ✅ Creates missing PBS users and grants datastore-wide administrator access
-- ✅ Configures MainStore on the local ZFS dataset
+- ✅ Registers the configured datastore name (`MainStore` is the default)
 - ✅ Optional remote plus pull-style sync-job creation
 - ✅ Installs and configures Tailscale VPN
 
+## Verified host snapshot — 2026-10-02
+
+The existing host `mnemosyne` runs PBS `4.2.7-1` on Debian 13 (`trixie`).
+Both PBS services are active. Its datastore is `mneme`, mounted at `/mneme`
+on the ZFS pool root dataset `mneme`. Both `mneme` and `rpool` are ONLINE.
+One sync job exists. Tailscale is inactive.
+
+The running kernel is `7.0.14-15-pve`; `7.0.14-20-pve` is installed but is
+not active. This documentation check did not reboot the host.
+
+These values differ from the role's example defaults. Do not apply the example
+`backup/pbs`, `/mnt/datastore`, or `MainStore` settings to this host. The local
+`pbs/inventory.yml` is absent; the host is also listed in the Proxmox project's
+inventory. Create reviewed PBS inventory and variables before using this
+project's entry point.
+
 ## Prerequisites
 
-- Existing PBS host on Debian 12 Bookworm; repository URLs are Bookworm-specific
+- Existing PBS host; this project does not install PBS
+- Review the Tailscale role before use on Debian 13: its repository suite and
+  key URL still target Debian 12 Bookworm
 - ansible-core 2.16 through 2.21 installed on the control node
 - Root or sudo access on target PBS server
 - SSH key authentication for routine playbook runs
@@ -249,10 +267,9 @@ ansible-playbook site.yml --check --diff
 
 Navigate to: `https://your-pbs-server:8007`
 
-Default credentials:
-
-- Username: `root`
-- Password: (the one you set in group_vars)
+Use the existing administrator account. For the Unix root account, select the
+Linux PAM realm (`root@pam`) and use its current password. The users role changes
+that password only when `users_root_password` is non-empty.
 
 ### 2. Configure Tailscale
 
