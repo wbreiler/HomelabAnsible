@@ -47,10 +47,13 @@ Host github.com
   IdentityFile ~/.ssh/github.pub
   IdentitiesOnly yes
 
-# Password Only
+# Arista: agent-held cluster key, with password fallback
 Host 192.168.1.222
-  PreferredAuthentications password
-  PubkeyAuthentication no
+  User admin
+  IdentityFile ~/.ssh/cluster.pub
+  IdentitiesOnly yes
+  PreferredAuthentications publickey,password
+  PubkeyAuthentication yes
 
 Host *
   IdentityAgent "~/.bitwarden-ssh-agent.sock"
