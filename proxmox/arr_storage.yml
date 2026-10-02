@@ -1,0 +1,109 @@
+---
+# Run against the guests directly. See docs/arr-storage.md for inventory and tests.
+- name: Require NFS storage before starting Sonarr and Radarr
+  hosts: arr_storage
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Validate application selection
+      ansible.builtin.assert:
+        that:
+          - arr_service in ['sonarr', 'radarr']
+
+    - name: Read configured NFS mounts
+      ansible.builtin.command:
+        argv: [findmnt, --fstab, --types, 'nfs,nfs4', --json, -o, 'SOURCE,TARGET']
+      register: arr_fstab
+      changed_when: false
+      check_mode: false
+
+    - name: Collect required storage paths
+      ansible.builtin.set_fact:
+        arr_mounts: "{{ (arr_fstab.stdout | from_json).filesystems }}"
+
+    - name: Validate existing IPv4 NFS configuration
+      ansible.builtin.assert:
+        that:
+          - arr_mounts | length > 0
+          - item.target is match('^/[^\s]+$')
+          - item.source is match('^[0-9.]+:/')
+        fail_msg: This playbook expects existing NFS mounts using IPv4 server addresses.
+      loop: "{{ arr_mounts }}"
+
+    - name: Read ifupdown networking state
+      ansible.builtin.systemd_service:
+        name: networking.service
+      register: arr_networking
+
+    - name: Confirm ifupdown networking is active
+      ansible.builtin.assert:
+        that:
+          - arr_networking.status.ActiveState == 'active'
+
+    - name: Create systemd override directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /etc/systemd/system/networking.service.d
+        - "/etc/systemd/system/{{ arr_service }}.service.d"
+
+    - name: Order network readiness after DHCP and route setup
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/networking.service.d/20-nfs-online.conf
+        mode: '0644'
+        backup: true
+        content: |
+          [Unit]
+          Before=network.target network-online.target
+
+          [Service]
+          {% for server in arr_mounts | map(attribute='source') | map('regex_replace', ':.*$', '') | unique %}
+          ExecStartPost=/usr/sbin/ip -4 route get {{ server }}
+          {% endfor %}
+      notify: Reload systemd
+
+    - name: Require every configured NFS mount before the application
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ arr_service }}.service.d/20-nfs-storage.conf"
+        mode: '0644'
+        backup: true
+        content: |
+          [Unit]
+          Requires=networking.service
+          After=networking.service network-online.target
+          RequiresMountsFor={{ arr_mounts | map(attribute='target') | join(' ') }}
+      notify: Reload systemd
+
+    - name: Retry application startup after unavailable storage recovers
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ arr_service }}-storage-retry.timer"
+        mode: '0644'
+        backup: true
+        content: |
+          [Unit]
+          Description=Retry {{ arr_service }} startup after storage failure
+
+          [Timer]
+          OnCalendar=*-*-* *:*:00
+          Unit={{ arr_service }}.service
+
+          [Install]
+          WantedBy=timers.target
+      notify: Reload systemd
+
+    - name: Apply systemd dependencies
+      ansible.builtin.meta: flush_handlers
+
+    - name: Enable storage recovery timer
+      ansible.builtin.systemd_service:
+        name: "{{ arr_service }}-storage-retry.timer"
+        enabled: true
+        state: started
+      when: not ansible_check_mode
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
