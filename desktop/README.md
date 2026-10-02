@@ -2,6 +2,12 @@
 
 Configures the Windows 11 gaming PC `ORION` over WinRM.
 
+The configuration below describes intended behavior and recorded hardware.
+The 2026-10-02 documentation review checked it against the role implementation.
+The fresh WinRM probe timed out at `192.168.1.221:5985`, so installed software,
+hardware details, updates, and the SMB mapping remain unverified. An earlier
+probe in the same review reached WinRM but failed authentication.
+
 For a new controller or Windows installation, start with the role's
 [first setup guide](roles/gaming_pc/README.md). It separates the one-time
 Windows bootstrap, local inventory and vault creation, read-only connection
@@ -17,7 +23,7 @@ migration to Bitwarden.
 This Ansible project owns protected and continuing live state:
 
 - Versioned AMD chipset, Realtek audio/LAN, and detected Realtek or MediaTek
-  Wi-Fi/Bluetooth driver validation and remediation for the Gigabyte X870
+  Wi-Fi/Bluetooth driver installation for the Gigabyte X870
   EAGLE WIFI7
 - Continuing Windows, Microsoft-product, and signed hardware-driver updates
 - Persistent, all-user `Z:` mapping to `\\10.10.20.3\clips` as SMB user
@@ -35,6 +41,11 @@ MediaTek wireless modules, so the role detects the installed hardware and
 refuses to guess when it cannot identify the module. The AMD chipset package
 also supplies the applicable X3D components.
 
+Driver tasks verify the board and wireless vendor before installation. A
+package/version marker prevents repeat installation. They do not compare the
+loaded driver version against that marker or verify installer signatures
+separately from the configured SHA-256 checksum.
+
 GPU drivers are maintained through the Windows Update driver catalog after the
 ISO installs the initial RX 7900 XT driver. AMD Radeon Software, ASTRO Command
 Center, ChatGPT, and iCloud are installed by the ISO in the normal desktop-user
@@ -47,7 +58,8 @@ application is not treated as the driver source and is not silently installed.
 
 ## Managed hardware
 
-The AMD gaming PC uses:
+The recorded hardware specification is below; this review did not verify it
+on the PC:
 
 - AMD Ryzen 7 9800X3D
 - Thermalright AXP90-X47 Full CPU cooler
@@ -111,6 +123,7 @@ ansible-playbook site.yml --ask-vault-pass --check --diff
 ansible-playbook site.yml --ask-vault-pass
 ```
 
-The role registers the PC's existing Microsoft App Installer package for the
-automation account before invoking WinGet. It uses a global SMB mapping so
-`Z:` is also visible in the interactive `Techn` session.
+If application installation is explicitly enabled, the role registers the
+existing Microsoft App Installer package for the automation account before
+invoking WinGet. That path is disabled by the current configuration. The role
+uses a global SMB mapping intended to expose `Z:` to interactive users too.

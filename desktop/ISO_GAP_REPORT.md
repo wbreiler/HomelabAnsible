@@ -1,5 +1,11 @@
 # ORION ISO gap report
 
+Historical design baseline: **2026-09-04**. This report preserves the ISO and
+Ansible responsibility decisions from that date. It does not prove that an ISO
+was built, tested, or deployed, or that ORION currently matches these details.
+Use the current role and configuration for implementation behavior. The
+2026-10-02 documentation review did not validate the installed Windows state.
+
 This document defines the responsibility boundary between the custom Windows 11
 Pro ISO and the post-install Ansible workflow. The ISO owns the complete
 non-secret baseline. Ansible owns credentials, remote-management bootstrap, the

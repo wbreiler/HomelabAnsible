@@ -136,8 +136,9 @@ Do not continue to the playbook until `win_ping` succeeds.
 
 ## 5. Preview the first run
 
-Check mode is the approval boundary. It can identify intended changes, but some
-Windows and WinGet operations cannot perfectly predict their live result.
+Check mode provides a preview, not permission to apply changes. It can identify
+intended changes, but some Windows and WinGet operations cannot perfectly
+predict their live result.
 
 ```bash
 ANSIBLE_LOCAL_TEMP=/tmp/desktop-ansible-local \
