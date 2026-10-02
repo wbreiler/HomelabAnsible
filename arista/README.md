@@ -3,7 +3,13 @@
 Ansible-managed config for the homelab core switch — it carries the storage,
 IPMI, and Proxmox VLANs and is the L3 gateway for all of them.
 
-## Target
+## Recorded target
+
+The device details and port tables below come from earlier discovery and local
+desired state. They are not a fresh live inventory. The 2026-10-02 review
+verified the playbook's scope, but SSH authentication blocked device
+verification. EOS version, links, VLANs, routes, and running/startup drift
+remain unverified for that date.
 
 | Setting | Value |
 | --- | --- |
@@ -15,17 +21,17 @@ IPMI, and Proxmox VLANs and is the L3 gateway for all of them.
 
 ## Status
 
-Discovery complete — sanitized running-config and raw output live in
+Earlier discovery captured sanitized running-config and raw output in
 `artifacts/` (gitignored). Those files are observations, not desired state:
 the captured snapshot predates the managed hostname and Ethernet7 corrections.
 
 Reusable automation remains tracked in `site.yml`. Machine-specific desired
 values live in ignored `group_vars/arista.yml`, copied from the tracked
-`group_vars/arista.yml.example`. The local file declares the complete known
-working state for VLANs 10–40, Ethernet2–11 and Ethernet43–48, SVI addresses,
-global routing, and static routes. It is designed so the only intended
-differences from the captured state are the hostname and Ethernet7 correction;
-confirm the actual device diff before applying.
+`group_vars/arista.yml.example`. The schema covers VLANs 10–40,
+Ethernet2–11 and Ethernet43–48, SVI addresses, global routing, and static routes.
+Do not assume the historical hostname and Ethernet7 corrections are the only
+current differences. Confirm the actual device diff before applying. DHCP
+configuration is outside `site.yml`.
 
 Application is independently gated by `arista_apply_config`, which defaults to
 `false` in the tracked example. The playbook still validates the complete local
@@ -58,7 +64,7 @@ The switch is the gateway (SVI) for each VLAN:
 | 30 | proxmox-hosts | 10.10.30.1/26 | Et2–4 |
 | 40 | proxmox-guests | 10.10.40.1/24 | Et2–4 |
 
-## Port map (connected)
+## Port map (recorded connections)
 
 | Port | Device | Mode | Speed |
 |---|---|---|---|
