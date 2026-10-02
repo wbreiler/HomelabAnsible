@@ -12,10 +12,10 @@ bambuddy_vlan: 40
 bambuddy_tags:
   - "3d-printing"
 
-bambuddy_version: "1.2.5.6"
+bambuddy_version: "1.2.5.7"
 bambuddy_release_url: >-
   https://api.github.com/repos/maziggy/bambuddy/tarball/v{{ bambuddy_version }}
-bambuddy_release_checksum: "sha256:80454c028851aeb96a4b5fb3f3013910477e6dee4ed33d45f2d43bb8021a8279"
+bambuddy_release_checksum: "sha256:9a5cc7e878fdbb1d5fc58f5e15ced0fccb2e9eb618b271a88aa98fc357ea1509"
 bambuddy_install_dir: "/opt/bambuddy"
 bambuddy_bind_host: "0.0.0.0"
 bambuddy_port: 8000

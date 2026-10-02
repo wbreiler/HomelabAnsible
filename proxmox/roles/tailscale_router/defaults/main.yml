@@ -5,7 +5,7 @@ tailscale_router_hostname: "tailscale-router-nash"
 tailscale_router_storage: "local-zfs"
 tailscale_router_template: ""  # auto-detect latest debian-1[23]-standard if empty
 tailscale_router_cores: 1
-tailscale_router_memory: 256
+tailscale_router_memory: 512
 tailscale_router_disk: 2
 tailscale_router_bridge: "vmbr0"
 tailscale_router_vlan: 40
