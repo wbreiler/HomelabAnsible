@@ -15,12 +15,46 @@
       check_mode: false
       register: cobalt_query
       changed_when: false
-    - name: Reconcile only Cobalt
-      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
-      vars:
-        truenas_entities_apps: "{{ cobalt_query.stdout | from_json }}"
-        desired_app:
-          name: cobalt
-          custom_app: true
-          state: RUNNING
-          custom_compose_config: "{{ lookup('file', cobalt_compose_path) | from_yaml }}"
+      no_log: true
+    - name: Require an existing Cobalt application
+      ansible.builtin.assert:
+        that:
+          - (cobalt_query.stdout | from_json) | length == 1
+          - (cobalt_query.stdout | from_json)[0].custom_app | bool
+        fail_msg: Cobalt must already exist as a custom application
+    - name: Locate the existing Cobalt configuration
+      ansible.builtin.set_fact:
+        cobalt_current: "{{ (cobalt_query.stdout | from_json) | first }}"
+        cobalt_desired: "{{ lookup('file', cobalt_compose_path) | from_yaml }}"
+      no_log: true
+    - name: Report Cobalt configuration drift
+      ansible.builtin.debug:
+        msg: Cobalt configuration differs from desired state
+      changed_when: true
+      when:
+        - ansible_check_mode
+        - not (cobalt_desired | truenas_is_subset(cobalt_current.config))
+    - name: Update Cobalt through the supported API with protected standard input
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - |
+            import json, sys
+            from truenas_api_client import Client
+            with Client() as client:
+                client.call("app.update", "cobalt", {
+                    "custom_compose_config": json.load(sys.stdin)
+                }, job=True)
+        stdin: "{{ cobalt_desired | to_json }}"
+      changed_when: true
+      no_log: true
+      when:
+        - not ansible_check_mode
+        - not (cobalt_desired | truenas_is_subset(cobalt_current.config))
+    - name: Start Cobalt if stopped
+      ansible.builtin.raw: midclt call -j app.start cobalt
+      changed_when: true
+      when:
+        - not ansible_check_mode
+        - cobalt_current.state == 'STOPPED'

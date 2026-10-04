@@ -46,6 +46,9 @@ the advertised address. Build dependencies use the upstream pnpm lockfile.
 
 The second apply must report `changed=0`. This playbook intentionally selects
 only Cobalt, avoiding reconciliation of other possibly stale app definitions.
+It requires an existing custom app and sends updates through the supported
+TrueNAS Python API client. The Compose payload travels through protected
+standard input, with `no_log` on configuration reads and updates.
 The read-only discovery task also runs in check mode.
 
 ## Access and verification
@@ -142,3 +145,24 @@ All three containers were healthy; all existing apps remained RUNNING and both
 pools ONLINE. The second apply reported `changed=0`; project lint and syntax
 checks passed. This verifies the tested public clip, not every YouTube video,
 quality, account restriction, or subtitle path.
+
+## Turnstile bot protection
+
+The pinned API and frontend include Turnstile integration. Create a widget
+restricted to the public web hostname. Managed mode allows Cloudflare to
+request interaction when needed. Leave pre-clearance disabled unless separately
+required by the site's security rules.
+
+Add `TURNSTILE_SITEKEY`, `TURNSTILE_SECRET`, and a random `JWT_SECRET`
+(at least 64 hexadecimal characters) to the API environment in the ignored,
+mode-`0600` Compose file. Set `API_AUTH_REQUIRED: "1"`. Keep secret values
+out of tracked examples, command arguments, and logs.
+
+Back up TrueNAS, dry-run the dedicated Cobalt playbook, apply it, and repeat
+until `changed=0`. No frontend rebuild is required: the frontend discovers
+the site key from API metadata.
+
+Verify that API metadata advertises the site key, an unauthenticated download
+request returns `error.api.auth.jwt.missing`, and `/session` rejects missing
+or invalid Turnstile tokens. Complete a real browser challenge and download
+a supported public media fixture. Do not automate interactive CAPTCHA solving.
