@@ -1,7 +1,7 @@
 # Homelab hardening task list
 
 Status: inventory complete. Atlas reboot and Minecraft container migrations completed on October 4, 2026.
-All five Minecraft servers passed service startup and LAN game status checks. H1/P0 and H2/P1 are complete with the validation limits documented below. Other hardening tasks have not started.
+All five Minecraft servers passed service startup and LAN game status checks. H1/P0 and H2/P1 are complete with the validation limits documented below. H3/P1 is in progress. Other hardening tasks have not started.
 
 Inventory date: October 4, 2026, approximately 11:27–11:34 AM America/Chicago.
 These observations are a snapshot. Recheck live state before each operation.
@@ -108,8 +108,8 @@ Time estimates exclude large restore or offsite transfers.
   - **Complete when:** trusted administration, clustering, replication, consoles, and backups work. Untrusted sources fail explicit reachability tests.
 
 - [ ] **H3 / P1 / Harden host authentication and patch maintenance (90–180 minutes, maintenance window separate).**
-  - [ ] Prove key access for administration, Ansible, inter-node SSH, backups, and emergency access before disabling password SSH.
-  - [ ] Preserve required root key authentication for supported cluster workflows. Disable unused forwarding features after dependency checks.
+  - [x] Prove controller and Ansible key access on all three hosts, pinned inter-node SSH in both directions, and protected console recovery before disabling password SSH. PBS backups use their existing pinned API identity.
+  - [x] Preserve root key authentication and TCP forwarding. Disable password/interactive SSH, X11 forwarding, and agent forwarding after dependency checks.
   - [ ] Audit PVE/PBS MFA enforcement, token scopes, certificate validity, time synchronization, and account ownership.
   - [ ] Refresh package metadata during the implementation phase. Review updates and kernel changes, then reboot one host at a time.
   - **Complete when:** repeat key-authentication tests, expected MFA behavior, valid TLS, current reviewed packages/kernel, and healthy quorum after maintenance.
@@ -362,6 +362,104 @@ For emergency recovery through a verified console:
 5. Correct the scoped policy and repeat the trusted, denied, console, quorum, replication, and backup checks before activation.
 
 Reference: [Proxmox native host firewall documentation](https://raw.githubusercontent.com/proxmox/pve-docs/master/pve-firewall.adoc).
+
+## H3/P1 progress — October 4, 2026
+
+Status: **in progress**. Host SSH hardening, authentication audit, package refresh, and maintenance preflight are complete.
+Local administrator MFA enrollment, certificate policy selection, and the kernel maintenance window remain pending.
+The user confirmed that normal Pocket ID login uses a passkey.
+
+### SSH changes and evidence
+
+All three hosts use `/etc/ssh/sshd_config.d/00-homelab-hardening.conf` with these settings:
+
+```text
+PermitRootLogin prohibit-password
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+X11Forwarding no
+AllowAgentForwarding no
+```
+
+TCP forwarding remains enabled for supported Proxmox workflows. Root key login remains enabled.
+The repository had no agent-forwarding requirement. SSH changes did not alter web account passwords or MFA settings.
+
+- [x] Test fresh controller access with only `cluster.pub` and its SSH agent key on each host before and after mutation.
+- [x] Test peer key-only SSH in both directions with Proxmox's pinned host-key options.
+- [x] Validate daemon syntax and effective root settings for LAN/Tailscale source contexts. Reload SSH without restarting the host.
+- [x] Verify each server offers only `publickey`; password/keyboard-interactive-only attempts fail without submitting credentials.
+- [x] Execute Ansible ping modules successfully on all three hosts after hardening. No deployment roles ran.
+
+Each host had a protected `/root/h3-recovery-20261004/ssh-before.tar` and a local 15-minute rollback timer.
+Atlas was the pilot, followed by Prometheus and PBS. All timers were cancelled after validation.
+For recovery, use the verified console and the saved `rollback-ssh.sh`. It removes only the new drop-in, validates SSH, and reloads the daemon.
+The original configuration archive remains available for review. Do not replace host keys without a separately reviewed recovery procedure.
+
+### Authentication, tokens, certificates, and time
+
+PVE local administrator `root@pam` had no registered MFA methods. PBS had no local TFA configuration.
+Normal `wbreiler@pid` access uses Pocket ID, and the user confirmed a passkey.
+The PVE `hladmin` group has Administrator access. PBS grants `wbreiler@pid` Admin access.
+The request to enroll MFA for the local root accounts and privately retain recovery codes remains pending.
+Do not expose TOTP seeds, security-key registration data, recovery codes, or passwords in this task file.
+
+PVE monitor and NexDeck tokens have privilege separation enabled and read-only ACLs.
+PBS monitor and NexDeck tokens have Audit/DatastoreAudit scopes, with the dashboard also permitted system audit.
+These tokens have no expiry. Rotation requires preserving their known consumers; no token was rotated.
+PBS backup-nash and Kuma writer identities retain prune-capable namespace roles. Their retention changes belong to H4.
+No account, token, group, or ACL was modified during this audit.
+
+| Host | Certificate evidence | Time evidence |
+| --- | --- | --- |
+| Atlas | PVE cluster CA; valid until April 29, 2028; management IP in SAN | Chrony normal, offset below 1 ms at inspection |
+| Prometheus | PVE cluster CA; valid until April 29, 2028; management IP in SAN | Chrony normal, offset below 1 ms at inspection |
+| Mnemosyne | Self-signed; valid until August 20, 3025; DNS SAN includes mnemosyne.wbreiler.com; management IP absent | Chrony normal, offset below 1 ms at inspection |
+
+TLS connections passed real chain and hostname verification using certificates obtained over verified SSH.
+PVE tests used the cluster CA and the management IPs. PBS used its pinned certificate and the DNS name with an explicit address override.
+No certificate checks were disabled in these verification probes.
+The existing PBS SHA-256 fingerprint matches the PVE storage configuration.
+All three certificate hostnames failed normal resolution from this controller. The DNS override proves TLS, not production DNS availability.
+Neither platform has an ACME account or DNS plugin configured. The standalone plugin is the only current plugin.
+The certificate policy question offers native DNS-validated ACME or explicit private trust/pinning.
+ACME requires working hostname access and a scoped DNS credential. PBS certificate replacement also requires updating the PVE storage fingerprint and validating backups.
+No certificate, DNS record, credential, or trust store was changed.
+
+### Packages and kernel maintenance
+
+APT metadata refreshed successfully on all three hosts. Protected logs contain no index warnings or errors.
+Upgrade simulation reported zero upgrades, additions, removals, or held upgrades on every host.
+The installed default-kernel metapackage matches its current repository candidate. No package installation or kernel removal occurred.
+Previous kernels remain available for recovery.
+
+| Host | Running kernel | Installed target | Required maintenance |
+| --- | --- | --- | --- |
+| Atlas | 7.0.14-20-pve | 7.0.14-20-pve | No kernel reboot needed |
+| Prometheus | 7.0.14-19-pve | 7.0.14-20-pve | Evacuate running guests, then reboot |
+| Mnemosyne | 7.0.14-15-pve | 7.0.14-20-pve | Separate PBS reboot outside backup/verification activity |
+
+Both Prometheus and PBS EFI copies include the target and fallback kernels, with no manually selected kernel.
+Pools are ONLINE, no failed systemd units appeared, and HA remains armed and quorate.
+At the latest placement check, Prometheus had 22 running containers. Placement changes automatically under HA load balancing.
+Atlas had the five Minecraft guests, Vaultwarden, and NexDeck. These counts are a snapshot, not a migration instruction.
+CTs 130 and 131 lack HA entries. Both use local-zfs and have peer replication; they need explicit migration handling.
+Atlas has capacity for all running guest allocations and substantial free space in every applicable pool.
+A fresh guest constraint, replication, capacity, task, and boot preflight remains required before shutdown.
+
+The user was asked to select the maintenance window. The proposed sequence is:
+
+1. Wait for active backups/replication to finish and capture current guest placement and a fresh configuration backup.
+2. Evacuate Prometheus through HA maintenance. Migrate non-HA CTs 130/131 explicitly. Validate applications, NFS, and the Tailscale router on Atlas.
+3. After Prometheus has no running guests, disarm HA in freeze mode and verify watchdog release. Reboot Prometheus only.
+4. Verify the target kernel, quorum, pools, firewall, key-only SSH, and guest health. Re-arm HA, then remove maintenance and restore reviewed placement.
+5. In a separate idle PBS window, reboot Mnemosyne. Verify its target kernel, datastore, firewall, key-only SSH, API fingerprint, and PVE backup access.
+
+Evacuation restarts LXCs and briefly interrupts their services, including Pocket ID and the Tailscale router.
+The five Minecraft guests can remain on Atlas. Do not change their automatic balancing policy or start VM 122.
+Budget 20–40 minutes for Prometheus evacuation/reboot/validation and 5–15 minutes for PBS, excluding a wait for active jobs.
+No H3 reboot or guest migration has occurred yet.
 
 ## Guest tasks
 
