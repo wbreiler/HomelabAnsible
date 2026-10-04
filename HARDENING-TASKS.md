@@ -134,13 +134,15 @@ Time estimates exclude large restore or offsite transfers.
 
 Status: **in progress**. Recovery backups and one isolated guest restore passed.
 The user confirmed that all remote consoles work and that the Erebus physical console displays the host and permits login.
-Administrator access tests and confirmation of the iCloud copy from a second device remain open.
+The user confirmed that the iCloud bundle opens and downloads from another device.
+Administrator access tests and review of the maintenance plan remain open.
 No firewall, authentication, quorum, NAS sharing, or production placement changes occurred during H1.
 
 ### Recovery evidence
 
 - [x] Capture protected configuration archives for Atlas, Prometheus, Mnemosyne, and Erebus.
 - [x] Validate readable archives, expected configuration members, restrictive permissions, and SHA-256 checksums.
+- [x] Copy the recovery bundle to personal iCloud and confirm access from another device through user verification.
 - [x] Restore one guest from PBS to an isolated test container and validate its application data.
 - [x] Confirm current HA protection, quorum, peer replication, migration capacity, and backup schedules.
 - [x] Verify Atlas, Prometheus, and Mnemosyne remote consoles through user confirmation on October 4, 2026.
@@ -162,7 +164,8 @@ The local iCloud copy matches the source byte-for-byte and uses mode `0600`.
 SHA-256: `355c2ffadb1748b9080b9ea2515e823db3245b9f506d2e59efe99942950b273a`.
 The bundle contains the four configuration archives, two consistent PVE database exports, and the checksum manifest.
 It excludes the temporary TrueNAS download token. The archive relies on the user-reported iCloud encryption; it has no separate archive password.
-Cloud upload completion and recovery from another device are not yet verified. Confirm the file is available on the iPhone or iPad.
+The user confirmed that the bundle opens and downloads from another device on October 4, 2026.
+This confirms cloud availability. Configuration import remains untested.
 Keep Apple Account recovery available independently of homelab identity services.
 
 Spoolman CT 102 restored from `mnemosyne:backup/ct/102/2026-10-04T11:31:56Z` to CT 132 on Prometheus `local-zfs`.
