@@ -110,8 +110,9 @@ Time estimates exclude large restore or offsite transfers.
 - [ ] **H3 / P1 / Harden host authentication and patch maintenance (90–180 minutes, maintenance window separate).**
   - [x] Prove controller and Ansible key access on all three hosts, pinned inter-node SSH in both directions, and protected console recovery before disabling password SSH. PBS backups use their existing pinned API identity.
   - [x] Preserve root key authentication and TCP forwarding. Disable password/interactive SSH, X11 forwarding, and agent forwarding after dependency checks.
-  - [ ] Audit PVE/PBS MFA enforcement, token scopes, certificate validity, time synchronization, and account ownership.
-  - [ ] Refresh package metadata during the implementation phase. Review updates and kernel changes, then reboot one host at a time.
+  - [x] Audit PVE/PBS MFA enforcement, token scopes, certificate validity, time synchronization, and account ownership.
+  - [ ] Enroll and verify local administrator MFA. Resolve the certificate policy and hostname access.
+  - [x] Refresh package metadata. Review updates and kernel changes. Reboot Prometheus and PBS separately after safety checks, then validate services and recovery access.
   - **Complete when:** repeat key-authentication tests, expected MFA behavior, valid TLS, current reviewed packages/kernel, and healthy quorum after maintenance.
 
 - [ ] **H4 / P1 / Protect PBS recovery data from compromised clients (90–150 minutes, offsite transfer additional).**
@@ -366,7 +367,7 @@ Reference: [Proxmox native host firewall documentation](https://raw.githubuserco
 ## H3/P1 progress — October 4, 2026
 
 Status: **in progress**. Host SSH hardening, authentication audit, package refresh, and maintenance preflight are complete.
-Local administrator MFA enrollment, certificate policy selection, and the kernel maintenance window remain pending.
+Local administrator MFA enrollment and certificate policy selection remain pending. The authorized kernel maintenance is complete.
 The user confirmed that normal Pocket ID login uses a passkey.
 
 ### SSH changes and evidence
@@ -437,18 +438,18 @@ Previous kernels remain available for recovery.
 | Host | Running kernel | Installed target | Required maintenance |
 | --- | --- | --- | --- |
 | Atlas | 7.0.14-20-pve | 7.0.14-20-pve | No kernel reboot needed |
-| Prometheus | 7.0.14-19-pve | 7.0.14-20-pve | Evacuate running guests, then reboot |
-| Mnemosyne | 7.0.14-15-pve | 7.0.14-20-pve | Separate PBS reboot outside backup/verification activity |
+| Prometheus | 7.0.14-20-pve | 7.0.14-20-pve | Reboot and validation complete |
+| Mnemosyne | 7.0.14-20-pve | 7.0.14-20-pve | Separate reboot and validation complete |
 
 Both Prometheus and PBS EFI copies include the target and fallback kernels, with no manually selected kernel.
 Pools are ONLINE, no failed systemd units appeared, and HA remains armed and quorate.
-At the latest placement check, Prometheus had 22 running containers. Placement changes automatically under HA load balancing.
+At the preflight placement check, Prometheus had 22 running containers. Placement changes automatically under HA load balancing.
 Atlas had the five Minecraft guests, Vaultwarden, and NexDeck. These counts are a snapshot, not a migration instruction.
 CTs 130 and 131 lack HA entries. Both use local-zfs and have peer replication; they need explicit migration handling.
 Atlas has capacity for all running guest allocations and substantial free space in every applicable pool.
 A fresh guest constraint, replication, capacity, task, and boot preflight remains required before shutdown.
 
-The user was asked to select the maintenance window. The proposed sequence is:
+The user authorized immediate execution after safety checks. The executed sequence was:
 
 1. Wait for active backups/replication to finish and capture current guest placement and a fresh configuration backup.
 2. Evacuate Prometheus through HA maintenance. Migrate non-HA CTs 130/131 explicitly. Validate applications, NFS, and the Tailscale router on Atlas.
@@ -459,7 +460,34 @@ The user was asked to select the maintenance window. The proposed sequence is:
 Evacuation restarts LXCs and briefly interrupts their services, including Pocket ID and the Tailscale router.
 The five Minecraft guests can remain on Atlas. Do not change their automatic balancing policy or start VM 122.
 Budget 20–40 minutes for Prometheus evacuation/reboot/validation and 5–15 minutes for PBS, excluding a wait for active jobs.
-No H3 reboot or guest migration has occurred yet.
+
+### Authorized maintenance results
+
+Prometheus rebooted at approximately 13:21 CDT and returned by 13:25 CDT.
+PBS rebooted at approximately 13:30 CDT and returned by 13:32 CDT.
+Both now run `7.0.14-20-pve`. Their boot IDs changed. Atlas remained running throughout both reboots.
+
+- [x] Wait for all five hourly Minecraft backups to finish. Capture protected fresh host configurations, boot IDs, placement, and guest service/NFS baselines.
+- [x] Evacuate Prometheus. Explicitly migrate non-HA CTs 130/131. Verify all 29 running guests on Atlas before shutdown.
+- [x] Disarm HA in freeze mode. Verify the CRM and surviving Atlas watchdogs released. Keep expected votes at two during the temporary quorum loss.
+- [x] Restore quorum and re-arm HA. Verify both LRM watchdogs active. Remove Prometheus maintenance and restore non-HA guests.
+- [x] Reboot idle PBS separately. Verify the datastore, services, firewall, key-only SSH, unchanged certificate fingerprint, verified TLS, and PVE backup catalog access.
+
+Final placement follows existing HA policies: 21 running containers on Prometheus and eight on Atlas.
+All five Minecraft containers remain on Atlas with their balancing policy unchanged. VM 122 remains stopped.
+All 29 guest service and NFS baselines passed after recovery. Tailscale reports Running and online.
+All five Minecraft game status probes passed. All 30 replication jobs reported zero failures after maintenance.
+Verified TLS passed on all three hosts after maintenance. An untrusted guest could not reach any host management API.
+PVE read 785 PBS backup snapshots after the PBS reboot. This verifies catalog access, not a new backup or restore.
+
+Deluge and SABnzbd had NFS startup timeouts after migration. Retrying their existing mount units restored the mounts and services.
+SearXNG stalled during network shutdown on its return migration. An HA-managed stop/start and relocation restored its application on Prometheus.
+No persistent guest configuration changed. The two existing failed Minecraft update units on CTs 115/116 remain deferred to guest maintenance.
+The earlier NPM certbot failure cleared after restart. This does not establish that certificate renewal is repaired.
+
+Protected local evidence is in ignored `truenas/artifacts/h3-maintenance-20261004/`.
+The recovery archives contain sensitive host configuration. They are not committed.
+H3 remains incomplete until local administrator MFA and the certificate policy are resolved.
 
 ## Guest tasks
 
