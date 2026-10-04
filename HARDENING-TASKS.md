@@ -1,6 +1,6 @@
 # Homelab hardening task list
 
-Status: inventory complete. Hardening has not started. Atlas reboot awaits explicit authorization.
+Status: inventory complete. Atlas reboot completed on October 4, 2026. Remaining hardening tasks have not started.
 
 Inventory date: October 4, 2026, approximately 11:27–11:34 AM America/Chicago.
 These observations are a snapshot. Recheck live state before each operation.
@@ -15,17 +15,37 @@ These observations are a snapshot. Recheck live state before each operation.
 
 ## Atlas reboot request
 
-- [ ] Obtain explicit authorization to reboot Atlas only.
-- [ ] Recheck guest placement, HA maintenance, quorum, replication, active tasks, and boot configuration.
-- [ ] Assess two-node quorum loss and HA fencing before issuing the reboot.
-- [ ] Establish an independent console recovery path and a safe maintenance procedure.
-- [ ] Reboot only if the safety checks pass, then verify the kernel, pools, cluster, HA, and guest health.
+- [x] Obtain explicit authorization to reboot Atlas only.
+- [x] Recheck guest placement, HA maintenance, quorum, replication, active tasks, and boot configuration.
+- [x] Assess two-node quorum loss and HA fencing before issuing the reboot.
+- [x] Use the supported HA disarm procedure before temporary quorum loss.
+- [ ] Verify an independent console recovery path for future maintenance.
+- [x] Reboot only if the safety checks pass, then verify the kernel, pools, cluster, HA, and guest health.
 
 Atlas was in HA maintenance mode. All running guests were on Prometheus.
 VM 122 on Atlas was stopped. Kernel `7.0.14-20-pve` was installed, while `7.0.14-19-pve` was running.
 The cluster required two votes. An Atlas reboot can remove quorum and affect HA behavior on Prometheus.
 Authorization does not permit changes to expected votes, guest startup, or unrelated hardening.
 Budget 5–15 minutes for the reboot and validation after the safety checks pass.
+
+## Atlas reboot result — October 4, 2026
+
+The user authorized the reboot after safety checks. Atlas rebooted at approximately 11:44 AM CDT and returned by 11:48 AM CDT.
+
+- [x] Confirm no running Atlas guests or active host tasks before the reboot.
+- [x] Verify healthy pools, recent replication, both EFI boot entries, and the new kernel files.
+- [x] Disarm HA in freeze mode and verify the CRM and Prometheus LRM watchdogs were released.
+- [x] Verify Atlas returned on kernel `7.0.14-20-pve` with a different boot ID.
+- [x] Restore HA protection after both nodes regained quorum.
+
+Prometheus retained the same boot ID. All 29 running guests retained placement, state, and increasing uptime.
+VM 122 remained stopped. Atlas remained in its existing HA maintenance mode.
+Both nodes reported healthy pools. Atlas reported all seven checked Proxmox services active and no failed systemd units.
+Replication resumed successfully after the reboot. Expected votes remained two throughout maintenance.
+HA protection was temporarily suspended during the reboot. No guest restart was observed.
+Independent console access was not tested. This remains an open recovery prerequisite for future maintenance.
+
+The maintenance procedure follows the supported [Proxmox HA disarm and re-arm workflow](https://github.com/proxmox/pve-docs/blob/master/ha-manager.adoc#disarming-ha-for-cluster-maintenance).
 
 ## Host inventory
 
