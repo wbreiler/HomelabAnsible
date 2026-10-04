@@ -1,7 +1,7 @@
 # Homelab hardening task list
 
 Status: inventory complete. Atlas reboot and Minecraft container migrations completed on October 4, 2026.
-All five Minecraft servers passed service startup and LAN game status checks. Remaining hardening tasks have not started.
+All five Minecraft servers passed service startup and LAN game status checks. H1/P0 is in progress. Other hardening tasks have not started.
 
 Inventory date: October 4, 2026, approximately 11:27–11:34 AM America/Chicago.
 These observations are a snapshot. Recheck live state before each operation.
@@ -127,6 +127,122 @@ Time estimates exclude large restore or offsite transfers.
   - [ ] Design snapshots, retention, and independent backups for appdata and important datasets. Reconcile desired-state drift before convergence.
   - [ ] Exact TrueNAS storage, network, SSH, and Ansible-account changes require explicit approval under truenas/AGENTS.md.
   - **Complete when:** approved clients retain NFS/SMB/app access, unapproved clients fail, TLS/MFA work, and recovery coverage is verified.
+
+## H1/P0 progress — October 4, 2026
+
+Status: **in progress**. Recovery backups and one isolated guest restore passed.
+Console display tests and the complete administrator access tests remain open.
+No firewall, authentication, quorum, NAS sharing, or production placement changes occurred during H1.
+
+### Recovery evidence
+
+- [x] Capture protected configuration archives for Atlas, Prometheus, Mnemosyne, and Erebus.
+- [x] Validate readable archives, expected configuration members, restrictive permissions, and SHA-256 checksums.
+- [x] Restore one guest from PBS to an isolated test container and validate its application data.
+- [x] Confirm current HA protection, quorum, peer replication, migration capacity, and backup schedules.
+- [ ] Test authenticated console display for each host. Confirm local console access for Erebus.
+- [ ] Validate administrator reachability from the LAN and each named Tailscale device.
+- [ ] Review the maintenance plan and select an independent quorum witness, if desired.
+
+Protected artifacts are local, ignored, and credential-bearing. Do not commit or publish them.
+Directory: `truenas/artifacts/h1-recovery-20261004/`, mode `0700`; archives and database exports use mode `0600`.
+PVE archives include `/etc/pve`, host networking, SSH, boot settings, and package sources.
+Consistent SQLite exports supplement the raw PVE configuration databases in the archives. Both exports passed SQLite integrity checks.
+PBS includes `/etc/proxmox-backup`, networking, SSH, boot settings, and package sources.
+TrueNAS uses supported `config.save` with the secret seed and root authorized keys. Pool encryption keys were not requested.
+These are configuration backups, not host disk images or appdata backups. Configuration import was not tested.
+The only recorded copy is on this controller. Place an encrypted copy in independent recovery storage before disruptive hardening.
+
+Spoolman CT 102 restored from `mnemosyne:backup/ct/102/2026-10-04T11:31:56Z` to CT 132 on Prometheus `local-zfs`.
+The next free cluster ID was 114, but the ignored Minecraft inventory still references 114. CT 132 follows the highest current ID.
+Restore processed 2.567 GiB in approximately 60 seconds, with a 50 MiB/s transfer limit.
+The clone remained stopped until its network interface was removed. It had no bind mounts or hook script.
+It started with loopback only, no routes, no HA registration, and automatic boot disabled.
+SQLite integrity returned `ok`. Nine database tables were present. Spoolman returned HTTP 200 and read 13 spool records.
+CT 132 is now stopped, retained for review, and excluded from automatic boot. Do not start it with a production network interface.
+The general `all` backup job can include CT 132 at its next run. Remove the temporary clone with explicit cleanup approval before that window.
+Production Spoolman was not stopped or modified. The restore proves this snapshot, not every guest or backup.
+
+### Console and administrator paths
+
+| Host | Recovery path | Evidence |
+| --- | --- | --- |
+| Atlas | Management controller `10.10.10.22` | HTTPS responds; authenticated console display pending |
+| Prometheus | Management controller `10.10.10.15` | HTTPS timed out from this controller; user reports connection works; console display pending |
+| Mnemosyne | Management controller `10.10.10.13` | HTTPS responds; authenticated console display pending |
+| Erebus | Physical keyboard, mouse, and local display | User reports physical access; display/login test pending |
+
+The management controllers use the routed management VLAN. A switch or routing failure can still prevent remote access.
+The TrueNAS physical console provides a local recovery path. Confirm physical alternatives for the other hosts before network changes.
+HTTPS reachability checks bypassed certificate validation solely for discovery. They do not prove trusted TLS or remote console operation.
+
+Required administrator sources supplied by the user:
+
+| Source | Address |
+| --- | --- |
+| LAN | `192.168.1.0/24` |
+| iPhone | `100.76.184.65` |
+| iPad | `100.75.92.43` |
+| Laptop | `100.66.52.114` |
+
+Tailscale router CT 123 advertises the LAN, management, storage, PVE, and guest networks.
+Its guest address is `10.10.40.88`, and its Tailscale address is `100.110.0.35`. Its `NoSNAT` setting is false. Destination hosts can see the router address instead of each device's Tailscale address.
+H2 must test the actual source address and preserve the routed path. Tailnet device addresses alone are insufficient as host allowlists.
+Tailnet ACLs and route approvals were not independently inspected.
+
+### Dependencies and maintenance plan
+
+At recheck, Atlas runs eight production containers and Prometheus runs 21. VM 122 remains stopped.
+All 30 replication jobs reported successful recent syncs and zero failures, around noon CDT.
+Combined running guest allocations are 130 GiB RAM and 66 virtual CPUs. Each host has approximately 376 GiB RAM.
+Both hosts have substantial free `helios` and `tartarus` capacity. These checks support evacuation, subject to per-guest constraints and a fresh preflight.
+The five Minecraft containers retain Atlas placement. A future evacuation restarts LXCs and interrupts game sessions.
+CT 124 retains CPU pinning and NUMA constraints. Recheck destination compatibility before any migration.
+CTs 130 and 131 lack HA entries and require explicit handling during evacuation. CT 132 is the stopped recovery test only.
+
+Corosync currently uses `10.10.30.3` and `10.10.30.9` over the management bridge.
+Dedicated `10.10.50.x` interfaces are DOWN on both nodes. Do not restrict management traffic based on the intended dedicated-link inventory.
+PVE storage access uses `10.10.20.4` and `10.10.20.9`. PBS is `10.10.20.2`; TrueNAS storage is `10.10.20.3`.
+PVE hosts showed no active NFS mounts. NFS mounts reside inside privileged media containers.
+
+| Guest | Verified NFS dependencies on Erebus |
+| --- | --- |
+| 108 Deluge | `/mnt/gaia/downloads/torrent` |
+| 109 SABnzbd | `/mnt/gaia/downloads/nzb` |
+| 110 Sonarr | `/mnt/gaia/media/tv`, `/mnt/gaia/media/anime`, `/mnt/gaia/downloads` |
+| 111 Radarr | Movies, anime, downloads, and nested NZB/torrent mounts |
+
+TrueNAS publishes torrent, complete/incomplete NZB, TV, anime, downloads, and movies exports.
+Some mounted paths are child directories of parent exports. Preserve parent exports and client UID/GID behavior until H5 reviews them.
+Media services depend on Erebus. PBS backup and restore depend on Mnemosyne.
+Remote Tailscale administration depends on CT 123 and its current PVE host.
+The core Arista switch routes these VLANs. Its management changes are outside this task.
+
+General backups run every six hours at minute 30, next approximately 6:30 PM CDT on this date.
+Minecraft backups run hourly at minute zero. The noon Atlas backup was still active during this assessment.
+No maintenance should overlap an active backup, restore, replication, scrub, or migration task.
+
+Proposed one-host maintenance sequence, to execute only for an authorized change:
+
+1. Test the target console and create fresh protected configuration backups. Confirm recovery credentials remain available without the guest identity services.
+2. Confirm both nodes, HA, storage, NFS, backups, and peer replicas are healthy. Check target capacity and every guest constraint.
+3. Evacuate the target through reviewed HA maintenance and migration operations. Handle non-HA guests explicitly. Confirm the target has no running guests.
+4. For quorum loss without a witness, use supported HA disarm in freeze mode. Verify watchdog release before the authorized host shutdown.
+5. Restore the host, verify quorum and health, and re-arm HA. Remove maintenance and restore reviewed guest placement. Verify applications and backup completion.
+
+If a safety gate fails, stop before shutdown. If a host fails to return, use its verified console and prior boot kernel.
+Do not reduce expected votes or start duplicate guest copies. Keep the surviving host running and restore the failed host before re-arming HA.
+PVE configuration recovery needs a separate reviewed procedure. Do not copy raw cluster databases over a running cluster.
+PBS and Erebus maintenance require separate application/storage outage plans; do not reboot them with PVE maintenance.
+
+### Third vote assessment
+
+The cluster has two votes and needs both. No external witness exists.
+A supported QDevice on an independent, always-on server can provide a third vote for this two-node cluster.
+Prefer a small dedicated server outside the PVE guests. Mnemosyne is physically independent, but would couple backup and quorum availability.
+Confirm independent power, network reachability, TCP 5403, ownership, and recovery access before selecting a witness.
+No witness packages were installed and no quorum settings changed.
+Reference: [Proxmox external vote documentation](https://github.com/proxmox/pve-docs/blob/master/pvecm.adoc).
 
 ## Guest tasks
 
