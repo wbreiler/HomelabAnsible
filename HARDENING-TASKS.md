@@ -1,7 +1,7 @@
 # Homelab hardening task list
 
 Status: inventory complete. Atlas reboot and Minecraft container migrations completed on October 4, 2026.
-All five Minecraft servers passed service startup and LAN game status checks. H1/P0 is complete with the recovery limitations documented below. Other hardening tasks have not started.
+All five Minecraft servers passed service startup and LAN game status checks. H1/P0 and H2/P1 are complete with the validation limits documented below. Other hardening tasks have not started.
 
 Inventory date: October 4, 2026, approximately 11:27–11:34 AM America/Chicago.
 These observations are a snapshot. Recheck live state before each operation.
@@ -101,10 +101,10 @@ Time estimates exclude large restore or offsite transfers.
   - [x] Assess a third quorum vote. No witness was selected or installed. Expected votes remain unchanged.
   - **Complete when:** documented recovery path, verified restore, reviewed access/dependency map, and a safe one-host maintenance plan.
 
-- [ ] **H2 / P1 / Restrict PVE and PBS management access (90–150 minutes).**
-  - [ ] Define allowlists for SSH, PVE 8006, PBS 8007, migration, replication, consoles, corosync, monitoring, and required storage traffic.
-  - [ ] Include IPv6. Stage and validate rules on one host with independent console access and a timed recovery procedure.
-  - [ ] Restrict or remove RPC and other listeners only after dependency checks. Preserve required PVE proxy and routing functions.
+- [x] **H2 / P1 / Restrict PVE and PBS management access (90–150 minutes).**
+  - [x] Define and apply allowlists for SSH, PVE 8006, PBS 8007, migration, replication, consoles, corosync, dashboard discovery, and required storage traffic.
+  - [x] Include IPv6. Pilot Atlas with verified console access and a 15-minute rollback timer, then validate Prometheus and PBS separately.
+  - [x] Block inbound RPC and unused host listeners after dependency checks. Preserve trusted PVE console/proxy access and forwarding. Services were not removed.
   - **Complete when:** trusted administration, clustering, replication, consoles, and backups work. Untrusted sources fail explicit reachability tests.
 
 - [ ] **H3 / P1 / Harden host authentication and patch maintenance (90–180 minutes, maintenance window separate).**
@@ -273,6 +273,95 @@ Prefer a small dedicated server outside the PVE guests. Mnemosyne is physically 
 Confirm independent power, network reachability, TCP 5403, ownership, and recovery access before selecting a witness.
 No witness packages were installed and no quorum settings changed.
 Reference: [Proxmox external vote documentation](https://github.com/proxmox/pve-docs/blob/master/pvecm.adoc).
+
+## H2/P1 result — October 4, 2026
+
+Status: **complete**. The user authorized implementation after H1/P0.
+Both PVE hosts now enforce native `pve-firewall` host rules. PBS enforces an `inet` nftables input policy.
+All policies deny other new host connections. Existing connections, loopback, and required ICMP/ICMPv6 remain permitted.
+Outbound traffic and guest forwarding remain permitted. No guest firewall gate was enabled.
+
+### Applied access policy
+
+| Source | Permitted host traffic |
+| --- | --- |
+| LAN `192.168.1.0/24`, router `10.10.40.88`, three named Tailscale device addresses | PVE TCP 22, 8006, 3128, 5900–5999; PBS TCP 22, 8007 |
+| PVE management/storage addresses `.30.3`, `.30.9`, `.20.4`, `.20.9` | PVE TCP 22, 8006, 60000–60050; PBS TCP 8007 |
+| PVE management addresses `10.10.30.3`, `10.10.30.9` | PVE UDP 5404–5412 for cluster traffic |
+| NexDeck `10.10.40.42`, Homelable `10.10.40.7` | PVE TCP 8006 and PBS TCP 8007 |
+| Other IPv4/IPv6 sources | No new host management connections; diagnostic ICMP/ICMPv6 remains allowed |
+
+Tailscale administration currently arrives through the trusted subnet router because SNAT is enabled.
+A compromised trusted router can reach management interfaces. Tailnet ACL review remains part of the guest/network scope.
+The named Tailscale addresses are also permitted if they arrive without translation. No IPv6 administrator source was requested.
+RPC port 111, BFD listeners, and other unused inbound host ports are blocked, including from administrator sources.
+The host storage clients initiate their requests outbound. Established replies remain permitted.
+TrueNAS host access and sharing were not changed.
+
+PVE paths: `/etc/pve/firewall/cluster.fw` and `/etc/pve/nodes/<node>/host.fw`.
+The cluster gate is enabled. Both host gates are enabled. All 30 guest firewall gates remain disabled.
+CT 107 retains its existing interface firewall flag, but its guest firewall gate remains disabled.
+An explicit final host DROP precedes the native automatic management exceptions. This prevents the whole management subnet from inheriting access.
+The installed iptables backend remains in use. No backend switch or guest restart occurred.
+
+PBS paths: `/etc/homelab-host-firewall.nft` and `/etc/systemd/system/homelab-host-firewall.service`.
+The service is active and enabled. It owns only `table inet homelab_management`.
+Its start/reload replaces that table atomically. Its stop removes only that table. It does not flush unrelated rules.
+Native PVE persistence and the enabled PBS service preserve the policy at boot. Reboot persistence was not tested.
+
+### Validation evidence
+
+- [x] Confirm all 30 guest firewall gates are off before cluster activation. Confirm no guest firewall configuration files exist.
+- [x] Parse and compile native PVE rules. Check PBS nftables syntax and validate the systemd unit.
+- [x] Verify fresh controller SSH and API reachability on all three hosts. Unauthenticated API probes returned the expected HTTP 401.
+- [x] Verify router CT 123 can reach management ports. Verify NexDeck can reach each permitted host API.
+- [x] Verify untrusted Spoolman CT 102 cannot reach host SSH, API, SPICE, or RPC ports as applicable.
+
+#### Cluster, backups, and applications
+
+- [x] Verify IPv6 SSH/API denial over live link-local connections on all three hosts. IPv6 ping and neighbor discovery continue to work.
+- [x] Verify both peer SSH directions using Proxmox's pinned host-key configuration.
+- [x] Verify quorum and armed HA. Run existing replication jobs 102-0 and 111-0 successfully after activation, one per direction.
+- [x] Verify scheduled PBS backups completed successfully after activation. Examples include CTs 108, 109, and 129.
+- [x] Verify all five Minecraft servers still answer valid game status requests.
+
+#### Administrator checks and finalization
+
+- [x] Verify user-reported fresh Tailscale administrator login and guest console on Atlas. The user also confirmed the requested Prometheus/PBS access and console checks.
+- [x] Cancel all rollback timers after successful validation. Keep persistent rules enabled.
+- [x] Run repository-required `ansible-lint --offline` in `proxmox/`: zero failures and zero warnings, 193 files processed.
+
+The native PVE simulator accepts IPv4 only on these hosts. IPv6 validation used actual sockets and neighbor connectivity instead.
+Corosync peer acceptance and untrusted denial passed native rule simulation. Untrusted migration access also simulated DROP.
+The native simulator could not parse the accepted migration multiport rule. Live temporary listeners verified TCP 60000 and 60050 in both directions.
+The temporary listeners exited after the probes. No production guest was migrated merely to test the firewall.
+A generic inter-node SSH attempt failed host-key verification. The supported Proxmox host-key options passed without changing known hosts.
+The running scheduled backup continued during the host-input policy change. Established transfers were preserved, and later backup tasks completed successfully.
+The full scheduled backup batch had not yet completed when these individual successes were inspected.
+No Ansible implementation files changed. Reusable, opt-in automation remains in G5. Machine-specific firewall configurations are ignored artifacts.
+
+### Recovery and implementation record
+
+Each activation had a local 15-minute rollback timer. PVE timers called `pve-firewall stop`; PBS called `systemctl stop homelab-host-firewall.service`.
+The cluster-gate activation also had a timer to disable that gate. All timers were cancelled after the checks passed.
+Automatic approval review initially rejected cluster activation because it could affect guests and clustering.
+Read-only checks then proved all guest gates were disabled. Both host gates were explicitly disabled before retrying the inert cluster gate.
+The protected retry passed approval review. Atlas was then the only filtered host during the pilot.
+
+Pre-change PVE artifacts remain under `/root/h2-recovery-20261004/` on Prometheus.
+PBS pre-change artifacts remain under that path on Mnemosyne.
+Protected current configuration copies are ignored under `truenas/artifacts/h2-firewall-20261004/` on this controller.
+Do not commit those machine-specific files.
+
+For emergency recovery through a verified console:
+
+1. On an affected PVE host, run `pve-firewall stop` to remove its active rules locally.
+2. With quorum available, set that node's host firewall option to disabled before restarting its firewall service.
+3. On PBS, stop and disable `homelab-host-firewall.service` to remove its owned table and prevent automatic activation.
+4. Inspect the saved pre-change artifacts before any restoration. Do not overwrite unrelated cluster configuration.
+5. Correct the scoped policy and repeat the trusted, denied, console, quorum, replication, and backup checks before activation.
+
+Reference: [Proxmox native host firewall documentation](https://raw.githubusercontent.com/proxmox/pve-docs/master/pve-firewall.adoc).
 
 ## Guest tasks
 
