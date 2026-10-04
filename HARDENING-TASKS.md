@@ -95,7 +95,8 @@ Time estimates exclude large restore or offsite transfers.
 
 - [ ] **H1 / P0 / Establish recovery and maintenance prerequisites (60–120 minutes, restore transfer time additional).**
   - [x] Verify PVE/PBS remote consoles (user confirmation), capture protected configuration backups, and validate one isolated guest restore.
-  - [ ] Confirm the Erebus physical display/login path and recovery access during a routing failure.
+  - [x] Confirm the Erebus physical display/login path (user confirmed October 4, 2026).
+  - [ ] Confirm physical alternatives for PVE/PBS recovery during a routing failure.
   - [ ] Confirm Atlas maintenance purpose, migration capacity, replication freshness, NFS clients, trusted admin sources, and current backup windows.
   - [ ] Assess a third quorum vote. Do not alter expected votes as a hardening shortcut.
   - **Complete when:** documented recovery path, verified restore, reviewed access/dependency map, and a safe one-host maintenance plan.
@@ -132,7 +133,8 @@ Time estimates exclude large restore or offsite transfers.
 ## H1/P0 progress — October 4, 2026
 
 Status: **in progress**. Recovery backups and one isolated guest restore passed.
-The user confirmed that all remote consoles work. Erebus physical display/login and the complete administrator access tests remain open.
+The user confirmed that all remote consoles work and that the Erebus physical console displays the host and permits login.
+Administrator access tests and an independent recovery backup copy remain open.
 No firewall, authentication, quorum, NAS sharing, or production placement changes occurred during H1.
 
 ### Recovery evidence
@@ -142,7 +144,8 @@ No firewall, authentication, quorum, NAS sharing, or production placement change
 - [x] Restore one guest from PBS to an isolated test container and validate its application data.
 - [x] Confirm current HA protection, quorum, peer replication, migration capacity, and backup schedules.
 - [x] Verify Atlas, Prometheus, and Mnemosyne remote consoles through user confirmation on October 4, 2026.
-- [ ] Confirm physical display/login access for Erebus and recovery access without the routed management network.
+- [x] Confirm physical display/login access for Erebus through user confirmation on October 4, 2026.
+- [ ] Confirm PVE/PBS recovery access without the routed management network.
 - [ ] Validate administrator reachability from the LAN and each named Tailscale device.
 - [ ] Review the maintenance plan and select an independent quorum witness, if desired.
 
@@ -173,7 +176,7 @@ Production Spoolman was not stopped or modified. The restore proves this snapsho
 | Atlas | Management controller `10.10.10.22` | HTTPS responds; user confirms remote console works |
 | Prometheus | Management controller `10.10.10.15` | HTTPS timed out from this controller; user confirms access and remote console work |
 | Mnemosyne | Management controller `10.10.10.13` | HTTPS responds; user confirms remote console works |
-| Erebus | Physical keyboard, mouse, and local display | User reports physical access; display/login test pending |
+| Erebus | Physical keyboard, mouse, and local display | User confirms physical console display and login work |
 
 The management controllers use the routed management VLAN. A switch or routing failure can still prevent remote access.
 The TrueNAS physical console provides a local recovery path. Confirm physical alternatives for the other hosts before network changes.
