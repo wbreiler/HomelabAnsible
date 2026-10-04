@@ -159,8 +159,9 @@ Restore processed 2.567 GiB in approximately 60 seconds, with a 50 MiB/s transfe
 The clone remained stopped until its network interface was removed. It had no bind mounts or hook script.
 It started with loopback only, no routes, no HA registration, and automatic boot disabled.
 SQLite integrity returned `ok`. Nine database tables were present. Spoolman returned HTTP 200 and read 13 spool records.
-CT 132 is now stopped, retained for review, and excluded from automatic boot. Do not start it with a production network interface.
-The general `all` backup job can include CT 132 at its next run. Remove the temporary clone with explicit cleanup approval before that window.
+The user explicitly authorized cleanup after the successful test. CT 132 and its `local-zfs` disk were deleted.
+Pre-deletion checks confirmed the test hostname, stopped state, expected disk, no network or mount entries, and no HA registration.
+Post-deletion checks confirmed that CT 132 and its disk are absent. Production CT 102 remains running. PBS backups were not deleted.
 Production Spoolman was not stopped or modified. The restore proves this snapshot, not every guest or backup.
 
 ### Console and administrator paths
@@ -198,7 +199,7 @@ Combined running guest allocations are 130 GiB RAM and 66 virtual CPUs. Each hos
 Both hosts have substantial free `helios` and `tartarus` capacity. These checks support evacuation, subject to per-guest constraints and a fresh preflight.
 The five Minecraft containers retain Atlas placement. A future evacuation restarts LXCs and interrupts game sessions.
 CT 124 retains CPU pinning and NUMA constraints. Recheck destination compatibility before any migration.
-CTs 130 and 131 lack HA entries and require explicit handling during evacuation. CT 132 is the stopped recovery test only.
+CTs 130 and 131 lack HA entries and require explicit handling during evacuation. The temporary recovery test CT 132 was deleted after explicit approval.
 
 Corosync currently uses `10.10.30.3` and `10.10.30.9` over the management bridge.
 Dedicated `10.10.50.x` interfaces are DOWN on both nodes. Do not restrict management traffic based on the intended dedicated-link inventory.
