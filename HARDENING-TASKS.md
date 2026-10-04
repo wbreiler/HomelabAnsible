@@ -209,7 +209,7 @@ Tailnet ACLs and route approvals were not independently inspected.
 Administrator access test evidence, October 4, 2026:
 
 - [x] iPhone Tailscale reachability to Atlas: user confirmed after the cellular/Tailscale test request.
-- [ ] Confirm authenticated administrator login to Atlas through that path.
+- [x] Confirm authenticated administrator login to Atlas through the iPhone Tailscale path: user confirmed.
 - [ ] Verify Prometheus, PBS, and TrueNAS administrator access from the required LAN and Tailscale devices.
 
 Connection success does not by itself establish successful administrator authentication.
