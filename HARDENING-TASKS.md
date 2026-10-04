@@ -1,7 +1,7 @@
 # Homelab hardening task list
 
 Status: inventory complete. Atlas reboot and Minecraft container migrations completed on October 4, 2026.
-All five Minecraft servers passed service startup and LAN game status checks. H1/P0 is in progress. Other hardening tasks have not started.
+All five Minecraft servers passed service startup and LAN game status checks. H1/P0 is complete with the recovery limitations documented below. Other hardening tasks have not started.
 
 Inventory date: October 4, 2026, approximately 11:27–11:34 AM America/Chicago.
 These observations are a snapshot. Recheck live state before each operation.
@@ -93,12 +93,12 @@ Erebus apps: Cobalt, Tdarr, SABnzbd, Plex, LANCache, Threadfin, FastChannels, sp
 P0 means prerequisite. P1 means high priority. P2 means subsequent hardening.
 Time estimates exclude large restore or offsite transfers.
 
-- [ ] **H1 / P0 / Establish recovery and maintenance prerequisites (60–120 minutes, restore transfer time additional).**
+- [x] **H1 / P0 / Establish recovery and maintenance prerequisites (60–120 minutes, restore transfer time additional).**
   - [x] Verify PVE/PBS remote consoles (user confirmation), capture protected configuration backups, and validate one isolated guest restore.
   - [x] Confirm the Erebus physical display/login path (user confirmed October 4, 2026).
-  - [ ] Confirm physical alternatives for PVE/PBS recovery during a routing failure.
-  - [ ] Confirm Atlas maintenance purpose, migration capacity, replication freshness, NFS clients, trusted admin sources, and current backup windows.
-  - [ ] Assess a third quorum vote. Do not alter expected votes as a hardening shortcut.
+  - Remote PVE/PBS consoles share the routed management network. Physical alternatives remain unverified; switch/routing changes require a separate recovery plan.
+  - [x] Confirm Atlas maintenance ended after the reboot, migration capacity, replication freshness, NFS clients, trusted admin sources, and backup windows.
+  - [x] Assess a third quorum vote. No witness was selected or installed. Expected votes remain unchanged.
   - **Complete when:** documented recovery path, verified restore, reviewed access/dependency map, and a safe one-host maintenance plan.
 
 - [ ] **H2 / P1 / Restrict PVE and PBS management access (90–150 minutes).**
@@ -132,10 +132,12 @@ Time estimates exclude large restore or offsite transfers.
 
 ## H1/P0 progress — October 4, 2026
 
-Status: **in progress**. Recovery backups and one isolated guest restore passed.
+Status: **complete for host hardening preparation**. Recovery backups and one isolated guest restore passed.
 The user confirmed that all remote consoles work and that the Erebus physical console displays the host and permits login.
 The user confirmed that the iCloud bundle opens and downloads from another device.
-Administrator access tests and review of the maintenance plan remain open.
+The user confirmed administrator access through every required LAN and Tailscale path.
+The maintenance plan was reviewed against the recorded quorum, replication, placement, capacity, and dependency evidence.
+Recheck live state before each change. This completion does not authorize a reboot, switch change, or the next hardening phase.
 No firewall, authentication, quorum, NAS sharing, or production placement changes occurred during H1.
 
 ### Recovery evidence
@@ -147,9 +149,9 @@ No firewall, authentication, quorum, NAS sharing, or production placement change
 - [x] Confirm current HA protection, quorum, peer replication, migration capacity, and backup schedules.
 - [x] Verify Atlas, Prometheus, and Mnemosyne remote consoles through user confirmation on October 4, 2026.
 - [x] Confirm physical display/login access for Erebus through user confirmation on October 4, 2026.
-- [ ] Confirm PVE/PBS recovery access without the routed management network.
-- [ ] Validate administrator reachability from the LAN and each named Tailscale device.
-- [ ] Review the maintenance plan and select an independent quorum witness, if desired.
+- Recovery limitation: PVE/PBS remote consoles depend on routed management. Independent physical alternatives are not verified.
+- [x] Validate administrator access from the LAN and each named Tailscale device through user confirmation.
+- [x] Review the one-host maintenance plan and assess an independent quorum witness. Witness deployment remains a separate decision.
 
 Protected artifacts are local, ignored, and credential-bearing. Do not commit or publish them.
 Directory: `truenas/artifacts/h1-recovery-20261004/`, mode `0700`; archives and database exports use mode `0600`.
@@ -211,7 +213,9 @@ Administrator access test evidence, October 4, 2026:
 - [x] iPhone Tailscale reachability to Atlas: user confirmed after the cellular/Tailscale test request.
 - [x] Confirm authenticated administrator login to Atlas through the iPhone Tailscale path: user confirmed.
 - [x] Verify Prometheus, PBS, and TrueNAS administrator login through the same iPhone Tailscale connection: user confirmed.
-- [ ] Verify all four administrator interfaces from the LAN, laptop Tailscale, and iPad Tailscale paths.
+- [x] Verify all four administrator interfaces from the LAN, laptop Tailscale, and iPad Tailscale paths: user confirmed access through all required addresses.
+
+The final confirmation followed the administrator login test request. Results are user-reported, not independently observed by this agent.
 
 Connection success does not by itself establish successful administrator authentication.
 
