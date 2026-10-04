@@ -20,7 +20,7 @@ These observations are a snapshot. Recheck live state before each operation.
 - [x] Recheck guest placement, HA maintenance, quorum, replication, active tasks, and boot configuration.
 - [x] Assess two-node quorum loss and HA fencing before issuing the reboot.
 - [x] Use the supported HA disarm procedure before temporary quorum loss.
-- [ ] Verify an independent console recovery path for future maintenance.
+- [x] Verify host remote consoles for future maintenance (user confirmed October 4; routed management remains a shared dependency).
 - [x] Reboot only if the safety checks pass, then verify the kernel, pools, cluster, HA, and guest health.
 
 Atlas was in HA maintenance mode. All running guests were on Prometheus.
@@ -44,7 +44,7 @@ VM 122 remained stopped. Atlas remained in its existing HA maintenance mode.
 Both nodes reported healthy pools. Atlas reported all seven checked Proxmox services active and no failed systemd units.
 Replication resumed successfully after the reboot. Expected votes remained two throughout maintenance.
 HA protection was temporarily suspended during the reboot. No guest restart was observed.
-Independent console access was not tested. This remains an open recovery prerequisite for future maintenance.
+Independent console access was not tested during the reboot. The user subsequently confirmed that the remote consoles work during H1/P0.
 
 The maintenance procedure follows the supported [Proxmox HA disarm and re-arm workflow](https://github.com/proxmox/pve-docs/blob/master/ha-manager.adoc#disarming-ha-for-cluster-maintenance).
 
@@ -94,7 +94,8 @@ P0 means prerequisite. P1 means high priority. P2 means subsequent hardening.
 Time estimates exclude large restore or offsite transfers.
 
 - [ ] **H1 / P0 / Establish recovery and maintenance prerequisites (60–120 minutes, restore transfer time additional).**
-  - [ ] Test independent console access. Capture protected configuration backups before mutation. Validate one isolated guest restore.
+  - [x] Verify PVE/PBS remote consoles (user confirmation), capture protected configuration backups, and validate one isolated guest restore.
+  - [ ] Confirm the Erebus physical display/login path and recovery access during a routing failure.
   - [ ] Confirm Atlas maintenance purpose, migration capacity, replication freshness, NFS clients, trusted admin sources, and current backup windows.
   - [ ] Assess a third quorum vote. Do not alter expected votes as a hardening shortcut.
   - **Complete when:** documented recovery path, verified restore, reviewed access/dependency map, and a safe one-host maintenance plan.
@@ -131,7 +132,7 @@ Time estimates exclude large restore or offsite transfers.
 ## H1/P0 progress — October 4, 2026
 
 Status: **in progress**. Recovery backups and one isolated guest restore passed.
-Console display tests and the complete administrator access tests remain open.
+The user confirmed that all remote consoles work. Erebus physical display/login and the complete administrator access tests remain open.
 No firewall, authentication, quorum, NAS sharing, or production placement changes occurred during H1.
 
 ### Recovery evidence
@@ -140,7 +141,8 @@ No firewall, authentication, quorum, NAS sharing, or production placement change
 - [x] Validate readable archives, expected configuration members, restrictive permissions, and SHA-256 checksums.
 - [x] Restore one guest from PBS to an isolated test container and validate its application data.
 - [x] Confirm current HA protection, quorum, peer replication, migration capacity, and backup schedules.
-- [ ] Test authenticated console display for each host. Confirm local console access for Erebus.
+- [x] Verify Atlas, Prometheus, and Mnemosyne remote consoles through user confirmation on October 4, 2026.
+- [ ] Confirm physical display/login access for Erebus and recovery access without the routed management network.
 - [ ] Validate administrator reachability from the LAN and each named Tailscale device.
 - [ ] Review the maintenance plan and select an independent quorum witness, if desired.
 
@@ -168,14 +170,14 @@ Production Spoolman was not stopped or modified. The restore proves this snapsho
 
 | Host | Recovery path | Evidence |
 | --- | --- | --- |
-| Atlas | Management controller `10.10.10.22` | HTTPS responds; authenticated console display pending |
-| Prometheus | Management controller `10.10.10.15` | HTTPS timed out from this controller; user reports connection works; console display pending |
-| Mnemosyne | Management controller `10.10.10.13` | HTTPS responds; authenticated console display pending |
+| Atlas | Management controller `10.10.10.22` | HTTPS responds; user confirms remote console works |
+| Prometheus | Management controller `10.10.10.15` | HTTPS timed out from this controller; user confirms access and remote console work |
+| Mnemosyne | Management controller `10.10.10.13` | HTTPS responds; user confirms remote console works |
 | Erebus | Physical keyboard, mouse, and local display | User reports physical access; display/login test pending |
 
 The management controllers use the routed management VLAN. A switch or routing failure can still prevent remote access.
 The TrueNAS physical console provides a local recovery path. Confirm physical alternatives for the other hosts before network changes.
-HTTPS reachability checks bypassed certificate validation solely for discovery. They do not prove trusted TLS or remote console operation.
+HTTPS reachability checks bypassed certificate validation solely for discovery. They do not prove trusted TLS. Remote console functionality is user-confirmed, not independently tested by this agent.
 
 Required administrator sources supplied by the user:
 
