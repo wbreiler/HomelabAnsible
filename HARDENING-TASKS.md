@@ -382,7 +382,7 @@ Protected pre-change copies are under `/root/h3-recovery-20261004/` on the respe
 
 Both subdomain routes returned HTTP 200 through NPM with forced local resolution.
 NPM presents an expired certificate. Normal certificate verification failed.
-The routing-only probes disabled certificate verification and sent no credentials. They do not prove trusted TLS or external Cloudflare access.
+The routing-only probes disabled certificate verification and sent no credentials. They do not prove trusted TLS. The user subsequently confirmed both subdomains open externally.
 No DNS, certificate, Cloudflare setting, or application authentication changed.
 The proxy certificate requires separate repair. H3 remains incomplete.
 
@@ -425,7 +425,10 @@ The original configuration archive remains available for review. Do not replace 
 PVE local administrator `root@pam` had no registered MFA methods. PBS had no local TFA configuration.
 Normal `wbreiler@pid` access uses Pocket ID, and the user confirmed a passkey.
 The PVE `hladmin` group has Administrator access. PBS grants `wbreiler@pid` Admin access.
-The request to enroll MFA for the local root accounts and privately retain recovery codes remains pending.
+The user confirmed local root MFA is not enrolled and reported enrollment/recovery options unavailable with default OpenID login.
+A live check confirmed Pocket ID is the default realm, PVE has no TFA entries, and PBS has no local TFA file.
+Local root enrollment and recovery codes remain pending. Select Linux PAM and authenticate as root for the local enrollment workflow.
+OpenID account MFA and recovery remain managed by Pocket ID.
 Do not expose TOTP seeds, security-key registration data, recovery codes, or passwords in this task file.
 
 PVE monitor and NexDeck tokens have privilege separation enabled and read-only ACLs.
