@@ -206,6 +206,15 @@ Its guest address is `10.10.40.88`, and its Tailscale address is `100.110.0.35`.
 H2 must test the actual source address and preserve the routed path. Tailnet device addresses alone are insufficient as host allowlists.
 Tailnet ACLs and route approvals were not independently inspected.
 
+Administrator access test evidence, October 4, 2026:
+
+- [x] iPhone Tailscale reachability to Atlas: user confirmed after the cellular/Tailscale test request.
+- [ ] Confirm authenticated administrator login to Atlas through that path.
+- [ ] Verify Prometheus, PBS, and TrueNAS administrator access from the required LAN and Tailscale devices.
+
+Connection success does not by itself establish successful administrator authentication.
+
+
 ### Dependencies and maintenance plan
 
 At recheck, Atlas runs eight production containers and Prometheus runs 21. VM 122 remains stopped.
