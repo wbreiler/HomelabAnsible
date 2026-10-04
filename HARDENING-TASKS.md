@@ -134,7 +134,7 @@ Time estimates exclude large restore or offsite transfers.
 
 Status: **in progress**. Recovery backups and one isolated guest restore passed.
 The user confirmed that all remote consoles work and that the Erebus physical console displays the host and permits login.
-Administrator access tests and an independent recovery backup copy remain open.
+Administrator access tests and confirmation of the iCloud copy from a second device remain open.
 No firewall, authentication, quorum, NAS sharing, or production placement changes occurred during H1.
 
 ### Recovery evidence
@@ -156,7 +156,14 @@ Consistent SQLite exports supplement the raw PVE configuration databases in the 
 PBS includes `/etc/proxmox-backup`, networking, SSH, boot settings, and package sources.
 TrueNAS uses supported `config.save` with the secret seed and root authorized keys. Pool encryption keys were not requested.
 These are configuration backups, not host disk images or appdata backups. Configuration import was not tested.
-The only recorded copy is on this controller. Place an encrypted copy in independent recovery storage before disruptive hardening.
+The user selected personal iCloud Drive and reports end-to-end encryption enabled and Apple Account MFA required.
+A verified bundle was copied to `iCloud Drive/Homelab Recovery/homelab-h1-recovery-20261004.tar.gz`.
+The local iCloud copy matches the source byte-for-byte and uses mode `0600`.
+SHA-256: `355c2ffadb1748b9080b9ea2515e823db3245b9f506d2e59efe99942950b273a`.
+The bundle contains the four configuration archives, two consistent PVE database exports, and the checksum manifest.
+It excludes the temporary TrueNAS download token. The archive relies on the user-reported iCloud encryption; it has no separate archive password.
+Cloud upload completion and recovery from another device are not yet verified. Confirm the file is available on the iPhone or iPad.
+Keep Apple Account recovery available independently of homelab identity services.
 
 Spoolman CT 102 restored from `mnemosyne:backup/ct/102/2026-10-04T11:31:56Z` to CT 132 on Prometheus `local-zfs`.
 The next free cluster ID was 114, but the ignored Minecraft inventory still references 114. CT 132 follows the highest current ID.
