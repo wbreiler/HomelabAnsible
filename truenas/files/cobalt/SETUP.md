@@ -15,6 +15,8 @@ the advertised address. Build dependencies use the upstream pnpm lockfile.
 1. Build the API image on the Docker host with
    `docker build -t cobalt-api:a636575-youtube1 - < Dockerfile.api`.
    Clone <https://github.com/imputnet/cobalt> and check out that revision.
+   Preserve the checkout’s `.git` directory in the build context. The web
+   build reads Git metadata to generate `version.json`; an archive alone fails.
 2. Copy `Dockerfile.web` into the checkout and `nginx.conf` into the checkout
    as `cobalt-nginx.conf`.
 3. On the Docker host, build with the desired LAN address:
@@ -61,6 +63,33 @@ restrictions can require additional configuration; no cookies are installed.
 The first deployment also corrected the shared app role to omit catalog-only
 fields for custom apps and avoid resolving missing `values` as a dictionary
 method. Existing-app update behavior is unchanged.
+
+## HTTPS reverse proxy
+
+For a public endpoint, keep the existing host port bindings and use separate
+TLS-enabled hostnames for the web interface and API. The unmodified frontend
+uses only the origin of `WEB_DEFAULT_API`, so an API subpath does not work.
+Rebuild the web image with `WEB_HOST=<public-web-hostname>` and
+`WEB_DEFAULT_API=https://<public-api-hostname>/`. Use a distinct image tag,
+update only the ignored Compose file, and retain the previous image for rollback.
+Set `API_URL=https://<public-api-hostname>/` and
+`CORS_URL=https://<public-web-hostname>` in that Compose file.
+
+Configure both proxy hosts without asset caching:
+
+| Hostname | Upstream | Path handling |
+| --- | --- | --- |
+| Public web hostname | Web host port 9001 | Preserve the path |
+| Public API hostname | API host port 9000 | Preserve the path |
+
+In Nginx Proxy Manager, select a valid certificate for each hostname and enable
+Force SSL and HTTP/2 Support. Proxy the API root and all paths, including
+`/session` and `/tunnel`. Do not append a path to the forward hostname.
+
+Use the existing backup, check, apply, and idempotency procedure. Verify the
+public API reports its HTTPS URL, the browser uses that API, and a returned
+tunnel delivers a complete download. Public API access remains unauthenticated
+unless separate access controls are configured.
 
 ## HLS compatibility patch
 
