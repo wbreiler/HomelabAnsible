@@ -364,6 +364,28 @@ For emergency recovery through a verified console:
 
 Reference: [Proxmox native host firewall documentation](https://raw.githubusercontent.com/proxmox/pve-docs/master/pve-firewall.adoc).
 
+### Management subdomain access correction — October 4, 2026
+
+The user identified `pve.wbreiler.com` and `pbs.wbreiler.com` as the primary external administration paths.
+The original H2 allowlist omitted NPM CT 101. Its verified address is `10.10.40.86`.
+Both NPM backend connections timed out before correction.
+
+The user authorized restoring these paths. Persistent exceptions now allow only:
+
+- NPM `10.10.40.86` to Atlas TCP 8006 for `pve.wbreiler.com`.
+- NPM `10.10.40.86` to PBS TCP 8007 for `pbs.wbreiler.com`.
+
+PVE firewall compilation and PBS nftables syntax validation passed. PBS reloaded its own table atomically.
+Both backend connections now succeed. SSH from NPM remains blocked on both hosts.
+An unrelated guest remains blocked from both management APIs.
+Protected pre-change copies are under `/root/h3-recovery-20261004/` on the respective hosts.
+
+Both subdomain routes returned HTTP 200 through NPM with forced local resolution.
+NPM presents an expired certificate. Normal certificate verification failed.
+The routing-only probes disabled certificate verification and sent no credentials. They do not prove trusted TLS or external Cloudflare access.
+No DNS, certificate, Cloudflare setting, or application authentication changed.
+The proxy certificate requires separate repair. H3 remains incomplete.
+
 ## H3/P1 progress — October 4, 2026
 
 Status: **in progress**. Host SSH hardening, authentication audit, package refresh, and maintenance preflight are complete.
