@@ -111,7 +111,7 @@ Time estimates exclude large restore or offsite transfers.
   - [x] Prove controller and Ansible key access on all three hosts, pinned inter-node SSH in both directions, and protected console recovery before disabling password SSH. PBS backups use their existing pinned API identity.
   - [x] Preserve root key authentication and TCP forwarding. Disable password/interactive SSH, X11 forwarding, and agent forwarding after dependency checks.
   - [x] Audit PVE/PBS MFA enforcement, token scopes, certificate validity, time synchronization, and account ownership.
-  - [ ] Enroll and verify local administrator MFA. Resolve the certificate policy and hostname access.
+  - [ ] Resolve the certificate policy and hostname access. Local root MFA/TOTP/recovery enrollment is excluded by explicit user decision.
   - [x] Refresh package metadata. Review updates and kernel changes. Reboot Prometheus and PBS separately after safety checks, then validate services and recovery access.
   - **Complete when:** repeat key-authentication tests, expected MFA behavior, valid TLS, current reviewed packages/kernel, and healthy quorum after maintenance.
 
@@ -389,7 +389,8 @@ The proxy certificate requires separate repair. H3 remains incomplete.
 ## H3/P1 progress — October 4, 2026
 
 Status: **in progress**. Host SSH hardening, authentication audit, package refresh, and maintenance preflight are complete.
-Local administrator MFA enrollment and certificate policy selection remain pending. The authorized kernel maintenance is complete.
+Certificate policy selection and the expired NPM certificate remain pending. The authorized kernel maintenance is complete.
+The user explicitly waived MFA, TOTP, and recovery-key enrollment for PVE/PBS local root accounts because these accounts are rarely used.
 The user confirmed that normal Pocket ID login uses a passkey.
 
 ### SSH changes and evidence
@@ -427,7 +428,10 @@ Normal `wbreiler@pid` access uses Pocket ID, and the user confirmed a passkey.
 The PVE `hladmin` group has Administrator access. PBS grants `wbreiler@pid` Admin access.
 The user confirmed local root MFA is not enrolled and reported enrollment/recovery options unavailable with default OpenID login.
 A live check confirmed Pocket ID is the default realm, PVE has no TFA entries, and PBS has no local TFA file.
-Local root enrollment and recovery codes remain pending. Select Linux PAM and authenticate as root for the local enrollment workflow.
+The user subsequently instructed that local root MFA, TOTP, and recovery-key enrollment be skipped.
+This is an accepted exception, not a completed MFA control. Local root web login remains password-only.
+Normal Pocket ID administration retains its existing passkey. SSH remains key-only, and the verified console recovery paths remain available.
+No authentication configuration changed for this exception. It does not change the separate TrueNAS task scope.
 OpenID account MFA and recovery remain managed by Pocket ID.
 Do not expose TOTP seeds, security-key registration data, recovery codes, or passwords in this task file.
 
@@ -512,7 +516,7 @@ The earlier NPM certbot failure cleared after restart. This does not establish t
 
 Protected local evidence is in ignored `truenas/artifacts/h3-maintenance-20261004/`.
 The recovery archives contain sensitive host configuration. They are not committed.
-H3 remains incomplete until local administrator MFA and the certificate policy are resolved.
+H3 remains incomplete until the certificate policy and expired NPM certificate are resolved. Local root MFA is an explicit user-approved exception.
 
 ## Guest tasks
 
