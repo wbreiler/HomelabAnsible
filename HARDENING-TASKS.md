@@ -1,6 +1,7 @@
 # Homelab hardening task list
 
-Status: inventory complete. Atlas reboot completed on October 4, 2026. Remaining hardening tasks have not started.
+Status: inventory complete. Atlas reboot and Minecraft container migrations completed on October 4, 2026.
+All five Minecraft servers passed service startup and LAN game status checks. Remaining hardening tasks have not started.
 
 Inventory date: October 4, 2026, approximately 11:27–11:34 AM America/Chicago.
 These observations are a snapshot. Recheck live state before each operation.
@@ -46,6 +47,35 @@ HA protection was temporarily suspended during the reboot. No guest restart was 
 Independent console access was not tested. This remains an open recovery prerequisite for future maintenance.
 
 The maintenance procedure follows the supported [Proxmox HA disarm and re-arm workflow](https://github.com/proxmox/pve-docs/blob/master/ha-manager.adoc#disarming-ha-for-cluster-maintenance).
+
+## Atlas maintenance removal and Minecraft migration — October 4, 2026
+
+The user authorized maintenance removal and migration of the five existing Minecraft servers to Atlas.
+
+- [x] Verify Atlas capacity, storage availability, replication health, and existing Minecraft services.
+- [x] Remove Atlas HA maintenance mode through the supported HA command.
+- [x] Migrate containers 113, 115, 116, 120, and 124 through HA management.
+- [x] Verify all five Minecraft services finish startup and answer game status requests.
+- [x] Verify final quorum, HA protection, guest placement, and replication health.
+
+| VMID | Minecraft server | Destination |
+| --- | --- | --- |
+| 113 | atm10-nash | Atlas |
+| 115 | homestead-nash | Atlas |
+| 116 | yabu-nash | Atlas |
+| 120 | bettermc-nash | Atlas |
+| 124 | hewwo-pwincess | Atlas |
+
+Each container restarted during its migration. Incremental ZFS transfers used existing replication copies.
+Removing maintenance allowed existing HA policies to return Radarr, Vaultwarden, and NexDeck to Atlas.
+The existing HA load balancer also moved Bambuddy to Atlas and later returned it to Prometheus. These were automatic HA movements.
+The HA load balancer moved Homestead back to Prometheus after its first migration.
+Automatic balancing was disabled for Homestead and YABU, then Homestead returned to Atlas.
+The other three Minecraft containers already had automatic balancing disabled.
+All five servers answered Minecraft status requests by approximately 12:01 PM CDT.
+Their replication jobs completed successfully toward Prometheus with zero failures.
+Atlas maintenance is disabled. Quorum is healthy, and HA fencing is armed.
+VM 122 remains stopped. No modpack, network, or backup schedule was changed.
 
 ## Host inventory
 
