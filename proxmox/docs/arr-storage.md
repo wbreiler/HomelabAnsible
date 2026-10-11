@@ -1,8 +1,9 @@
 # Sonarr and Radarr NFS startup
 
 Run `arr_storage.yml` from `proxmox/` against the guests directly. It reads
-their existing IPv4 NFS entries in `/etc/fstab`; it does not change exports,
-mount options, application paths, or network addresses.
+their existing IPv4 NFS entries in `/etc/fstab`. It can also mount explicitly
+configured `arr_extra_nfs_mounts` before collecting storage dependencies.
+It does not change exports, application paths, or network addresses.
 
 Use an ignored inventory or a file outside the repository:
 
@@ -18,6 +19,10 @@ arr_storage:
   vars:
     ansible_user: root
     ansible_python_interpreter: /usr/bin/python3
+    # Optional storage already exported by the NFS server:
+    arr_extra_nfs_mounts:
+      - path: /mnt/downloads/torrents
+        src: 192.0.2.10:/mnt/tank/downloads/torrents
 ```
 
 ```sh
@@ -30,6 +35,11 @@ for each NFS server, before `network-online.target`. Each application requires
 all configured NFS mounts, including nested download mounts. Drop-ins survive
 application service-template updates. No running service is restarted by the
 playbook.
+
+For Deluge on TrueNAS, map its reported `/media/` path to the local torrent
+mount in each arr download client. Use the same media UID/GID on both sides
+and restrict a root-squashed export to the arr guest addresses. Archive is
+private to Deluge and must not be mounted by the arr apps.
 
 A systemd timer retries application activation each minute. Starting an
 already active service does not restart it. For an intentional prolonged app
@@ -44,4 +54,5 @@ to confirm `changed=0`. Host reboots are not part of this procedure.
 
 Rollback: stop and disable the retry timer, restore backed-up overrides (or
 remove the three files created by this playbook), then run
-`systemctl daemon-reload`. The original fstab and application unit are intact.
+`systemctl daemon-reload`. If additional mounts were configured, remove their
+fstab entries and unmount them separately. The application unit is intact.

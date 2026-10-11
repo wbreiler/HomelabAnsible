@@ -10,6 +10,22 @@
         that:
           - arr_service in ['sonarr', 'radarr']
 
+    - name: Validate additional NFS mounts
+      ansible.builtin.assert:
+        that:
+          - item.path is match('^/[^\s]+$')
+          - item.src is match('^[0-9.]+:/[^\s]+$')
+      loop: '{{ arr_extra_nfs_mounts | default([]) }}'
+
+    - name: Mount additional download storage persistently
+      ansible.posix.mount:
+        path: '{{ item.path }}'
+        src: '{{ item.src }}'
+        fstype: nfs
+        opts: rw,_netdev,hard
+        state: mounted
+      loop: '{{ arr_extra_nfs_mounts | default([]) }}'
+
     - name: Read configured NFS mounts
       ansible.builtin.command:
         argv: [findmnt, --fstab, --types, 'nfs,nfs4', --json, -o, 'SOURCE,TARGET']
