@@ -1,0 +1,40 @@
+---
+# Run against Deluge guests directly with deluge_archive_source=server:/export.
+- name: Mount archive storage for Deluge
+  hosts: deluge_storage
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Validate archive source
+      ansible.builtin.assert:
+        that:
+          - deluge_archive_source is defined
+          - deluge_archive_source is match('^[0-9.]+:/[^\s]+$')
+
+    - name: Mount the archive persistently
+      ansible.posix.mount:
+        path: /archive
+        src: "{{ deluge_archive_source }}"
+        fstype: nfs
+        opts: rw,_netdev,hard
+        state: mounted
+
+    - name: Create Deluge service override directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/deluged.service.d
+        state: directory
+        mode: '0755'
+
+    - name: Require archive storage before Deluge starts
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/deluged.service.d/30-archive.conf
+        mode: '0644'
+        content: |
+          [Unit]
+          RequiresMountsFor=/archive
+      notify: Reload systemd
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
