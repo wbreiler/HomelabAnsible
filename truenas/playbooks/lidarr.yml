@@ -10,6 +10,7 @@
           - lidarr_config_path is defined
           - lidarr_music_path is defined
           - lidarr_downloads_path is defined
+          - lidarr_torrents_path is defined
           - lidarr_uid is defined
           - lidarr_gid is defined
           - lidarr_bind_address is defined
@@ -54,3 +55,4 @@
                   - "{{ lidarr_config_path }}:/config"
                   - "{{ lidarr_music_path }}:/music"
                   - "{{ lidarr_downloads_path }}:/nzb"
+                  - "{{ lidarr_torrents_path }}:/media"

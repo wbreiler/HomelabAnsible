@@ -8,6 +8,10 @@ Copy `files/lidarr/vars.yml.example` to ignored `artifacts/lidarr-vars.yml` and
 set existing storage parent paths, the media account IDs, and a LAN bind address.
 The playbook creates ordinary directories, not datasets. Downloads are mounted
 at `/nzb` to match SABnzbd; the music library is mounted at `/music`.
+Deluge downloads are mounted at `/media` using the same host path
+and media UID/GID as Deluge. Archive storage belongs only to Deluge.
+Configure its download client with the `lidarr`
+label. Shared local paths need no remote path mapping.
 
 From `truenas/`, after read-only discovery and a fresh protected configuration
 backup as described in the project README:

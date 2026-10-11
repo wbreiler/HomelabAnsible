@@ -1,0 +1,59 @@
+services:
+  gluetun:
+    image: qmcgaw/gluetun:v3.40.0@sha256:2b42bfa046757145a5155acece417b65b4443c8033fb88661a8e9dcf7fda5a00
+    restart: unless-stopped
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun:/dev/net/tun]
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: '1'
+    environment:
+      VPN_SERVICE_PROVIDER: custom
+      VPN_TYPE: wireguard
+      VPN_PORT_FORWARDING: 'on'
+      VPN_PORT_FORWARDING_PROVIDER: protonvpn
+      FIREWALL_INPUT_PORTS: '8112'
+      FIREWALL_OUTBOUND_SUBNETS: '{{ deluge_lan_subnet }}'
+      TZ: '{{ deluge_timezone }}'
+    ports:
+      - '{{ deluge_bind_address }}:8112:8112'
+    volumes:
+      - '{{ deluge_vpn_path }}/wg0.conf:/gluetun/wireguard/wg0.conf:ro'
+      - '{{ deluge_port_path }}:/tmp/gluetun'
+  deluge:
+    image: lscr.io/linuxserver/deluge:2.2.0@sha256:bf306ddd5e6d4a85d3d05ce1b947ab6e344e7fca1b7740b77c58ce170118c7ff
+    restart: unless-stopped
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      PUID: '{{ deluge_uid }}'
+      PGID: '{{ deluge_gid }}'
+      UMASK: '002'
+      TZ: '{{ deluge_timezone }}'
+    mem_limit: 2g
+    volumes:
+      - '{{ deluge_config_path }}:/config'
+      - '{{ deluge_media_path }}:/media'
+      - '{{ deluge_archive_path }}:/archive'
+      - '{{ deluge_metadata_script_path }}:/custom-cont-init.d/10-metadata-limit:ro'
+    healthcheck:
+      test: [CMD, /lsiopy/bin/python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8112/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  port-sync:
+    image: lscr.io/linuxserver/deluge:2.2.0@sha256:bf306ddd5e6d4a85d3d05ce1b947ab6e344e7fca1b7740b77c58ce170118c7ff
+    restart: unless-stopped
+    network_mode: service:gluetun
+    user: '{{ deluge_uid }}:{{ deluge_gid }}'
+    entrypoint: [/lsiopy/bin/python3, /opt/port-sync.py]
+    depends_on:
+      deluge:
+        condition: service_healthy
+    mem_limit: 128m
+    volumes:
+      - '{{ deluge_config_path }}:/config:ro'
+      - '{{ deluge_port_path }}:/tmp/gluetun:ro'
+      - '{{ deluge_script_path }}:/opt/port-sync.py:ro'

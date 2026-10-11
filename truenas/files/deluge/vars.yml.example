@@ -1,0 +1,13 @@
+---
+deluge_config_path: /mnt/tank/appdata/deluge/config
+deluge_media_path: /mnt/tank/downloads/torrents
+deluge_archive_path: /mnt/tank/Archive
+deluge_vpn_path: /mnt/tank/appdata/deluge/vpn
+deluge_port_path: /mnt/tank/appdata/deluge/forwarded-port
+deluge_script_path: /mnt/tank/appdata/deluge/port-sync.py
+deluge_metadata_script_path: /mnt/tank/appdata/deluge/metadata-limit.sh
+deluge_bind_address: 192.0.2.10
+deluge_lan_subnet: 192.0.2.0/24
+deluge_uid: 1000
+deluge_gid: 3001
+deluge_timezone: Etc/UTC

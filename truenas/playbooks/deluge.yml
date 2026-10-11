@@ -1,0 +1,86 @@
+---
+- name: Deploy Deluge with an isolated ProtonVPN tunnel
+  hosts: truenas
+  gather_facts: false
+  tasks:
+    - name: Require explicit deployment opt-in and storage configuration
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode or truenas_allow_changes | bool
+          - deluge_config_path is defined
+          - deluge_media_path is defined
+          - deluge_archive_path is defined
+          - deluge_vpn_path is defined
+          - deluge_bind_address is defined
+          - deluge_lan_subnet is defined
+          - deluge_uid is defined
+          - deluge_gid is defined
+
+    - name: Read prepared storage paths
+      ansible.builtin.stat:
+        path: '{{ item }}'
+      loop:
+        - '{{ deluge_config_path }}'
+        - '{{ deluge_media_path }}'
+        - '{{ deluge_archive_path }}'
+        - '{{ deluge_vpn_path }}/wg0.conf'
+      register: deluge_paths
+
+    - name: Require prepared storage and VPN configuration
+      ansible.builtin.assert:
+        that: item.stat.exists
+      loop: '{{ deluge_paths.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+
+    - name: Create shared forwarded-port directory
+      ansible.builtin.file:
+        path: '{{ deluge_port_path }}'
+        state: directory
+        mode: '0755'
+
+    - name: Install forwarded-port synchronization
+      ansible.builtin.copy:
+        src: '{{ playbook_dir | dirname }}/files/deluge/port-sync.py'
+        dest: '{{ deluge_script_path }}'
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Redeploy Deluge
+
+    - name: Install bounded metadata compatibility fix
+      ansible.builtin.copy:
+        src: '{{ playbook_dir | dirname }}/files/deluge/metadata-limit.sh'
+        dest: '{{ deluge_metadata_script_path }}'
+        owner: root
+        group: root
+        mode: '0755'
+      notify: Redeploy Deluge
+
+    - name: Read current Deluge application
+      ansible.builtin.raw: >-
+        midclt call app.query '[["name","=","deluge"]]'
+        '{"extra":{"retrieve_config":true}}'
+      check_mode: false
+      register: deluge_query
+      changed_when: false
+      no_log: true
+
+    - name: Reconcile only Deluge
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
+      vars:
+        truenas_entities_apps: '{{ deluge_query.stdout | from_json }}'
+        desired_app:
+          name: deluge
+          custom_app: true
+          state: RUNNING
+          custom_compose_config: >-
+            {{ lookup('template', '../files/deluge/docker-compose.yml.j2') | from_yaml }}
+
+  handlers:
+    - name: Redeploy Deluge
+      ansible.builtin.raw: midclt call -j app.redeploy deluge
+      changed_when: true
+      when:
+        - not ansible_check_mode
+        - (deluge_query.stdout | from_json) | length > 0

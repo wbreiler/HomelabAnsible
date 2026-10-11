@@ -232,6 +232,9 @@ to make it pass.
 
 ## Application guides
 
+- [Deluge with ProtonVPN](files/deluge/SETUP.md) — local torrent storage,
+  isolated VPN networking, NAT-PMP synchronization, and arr access.
+
 - [LANCache](files/lancache/SETUP.md) — scoped game-download cache and DNS service.
 
 - [FastChannels](files/fastchannels/SETUP.md) — LAN channel aggregator with dedicated appdata bind mounts.
