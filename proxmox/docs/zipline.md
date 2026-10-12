@@ -65,7 +65,7 @@ a descriptive User-Agent. A test with Discord's User-Agent returned the image.
 
 The installed Quick Action is **Upload Screenshot**. Its assigned shortcut is
 **Control + Option + Command + U**. Select a region. The action uploads the
-image and copies its direct URL to the clipboard. Escape cancels the action.
+image and copies its extensionless direct URL to the clipboard. Escape cancels the action.
 macOS can request screen capture permission on first use.
 
 The client is installed at `~/.local/bin/screenshot-upload`, with its token

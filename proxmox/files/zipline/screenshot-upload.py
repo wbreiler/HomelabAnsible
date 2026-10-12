@@ -21,6 +21,7 @@ def upload(path, token):
     request = urllib.request.Request(ENDPOINT, data=body, headers={
         "Authorization": token,
         "User-Agent": "Wbreiler-Screenshot-Uploader/1.0",
+        "x-zipline-extensionless": "true",
         "Content-Type": "multipart/form-data; boundary=" + boundary,
     })
     with urllib.request.urlopen(request, timeout=60) as response:

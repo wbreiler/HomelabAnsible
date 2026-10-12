@@ -33,6 +33,7 @@ with tempfile.TemporaryDirectory() as directory:
         assert request.get_header("Authorization") == "private-token"
         assert request.get_header("User-agent") == "Wbreiler-Screenshot-Uploader/1.0"
         assert b'name="file"' in request.data and b"png-content" in request.data
+        assert request.get_header("X-zipline-extensionless") == "true"
         assert timeout == 60
         return Response()
 
