@@ -12,7 +12,7 @@
 			<key>NSKeyEquivalent</key>
 			<dict>
 				<key>default</key>
-				<string>^@$4</string>
+				<string>^~@u</string>
 			</dict>
 			<key>NSMenuItem</key>
 			<dict>
