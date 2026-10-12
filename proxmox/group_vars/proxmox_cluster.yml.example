@@ -464,3 +464,6 @@ homelable_vmid: "131"
 # Initial scan ranges; later edits are saved in the application settings.
 homelable_scanner_ranges:
   - "10.10.40.0/24"
+
+# Authenticated screenshot uploads with public direct image links.
+install_zipline: false

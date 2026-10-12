@@ -1,0 +1,30 @@
+---
+- name: Render screenshot HTTPS ingress
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "/tmp/zipline-ingress-{{ lxc_resolved_vmid }}.conf"
+    mode: "0644"
+  delegate_to: "{{ zipline_proxy_node }}"
+
+- name: Install validated screenshot HTTPS ingress
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      source_file=/tmp/zipline-ingress-{{ lxc_resolved_vmid }}.conf
+      destination=/etc/nginx/conf.d/homelab-zipline.conf
+      local_hash=$(sha256sum "$source_file" | cut -d ' ' -f 1)
+      remote_hash=$(pct exec {{ zipline_proxy_vmid }} -- sha256sum "$destination" 2>/dev/null | cut -d ' ' -f 1 || true)
+      if test "$local_hash" != "$remote_hash"; then
+        pct exec {{ zipline_proxy_vmid }} -- sh -c 'test ! -f "$1" || cp "$1" "$1.previous"' -- "$destination"
+        pct push {{ zipline_proxy_vmid }} "$source_file" "$destination" --perms 0644
+        if ! pct exec {{ zipline_proxy_vmid }} -- nginx -t; then
+          pct exec {{ zipline_proxy_vmid }} -- sh -c 'if test -f "$1.previous"; then mv "$1.previous" "$1"; else rm "$1"; fi' -- "$destination"
+          exit 1
+        fi
+        pct exec {{ zipline_proxy_vmid }} -- nginx -s reload
+        echo changed
+      fi
+    executable: /bin/bash
+  delegate_to: "{{ zipline_proxy_node }}"
+  register: zipline_ingress
+  changed_when: "'changed' in zipline_ingress.stdout"

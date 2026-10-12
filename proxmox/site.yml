@@ -68,6 +68,10 @@
       when: install_homelable | default(false) | bool
       tags: ['homelable', 'lxc']
 
+    - role: zipline
+      when: install_zipline | default(false) | bool
+      tags: ['zipline', 'lxc']
+
     - role: nexdeck
       when: install_nexdeck | default(false) | bool
       tags: ['nexdeck', 'lxc']

@@ -538,3 +538,14 @@ management, LXC installation, system updates, and PBS restores.
   password. Existing different releases require a reviewed migration.
 * Check mode skips container operations. Verify live API/login/database health
   and repeat-run idempotency before declaring a deployment complete.
+
+### zipline
+
+* Authenticated screenshot uploads with public root-level image URLs.
+* Uses digest-pinned Zipline and PostgreSQL in an unprivileged LXC.
+* The fallback is Prometheus, VMID 126. Confirm live and configured ID usage.
+* Creates a private administrator before public exposure. Registration and
+  invitations are disabled. Preserve `/var/lib/zipline` and `/opt/zipline`.
+* Optional `zipline_manage_proxy` manages an isolated NPM configuration and
+  requires the `homelab-zipline` certificate first. See `docs/zipline.md`.
+* The Mac client and Automator action are under `files/zipline/`.

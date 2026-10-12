@@ -1,0 +1,40 @@
+services:
+  postgresql:
+    image: {{ zipline_postgres_image }}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zipline
+      POSTGRES_PASSWORD: ${POSTGRESQL_PASSWORD:?required}
+      POSTGRES_DB: zipline
+    volumes:
+      - /var/lib/zipline/database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD, pg_isready, -U, zipline]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  zipline:
+    image: {{ zipline_image }}
+    restart: unless-stopped
+    ports:
+      - "{{ zipline_port }}:3000"
+    env_file: secrets.env
+    environment:
+      DATABASE_URL: postgres://zipline:${POSTGRESQL_PASSWORD}@postgresql:5432/zipline
+      CORE_DEFAULT_DOMAIN: {{ zipline_domain }}
+      CORE_RETURN_HTTPS_URLS: "true"
+      FILES_ROUTE: /
+      FILES_LENGTH: "16"
+      FILES_MAX_FILE_SIZE: 25mb
+      FILES_ASSUME_MIMETYPES: "true"
+      FILES_DISABLED_TYPES: text/html,application/javascript,text/javascript,image/svg+xml,application/xhtml+xml
+      FEATURES_USER_REGISTRATION: "false"
+      FEATURES_OAUTH_REGISTRATION: "false"
+      FEATURES_HEALTHCHECK: "true"
+      INVITES_ENABLED: "false"
+      WEBSITE_TITLE: Screenshots
+    volumes:
+      - /var/lib/zipline/uploads:/zipline/uploads
+    depends_on:
+      postgresql:
+        condition: service_healthy

@@ -1,0 +1,178 @@
+---
+- name: Validate immutable Zipline image
+  ansible.builtin.assert:
+    that:
+      - zipline_image is match('^ghcr.io/diced/zipline:[^@]+@sha256:[0-9a-f]{64}$')
+      - zipline_postgres_image is match('^docker.io/library/postgres:[^@]+@sha256:[0-9a-f]{64}$')
+      - zipline_port | int > 0
+      - zipline_port | int < 65536
+
+- name: Resolve Zipline node
+  ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
+  vars:
+    lxc_lookup_hostname: "{{ zipline_hostname }}"
+    lxc_fallback_node: "{{ zipline_node }}"
+
+- name: Deploy Zipline on its hosting node
+  when:
+    - proxmox_node_name | default(inventory_hostname) == lxc_current_node
+    - not ansible_check_mode
+  block:
+    - name: Bootstrap Zipline LXC
+      ansible.builtin.include_tasks: ../../../tasks/create_lxc.yml
+      vars:
+        configure_apt_proxy: false
+        lxc_hostname: "{{ zipline_hostname }}"
+        lxc_vmid: "{{ zipline_vmid }}"
+        lxc_storage: "{{ zipline_storage }}"
+        lxc_template: "{{ zipline_template }}"
+        lxc_cores: "{{ zipline_cores }}"
+        lxc_memory: "{{ zipline_memory }}"
+        lxc_disk: "{{ zipline_disk }}"
+        lxc_bridge: "{{ zipline_bridge }}"
+        lxc_vlan: "{{ zipline_vlan }}"
+        lxc_tags: screenshots
+        lxc_packages: [ca-certificates, curl, docker.io, docker-compose, openssl, python3]
+
+    - name: Enable container boot and Docker
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          if ! pct config {{ lxc_resolved_vmid }} | grep -qx 'onboot: 1'; then
+            pct set {{ lxc_resolved_vmid }} --onboot 1
+            echo changed
+          fi
+          pct exec {{ lxc_resolved_vmid }} -- bash -ceu '
+            if ! systemctl is-enabled --quiet docker; then
+              systemctl enable docker
+              echo changed
+            fi
+            if ! systemctl is-active --quiet docker; then
+              systemctl start docker
+              echo changed
+            fi'
+        executable: /bin/bash
+      register: zipline_boot
+      changed_when: "'changed' in zipline_boot.stdout"
+
+    - name: Create persistent data and secrets once
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - |
+            install -d -m 0700 /opt/zipline
+            if ! test -d /var/lib/zipline; then
+              install -d -m 0700 /var/lib/zipline/{database,uploads}
+              echo changed
+            fi
+            if ! test -f /opt/zipline/secrets.env; then
+              umask 077
+              { printf 'CORE_SECRET='; openssl rand -hex 32;
+                printf 'POSTGRESQL_PASSWORD='; openssl rand -hex 32;
+              } > /opt/zipline/secrets.env
+              cp /opt/zipline/secrets.env /opt/zipline/.env
+              echo changed
+            fi
+            test -s /opt/zipline/secrets.env
+            chmod 0600 /opt/zipline/secrets.env
+      register: zipline_secrets
+      changed_when: "'changed' in zipline_secrets.stdout"
+      no_log: true
+
+    - name: Read container IPv4 address
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - "ip -4 -o addr show dev eth0 scope global | awk '{split($4,a,\"/\"); print a[1]; exit}'"
+      register: zipline_ip
+      changed_when: false
+      check_mode: false
+      until: zipline_ip.stdout | trim | length > 0
+      retries: 12
+      delay: 5
+
+    - name: Render Zipline Compose configuration
+      ansible.builtin.template:
+        src: compose.yml.j2
+        dest: "/tmp/zipline-{{ lxc_resolved_vmid }}.yml"
+        mode: "0600"
+      register: zipline_compose
+
+    - name: Read deployed Compose checksum
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, sha1sum, /opt/zipline/compose.yml]
+      register: zipline_deployed
+      changed_when: false
+      failed_when: zipline_deployed.rc not in [0, 1]
+      check_mode: false
+
+    - name: Copy Compose configuration into container
+      ansible.builtin.command:
+        argv:
+          - pct
+          - push
+          - "{{ lxc_resolved_vmid }}"
+          - "/tmp/zipline-{{ lxc_resolved_vmid }}.yml"
+          - /opt/zipline/compose.yml
+          - --perms
+          - "0600"
+      when: zipline_compose.checksum | default('') != zipline_deployed.stdout.split(' ')[0]
+      changed_when: true
+
+    - name: Reconcile Zipline container
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - docker
+          - compose
+          - --project-directory
+          - /opt/zipline
+          - up
+          - -d
+      register: zipline_up
+      changed_when: "zipline_up.stderr is search('(?i)creat|start|pull')"
+
+    - name: Verify Zipline HTTP health
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --output
+          - /dev/null
+          - "http://127.0.0.1:{{ zipline_port }}/api/healthcheck"
+      changed_when: false
+      register: zipline_health
+      until: zipline_health.rc == 0
+      retries: 30
+      delay: 5
+      when: not ansible_check_mode
+
+    - name: Initialize the private administrator before public exposure
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, python3, -]
+        stdin: "{{ lookup('file', 'initialize.py') }}"
+      register: zipline_initialize
+      changed_when: "'created' in zipline_initialize.stdout"
+      no_log: true
+
+    - name: Configure existing HTTPS ingress
+      ansible.builtin.include_tasks: proxy.yml
+      when: zipline_manage_proxy | bool

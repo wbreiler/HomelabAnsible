@@ -1,0 +1,19 @@
+---
+zipline_node: prometheus
+zipline_vmid: "126"
+zipline_hostname: zipline-nash
+zipline_storage: local-zfs
+zipline_template: ""
+zipline_cores: 2
+zipline_memory: 2048
+zipline_disk: 32
+zipline_bridge: vmbr0
+zipline_vlan: 40
+zipline_domain: i.wbreiler.com
+zipline_port: 3000
+zipline_image: ghcr.io/diced/zipline:4.8.0@sha256:8ae3cdf8cdbba2ac98754e9fc4ccec67bbaa86b6e6ab1ccf9683ddcff85eee72
+zipline_postgres_image: docker.io/library/postgres:16.10-alpine@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+# Existing NPM ingress. Issue homelab-zipline certificate before enabling ingress.
+zipline_manage_proxy: false
+zipline_proxy_node: prometheus
+zipline_proxy_vmid: "101"

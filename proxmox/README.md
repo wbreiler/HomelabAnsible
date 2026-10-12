@@ -1149,3 +1149,9 @@ operations. Live verification checks the UI, API version, authentication,
 unauthenticated rejection, credential permissions, and SQLite integrity.
 A repeat run must report `changed=0`. The role refuses a different installed
 release until its migration and backup procedure have been reviewed.
+
+### Screenshot uploads (Zipline)
+
+The `zipline` role deploys digest-pinned Zipline and PostgreSQL in an
+unprivileged LXC. Enable `install_zipline` and run the `zipline` tag.
+See [screenshot setup](docs/zipline.md) for ingress prerequisites and clients.
