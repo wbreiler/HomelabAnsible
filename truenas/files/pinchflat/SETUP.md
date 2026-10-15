@@ -19,7 +19,9 @@ ansible-playbook playbooks/youtube.yml -e @artifacts/youtube-vars.yml -e truenas
 
 Repeat the deployment and require `changed=0`. The LAN UI is port 8945 on the
 configured address. Select **YouTube Archive** for additional sources.
-Sources include historical videos and future uploads, with no retention limit.
+Sources include historical videos and future uploads up to 60 minutes long,
+with no retention limit. Longer videos and VODs are skipped, not trimmed.
+Existing downloaded files are retained.
 Fast indexing checks new uploads every ten minutes; Pinchflat also schedules
 full channel scans. Private, deleted, unavailable, or restricted videos may
 require additional access and are not guaranteed to download.
