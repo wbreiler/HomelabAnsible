@@ -232,6 +232,9 @@ to make it pass.
 
 ## Application guides
 
+- [YouTube archive](files/pinchflat/SETUP.md) — Pinchflat, a video dataset under
+  Archive, and a dedicated Tdarr AV1 library.
+
 - [Deluge with ProtonVPN](files/deluge/SETUP.md) — local torrent storage,
   isolated VPN networking, NAT-PMP synchronization, and arr access.
 

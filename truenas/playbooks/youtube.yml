@@ -1,0 +1,151 @@
+---
+- name: Deploy the YouTube archive on TrueNAS
+  hosts: truenas
+  gather_facts: false
+  tasks:
+    - name: Require explicit deployment settings
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode or truenas_allow_changes | bool
+          - youtube_dataset is defined
+          - youtube_dataset.startswith('gaia/Archive/')
+          - youtube_config_path is defined
+          - youtube_bind_address is defined
+          - youtube_uid is defined
+          - youtube_gid is defined
+    - name: Read archive dataset
+      ansible.builtin.command:
+        argv:
+          - midclt
+          - call
+          - pool.dataset.query
+          - '{{ [["id", "=", youtube_dataset]] | to_json }}'
+      check_mode: false
+      changed_when: false
+      register: youtube_datasets
+    - name: Reconcile only the YouTube dataset
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/dataset.yml
+      vars:
+        truenas_entities_datasets: '{{ youtube_datasets.stdout | from_json }}'
+        desired_dataset:
+          name: '{{ youtube_dataset }}'
+          recordsize: 1M
+          compression: LZ4
+          atime: 'OFF'
+    - name: Create dedicated application and archive directories
+      ansible.builtin.file:
+        path: '{{ item }}'
+        state: directory
+        owner: '{{ youtube_uid }}'
+        group: '{{ youtube_gid }}'
+        mode: '0770'
+      loop:
+        - '{{ youtube_config_path }}'
+        - '/mnt/{{ youtube_dataset }}'
+    - name: Read current Pinchflat configuration
+      ansible.builtin.command:
+        argv:
+          - midclt
+          - call
+          - app.query
+          - '[["name","=","pinchflat"]]'
+          - '{"extra":{"retrieve_config":true}}'
+      check_mode: false
+      changed_when: false
+      register: youtube_apps
+    - name: Preserve application ownership for the non-root container
+      ansible.builtin.file:
+        path: '{{ youtube_config_path }}'
+        state: directory
+        owner: '{{ youtube_uid }}'
+        group: '{{ youtube_gid }}'
+        recurse: true
+    - name: Reconcile only Pinchflat
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
+      vars:
+        truenas_entities_apps: '{{ youtube_apps.stdout | from_json }}'
+        desired_app:
+          name: pinchflat
+          custom_app: true
+          state: RUNNING
+          custom_compose_config:
+            services:
+              pinchflat:
+                image: ghcr.io/kieraneglin/pinchflat@sha256:1f6090ad9940bb6907f6c542ae0c18ecd3df08cd6cfece6617a424adbfbe3740
+                user: '{{ youtube_uid }}:{{ youtube_gid }}'
+                restart: unless-stopped
+                environment:
+                  TZ: America/Chicago
+                  UMASK: '0002'
+                ports:
+                  - '{{ youtube_bind_address }}:8945:8945'
+                volumes:
+                  - '{{ youtube_config_path }}:/config'
+                  - '/mnt/{{ youtube_dataset }}:/downloads'
+                logging:
+                  options:
+                    max-size: 10m
+                    max-file: '3'
+    - name: Reconcile the YouTube mount and Tdarr library
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - '{{ lookup("file", playbook_dir + "/../files/tdarr/youtube-library.py") }}'
+          - --dataset
+          - '{{ youtube_dataset }}'
+          - --server-path
+          - '{{ youtube_tdarr_server_path }}'
+          - --url
+          - '{{ youtube_tdarr_url }}'
+          - '{{ "--check" if ansible_check_mode else "--apply" }}'
+      check_mode: false
+      register: youtube_tdarr_result
+      changed_when: youtube_tdarr_result.rc == 0 and (youtube_tdarr_result.stdout | from_json).changed
+    - name: Wait for Pinchflat web readiness
+      ansible.builtin.uri:
+        url: 'http://{{ youtube_bind_address }}:8945/'
+        status_code: 200
+      register: youtube_web
+      until: youtube_web.status == 200
+      retries: 20
+      delay: 3
+      when: not ansible_check_mode
+    - name: Configure the MKV archive profile
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - ix-pinchflat-pinchflat-1
+          - /app/bin/pinchflat
+          - rpc
+          - >-
+            {{ lookup('file', playbook_dir + '/../files/pinchflat/archive-profile.exs') |
+            replace('__ARCHIVE_CHECK__', ansible_check_mode | lower) }}
+      register: youtube_profile
+      changed_when: >-
+        youtube_profile.rc == 0 and
+        (youtube_profile.stdout_lines | select('match', '^ARCHIVE_RESULT=') | first |
+        replace('ARCHIVE_RESULT=', '') | from_json).changed
+      when: not ansible_check_mode or (youtube_apps.stdout | from_json | length > 0)
+      check_mode: false
+    - name: Subscribe to requested YouTube channels
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - ix-pinchflat-pinchflat-1
+          - /app/bin/pinchflat
+          - rpc
+          - >-
+            {{ lookup('file', playbook_dir + '/../files/pinchflat/archive-source.exs') |
+            replace('__ARCHIVE_CHECK__', ansible_check_mode | lower) |
+            replace('__ARCHIVE_SOURCE_URL__', item | to_json) }}
+      loop: '{{ youtube_sources | default([]) }}'
+      register: youtube_source
+      changed_when: >-
+        youtube_source.rc == 0 and
+        (youtube_source.stdout_lines | select('match', '^ARCHIVE_RESULT=') | first |
+        replace('ARCHIVE_RESULT=', '') | from_json).changed
+      when: not ansible_check_mode or (youtube_apps.stdout | from_json | length > 0)
+      check_mode: false

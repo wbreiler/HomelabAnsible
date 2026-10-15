@@ -1,0 +1,8 @@
+---
+youtube_dataset: gaia/Archive/YouTube
+youtube_config_path: /mnt/gaia/appdata/pinchflat
+youtube_bind_address: 10.10.20.3
+youtube_uid: 1000
+youtube_gid: 3001
+youtube_tdarr_server_path: /mnt/gaia/appdata/tdarr/server
+youtube_tdarr_url: http://10.10.20.3:8266
