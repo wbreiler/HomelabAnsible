@@ -25,9 +25,9 @@ def main():
     args = parser.parse_args()
     assert args.dataset.startswith("gaia/Archive/")
     database = Path(args.server_path) / "Tdarr/DB2/SQL/database.db"
-    with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as db:
-        # Read the existing node key locally. Never emit it or put it in argv.
-        key = json.loads(db.execute("SELECT json_data FROM apikeysjsondb LIMIT 1").fetchone()[0])["_id"]
+    # Follow the node's configured key when several keys exist during rotation.
+    node_config = Path(args.server_path).parent / "config/Tdarr_Node_Config.json"
+    key = json.loads(node_config.read_text())["apiKey"]
 
     def api(endpoint, data=None):
         request = urllib.request.Request(

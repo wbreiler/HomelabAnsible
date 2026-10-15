@@ -51,7 +51,7 @@ database rollback occurs.
 
 ## Verification
 
-The helper reads the existing Tdarr key locally and uses the authenticated API;
+The helper reads the configured Tdarr node key locally and uses the authenticated API;
 it never changes the appliance database or prints the key. API writes have
 read-back assertions. Pinchflat uses its running application's release RPC and
 context functions for profiles and sources. Check mode does not mutate either.
