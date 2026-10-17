@@ -6,12 +6,18 @@ its internal Tdarr node, the RTX 5050, and the existing media paths on
 original audio/subtitles/chapters, no resolution change, and manual validation
 before processing a whole library.
 
-## Live snapshot — 2026-10-02
+## Current release pin
+
+The Compose file pins Tdarr `2.96.01` and its immutable image digest. This
+stays on the 2.x release line. Tdarr 3.x changes the backend and requires a
+separate review of node authentication and the custom flows before migration.
+
+## Historical live snapshot — 2026-10-02
 
 The app is RUNNING and its web interface responds on port 8265. The live image
-reference is untagged `ghcr.io/haveagitgat/tdarr`; the tracked Compose file pins
-`2.86.01`. Confirm the running binary version before reapplying that file, since
-it can select a different release. This read-only check did not repeat the
+reference was untagged `ghcr.io/haveagitgat/tdarr`; the tracked Compose file then
+pinned `2.86.01`. Confirm the running binary version before reapplying the file,
+since it can select a different release. This read-only check did not repeat the
 GPU, encoding, HDR, or client-playback tests below.
 
 ## Encoding policy

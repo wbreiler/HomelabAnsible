@@ -46,7 +46,7 @@
           custom_compose_config:
             services:
               fastchannels:
-                image: ghcr.io/kineticman/fastchannels:v5.3.2
+                image: ghcr.io/kineticman/fastchannels:v5.6.0@sha256:36c5dd764d2d3bb9a3af092ff292d72dcd4c2d26e996727a2d62389135bde1e3
                 restart: unless-stopped
                 environment:
                   PUBLIC_BASE_URL: http://10.10.20.3:5523

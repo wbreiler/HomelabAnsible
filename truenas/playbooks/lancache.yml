@@ -46,7 +46,7 @@
           custom_compose_config:
             services:
               dns:
-                image: lancachenet/lancache-dns@sha256:cec61382a3b4b8ef6dfc4ff44eefd4028ea48662ff5930097bb366b69e22296c
+                image: lancachenet/lancache-dns@sha256:6e046a40e9f0467b1df97ca2ba9b8b7c0d4404736a349c0f8df11fa212871a03
                 restart: unless-stopped
                 environment:
                   USE_GENERIC_CACHE: 'true'
@@ -62,7 +62,7 @@
                     max-size: 10m
                     max-file: '3'
               monolithic:
-                image: lancachenet/monolithic@sha256:37f28b362c939a333f3e4f12aa8ca80604cf75050b2f190d0ad972b2fedce00e
+                image: lancachenet/monolithic@sha256:155817065b13cc427aa0014acc34bbb389591400d7639c95abcfcfb2230ad7f0
                 restart: unless-stopped
                 environment:
                   UPSTREAM_DNS: "{{ lancache_upstream_dns }}"

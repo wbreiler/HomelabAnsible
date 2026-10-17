@@ -1,7 +1,7 @@
 # Deluge with ProtonVPN
 
 Run `playbooks/deluge.yml` from `truenas/`. It deploys only the Deluge custom
-app through TrueNAS middleware. Deluge 2.2.0 and Gluetun 3.40.0 images are
+app through TrueNAS middleware. Deluge 2.2.0 and Gluetun 3.41.3 images are
 version-pinned and use immutable image digests.
 
 Copy `vars.yml.example` to ignored `artifacts/deluge-vars.yml`. Prepare the
