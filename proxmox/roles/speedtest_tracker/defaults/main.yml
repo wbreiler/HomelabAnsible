@@ -10,7 +10,7 @@ speedtest_tracker_disk: 8
 speedtest_tracker_bridge: vmbr0
 speedtest_tracker_vlan: 40
 speedtest_tracker_image: >-
-  ghcr.io/linuxserver/speedtest-tracker:v1.15.0-ls173@sha256:dc439a8bbadd3d0d4a4af4ee64bf30a6db9ced425c00ac12ea2ff04e15669ed1
+  ghcr.io/linuxserver/speedtest-tracker:v1.15.0-ls175@sha256:1eeed2307699c083407bd4c1eb86f14d5179f9e1cd960f57d4cbab6f1f8b8a42
 speedtest_tracker_port: 80
 speedtest_tracker_schedule: "17 * * * *"
 speedtest_tracker_timezone: America/Chicago
@@ -18,6 +18,6 @@ speedtest_tracker_admin_email: admin@example.com
 speedtest_tracker_discord_enabled: false
 speedtest_tracker_discord_webhook_url: ""
 speedtest_tracker_apprise_image: >-
-  docker.io/caronc/apprise:v2.0.0@sha256:cc5ef662ad2a4a25958f1eddbf87f2e95f9bf637ea481f1adcec18312ad262f5
+  docker.io/caronc/apprise:2.0.1@sha256:0b2913b15c8eb47c25345722985ffbfae701326edde21909c205d296d62dd52c
 speedtest_tracker_download_threshold: 1000
 speedtest_tracker_upload_threshold: 250

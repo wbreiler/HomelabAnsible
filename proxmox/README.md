@@ -373,18 +373,18 @@ Repository-owned roles in this section manage single-purpose LXCs; the Tailscale
 
 - **`apt_cacher_ng`** — Apt-Cacher NG package cache with HTTPS pass-through and self-proxy configuration. Its defaults identify `apt-nash`, VMID 106, `atlas` as the fresh-install fallback, and a 2 CPU/512 MB/25 GB container. It removes the legacy remote update hook.
 - **`prowlarr`** — Prowlarr indexer manager. Its defaults identify `prowlarr-nash`, VMID 104, and `atlas` as the fresh-install fallback. It pins version 2.6.5.5623 and its release checksum, removes the remote update hook, and verifies the web interface.
-- **`homebridge`** — HomeKit bridge. Its defaults identify `homebridge-nash`, VMID 105, and `prometheus` as the fresh-install fallback. It pins package version 2.0.19, checksum-verifies the Homebridge repository key, removes the remote update hook, and verifies Homebridge and Avahi.
+- **`homebridge`** — HomeKit bridge. Its defaults identify `homebridge-nash`, VMID 105, and `prometheus` as the fresh-install fallback. It pins package version 2.0.20, checksum-verifies the Homebridge repository key, removes the remote update hook, and verifies Homebridge and Avahi.
 - **`spoolman`** — 3D-printer spool inventory. Its defaults identify `spoolman-nash`, VMID 102, and `atlas` as the fresh-install fallback. It pins and verifies Spoolman 0.27.0 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
 - **`bambuddy`** — Bambu Lab printer management. It creates or adopts an unprivileged Debian LXC, installs a pinned and checksum-verified Bambuddy release using the sizing recommended by the Community Scripts installer, preserves local environment and data files, and verifies the web interface on port 8000. The pinned `nils_ost.bambuddy` collection is also installed for future API-driven printer and settings management; its Docker installer is not used.
-- **`nexdeck`** — Infrastructure dashboard. The tracked release is 0.29.1; the
+- **`nexdeck`** — Infrastructure dashboard. The tracked release is 0.41.4; the
   role resolves existing placement and serves port 8000.
 - **`homelable`** — Topology UI and discovery. See [Homelable](#homelable).
 - **`speedtest_tracker`** — Scheduled Internet speed checks. See [Speedtest Tracker](#speedtest-tracker).
-- **`gitea_mirror`** — Gitea Mirror repository mirroring service. Its defaults identify `git-mirror-nash`, VMID 119, and `atlas` as the fresh-install fallback. It pins and verifies Gitea Mirror 3.40.3 and Bun 1.3.14, preserves the existing environment file and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the installed version.
+- **`gitea_mirror`** — Gitea Mirror repository mirroring service. Its defaults identify `git-mirror-nash`, VMID 119, and `atlas` as the fresh-install fallback. It pins and verifies Gitea Mirror 3.41.0 and Bun 1.3.14, preserves the existing environment file and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the installed version.
 - **`seerr`** — Seerr media-request manager. Its defaults identify `seerr-nash`, VMID 117, and `atlas` as the fresh-install fallback. It pins and verifies Seerr 3.5.0 and pnpm 10.34.4, requires Node.js 22, preserves `/etc/seerr/seerr.conf` and the SQLite config data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the API-reported version.
-- **`pocket_id`** — Pocket ID OIDC identity provider. Its defaults identify `pocketid-nash`, VMID 100, and `atlas` as the fresh-install fallback. It pins and verifies the Pocket ID 2.17.0 binary, preserves the `.env` and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
-- **`vaultwarden`** — Vaultwarden password manager. Its defaults identify `vaultwarden-nash`, VMID 125, and `atlas` as the fresh-install fallback. Based on the Community Scripts design without executing its installer, it builds pinned Vaultwarden 1.37.3 source with pinned Rust 1.97.1, installs the pinned matching web vault, preserves and verifies SQLite data, uses a hardened non-root systemd service, and rolls back failed upgrades.
-- **`forgejo`** — Forgejo Git hosting. Its defaults identify `forgejo-nash`, VMID 103, and `prometheus` as the fresh-install fallback. It pins and verifies the Forgejo 16.0.5 release binary, refuses downgrades and skipped major versions, preserves `app.ini` and repository data, checks SQLite integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
+- **`pocket_id`** — Pocket ID OIDC identity provider. Its defaults identify `pocketid-nash`, VMID 100, and `atlas` as the fresh-install fallback. It pins and verifies the Pocket ID 2.18.0 binary, preserves the `.env` and SQLite data, checks database integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
+- **`vaultwarden`** — Vaultwarden password manager. Its defaults identify `vaultwarden-nash`, VMID 125, and `atlas` as the fresh-install fallback. Based on the Community Scripts design without executing its installer, it builds pinned Vaultwarden 1.37.4 source with pinned Rust 1.97.1, installs the pinned matching web vault, preserves and verifies SQLite data, uses a hardened non-root systemd service, and rolls back failed upgrades.
+- **`forgejo`** — Forgejo Git hosting. Its defaults identify `forgejo-nash`, VMID 103, and `prometheus` as the fresh-install fallback. It pins and verifies the Forgejo 16.0.6 release binary, refuses downgrades and skipped major versions, preserves `app.ini` and repository data, checks SQLite integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
 - **`sonarr`** — Sonarr TV manager. Its defaults identify `sonarr-nash`, VMID 110, and `atlas` as the fresh-install fallback. It pins and verifies Sonarr 4.0.20.3014, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`radarr`** — Radarr movie manager. Its defaults identify `radarr-nash`, VMID 111, and `prometheus` as the fresh-install fallback. It pins and verifies Radarr 6.4.4.10685, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`gallery_dl`** — gallery-dl on a cron schedule, NFS-mounted to the vault share. Configure `gallery_dl_profiles` (usernames to archive) and optionally `gallery_dl_cookies_file`.
@@ -487,7 +487,7 @@ prowlarr_version: "2.6.5.5623"
 install_homebridge: true
 homebridge_node: "prometheus"
 homebridge_vmid: "105"
-homebridge_version: "2.0.19"
+homebridge_version: "2.0.20"
 
 install_spoolman: true
 spoolman_node: "atlas"
@@ -502,7 +502,7 @@ bambuddy_version: "1.2.5.7"
 install_gitea_mirror: true
 gitea_mirror_node: "atlas"  # fresh-install fallback; the role finds the current host itself
 gitea_mirror_vmid: "119"
-gitea_mirror_version: "3.40.3"
+gitea_mirror_version: "3.41.0"
 
 install_seerr: true
 seerr_node: "atlas"  # fresh-install fallback; the role finds the current host itself
@@ -512,7 +512,7 @@ seerr_version: "3.5.0"
 install_pocket_id: true
 pocket_id_node: "atlas"
 pocket_id_vmid: "100"
-pocket_id_version: "2.17.0"
+pocket_id_version: "2.18.0"
 
 install_vaultwarden: true
 vaultwarden_node: "atlas"
@@ -523,7 +523,7 @@ vaultwarden_domain: "https://vault.wbreiler.com"
 install_forgejo: true
 forgejo_node: "prometheus"
 forgejo_vmid: "103"
-forgejo_version: "16.0.5"  # never skip a major; upgrade one major at a time
+forgejo_version: "16.0.6"  # never skip a major; upgrade one major at a time
 
 install_sonarr: true
 sonarr_node: "atlas"
@@ -1122,7 +1122,7 @@ placement before using the example host and VMID.
 
 ### Homelable
 
-The opt-in `homelable` role installs checksum-pinned Homelable 3.5.1 in an
+The opt-in `homelable` role installs checksum-pinned Homelable 3.6.0 in an
 unprivileged Debian 13 LXC. Its initial placement is Atlas, VMID 131, VLAN 40,
 with DHCP, 2 cores, 4 GiB RAM, and a 12 GiB root disk. Verify live placement
 before operations. The role reuses an existing container by hostname.

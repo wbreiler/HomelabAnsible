@@ -11,10 +11,10 @@ vaultwarden_bridge: "vmbr0"
 vaultwarden_vlan: 40
 vaultwarden_tags: ["password-manager"]
 
-vaultwarden_version: "1.37.3"
+vaultwarden_version: "1.37.4"
 vaultwarden_source_url: >-
   https://api.github.com/repos/dani-garcia/vaultwarden/tarball/{{ vaultwarden_version }}
-vaultwarden_source_checksum: "sha256:e82f06084e90e960f1eafb5118630944204caa382fff98ca15e1b4307b584a29"
+vaultwarden_source_checksum: "sha256:1f73d366d0ffe995176fba514279b10c94d771d33e9ffd009d9aca0c70d7ece5"
 vaultwarden_rust_version: "1.97.1"
 vaultwarden_rustup_url: >-
   https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init
