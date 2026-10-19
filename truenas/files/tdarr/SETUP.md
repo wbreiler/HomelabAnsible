@@ -8,9 +8,10 @@ before processing a whole library.
 
 ## Current release pin
 
-The Compose file pins Tdarr `2.96.01` and its immutable image digest. This
-stays on the 2.x release line. Tdarr 3.x changes the backend and requires a
-separate review of node authentication and the custom flows before migration.
+The Compose file pins Tdarr `3.01.00` and its immutable image digest. The
+2026-10-19 migration preserves the existing authenticated internal node and
+tests the custom flows in a separate container without live media mounts.
+See [the validation report](VALIDATION-3.01.md) for the tested formats and limits.
 
 ## Historical live snapshot — 2026-10-02
 
@@ -80,6 +81,10 @@ Create three libraries so each can be tested and scheduled independently:
 | TV | `/media/tv` | `/temp/tv` |
 | Anime | `/media/anime` | `/temp/anime` |
 
+The YouTube archive adds `/youtube` with cache `/temp/youtube` through
+`playbooks/youtube.yml`. Library priorities are Movies `0`, TV `1`, Anime `2`,
+and YouTube `3`. Lower values run first, so TV takes precedence over YouTube.
+
 For the initial rollout:
 
 - Disable folder watching and scheduled scans.
@@ -107,7 +112,8 @@ Use these stages:
    - Output 1 (Dolby Vision or HDR10+) -> the dynamic-HDR remux path.
    - Output 2 (no dynamic HDR) -> **Check HDR Video**.
 4. On the dynamic-HDR remux path, use **Begin Command**, the same audio and
-   subtitle language filters described below, and **Execute**. Do not add a
+   subtitle language filters described below, a **Custom JS Function** using
+   `preserve-stream-metadata.js`, and **Execute**. Do not add a
    video encoder or **Set Container** stage: the HEVC video must be
    stream-copied and the source container must be retained. In particular,
    MP4 `mov_text` subtitles cannot be copied into Matroska. Send a successful
@@ -155,12 +161,20 @@ Use these stages:
    when the target codec is AV1, even when the preset switch is enabled, so the
    explicit P7 argument is required.
    On the Anime flow, append
-   `-disposition:a:0 default -disposition:s:0 default` so the first retained
-   Japanese audio and English subtitle streams are defaults.
+   `-disposition:a:0 +default -disposition:s:0 +default` so the first retained
+   Japanese audio and English subtitle streams are defaults without clearing
+   an existing forced-subtitle flag.
+   After these arguments, add a **Custom JS Function** using
+   `preserve-stream-metadata.js`. This explicitly preserves retained audio and
+   subtitle dispositions, including zero flags. Otherwise, FFmpeg can invent a
+   default track when the source has none. Use this function on the dynamic-HDR
+   branch too. It also enables FFmpeg's Dolby Vision MP4 configuration box,
+   which requires `-strict unofficial` to preserve Dolby Vision signaling.
 12. Add a **Custom JS Function** using `matroska-stream-compatibility.js` after
     the HDR and SDR paths converge. This converts retained MP4 `mov_text`
     subtitles to SubRip and removes MP4 data streams that Matroska cannot mux.
     Existing Matroska-compatible subtitles and attachments remain unchanged.
+    All three flows, including Anime, require this stage.
 13. **Set Container**: `mkv`, then **Execute**. Tdarr's command builder maps all
     retained streams and copies compatible non-video streams without adding
     custom mapping arguments.
