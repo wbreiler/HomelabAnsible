@@ -25,7 +25,7 @@ services:
       priority: "0"
       pollInterval: "2000"
       startPaused: "true"
-      transcodegpuWorkers: "1"
+      transcodegpuWorkers: "2"
       transcodecpuWorkers: "0"
       healthcheckgpuWorkers: "0"
       healthcheckcpuWorkers: "1"

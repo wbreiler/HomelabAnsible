@@ -2,7 +2,7 @@
 
 This guide is tailored to the single-container Compose stack in this directory,
 its internal Tdarr node, the RTX 5050, and the existing media paths on
-`erebus`. It favors safe replacement over maximum compression: one GPU worker,
+`erebus`. It favors safe replacement over maximum compression: two GPU workers,
 original audio/subtitles/chapters, no resolution change, and manual validation
 before processing a whole library.
 
@@ -241,8 +241,11 @@ Anime separately.
 
 ## 7. Operational defaults
 
-- Keep one GPU transcode worker until temperatures, stability, Plex contention,
-  and output quality are known.
+- Use two GPU transcode workers after the isolated concurrency benchmark.
+  Two concurrent AV1 encodes improved throughput by 1.4% at 1080p and 6.7% at
+  4K with the same P7 settings. Both share the RTX 5050's single NVENC engine.
+  Monitor temperatures and Plex contention. Initial flow validation still uses
+  one worker to isolate failures.
 - Keep CPU transcode workers at zero; the configured CPU worker is for health
   checks only.
 - Keep `/temp` on `/mnt/gaia/appdata/tdarr/transcode_cache`; do not put cache

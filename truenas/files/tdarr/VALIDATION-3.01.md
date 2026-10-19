@@ -85,3 +85,28 @@ The disposable test container is stopped after validation.
 These are isolated fixture tests, not a full-library compatibility guarantee.
 No Plex client playback or calibrated HDR display test was performed.
 The small Dolby Vision and HDR10+ samples test metadata retention and remuxing, not every profile or commercial title.
+
+## GPU concurrency benchmark
+
+The live queue drained before this benchmark. Only isolated synthetic fixtures
+were used. Both tests retain AV1 NVENC P7, full-resolution multipass, VBR,
+spatial/temporal AQ, and lookahead 32.
+
+| Input | Total media duration | One worker, two sequential jobs | Two workers, parallel jobs | Throughput gain |
+| --- | --- | --- | --- | --- |
+| 1080p H.264 | 128 seconds | 15.739 seconds | 15.521 seconds | 1.4% |
+| 2160p VP9 | 96 seconds | 45.462 seconds | 42.603 seconds | 6.7% |
+
+Each setting used the same input, frame count, and encoding arguments.
+The benchmark discards encoded packets rather than replacing files.
+Two GPU workers are now configured in the live node and the persisted Compose
+environment. CPU transcode and health-check limits remain unchanged.
+
+The 100% encoder reading measures busy time, not maximum possible throughput.
+It is separate from driver limits on concurrent sessions. See the
+[NVIDIA utilization definition](https://docs.nvidia.com/deploy/nvidia-smi/index.html)
+and [hardware matrix](https://developer.nvidia.com/video-encode-decode-support-matrix).
+
+These short encoding tests exclude Tdarr's scanning, health checks, and file
+copies. They do not establish a complete queue speedup. The 1080p difference
+is small enough to be timing variation. Encoding quality settings are unchanged.
