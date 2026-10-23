@@ -7,17 +7,28 @@ This deployment uses the bundled restic 0.16.4, the Virginia endpoint
 `https://s3.us-east-1.idrivee2.com`, and the separate `truenas-backup` bucket.
 No additional container or package was installed.
 
-All production tasks remain **disabled**. Their candidate schedule is 04:00
-in the TrueNAS host timezone. Do not start an initial production backup or
-activate a schedule without approval. Running the configuration playbook
-leaves these tasks disabled deliberately.
+The user approved the initial upload, 30 versions per scope, temporary
+snapshot creation/cleanup, nightly backups after initial success, and Discord
+completion notifications. The initial upload started on 2026-10-22 at 21:34
+America/Chicago under `truenas-e2-initial-backup.service`.
+
+Per-scope native task schedules remain **disabled by design**. A sequential
+runner invokes them through the supported API. After every initial scope
+succeeds, the runner creates one native TrueNAS cron job named
+**IDrive e2 nightly backups** at **04:00 America/Chicago**. It sends a Discord
+completion notification. If any scope fails, it stops and does not activate
+the nightly job. It sends a failure notification instead.
+
+The native cron entry, rather than each task's Enabled checkbox, controls
+nightly execution. Reapplying the configuration playbook leaves the native
+per-scope schedulers disabled and does not modify the sequential cron job.
 
 ## Backup scopes
 
 Each scope has a separate encrypted repository prefix. Native Cloud Backup
 runs `forget --keep-last 30 --group-by '' --prune` after a successful backup.
 Separate repositories prevent one scope's retention from removing another
-scope's snapshots. Approve this retention policy before production runs.
+scope's snapshots. The user explicitly approved this retention policy.
 
 | Scope | Source | Consistency |
 | --- | --- | --- |
@@ -70,7 +81,8 @@ The encrypted backup and native restore passed:
 - All five expected files matched their original SHA-256 hashes.
 - YouTube, LANCache, Tdarr transcode cache, and backup cache files were absent.
 - The restored consistent database returned the expected SQL record.
-- All six production tasks remained disabled, and no production snapshot ran.
+- During the validation test, all production schedules remained disabled and
+  no production snapshot ran.
 
 Test state is in `/mnt/gaia/appdata/_cloud-backup/test-result.json`. Synthetic
 files and restored fixtures remain in the excluded test directories. An early
@@ -112,8 +124,45 @@ Apply only this playbook with `-e truenas_allow_changes=true`, then repeat it to
 verify `changed=0`. It uses the supported local JSON-RPC client over SSH.
 Credentials travel through protected standard input, never command arguments.
 
-Before an initial production run, obtain explicit approval for native temporary
-snapshot creation and automatic cleanup on **`gaia/clips`** and
-**`gaia/TimeMachine/MacBook-Pro`**, plus the cloud retention policy. The appliance
-rules require approval for snapshot deletions. No pool, dataset, ACL, network,
-SSH service, or account configuration changes are part of this deployment.
+The user explicitly approved native temporary snapshot creation and automatic
+cleanup on **`gaia/clips`** and **`gaia/TimeMachine/MacBook-Pro`**, plus 30 versions
+per cloud scope. This approval covers the configured backup workflow. No pool,
+dataset, ACL, network, SSH service, or account configuration changes are part
+of this deployment.
+
+## Sequential runner and notifications
+
+`run.py` uses a nonblocking lock to prevent overlapping runs. It validates the
+six repository prefixes, retention, disabled per-scope schedules, and Archive's
+YouTube exclusion before starting any scope. The order is system configuration,
+application settings, application data, Time Machine, clips, then Archive.
+Each scope must finish before the next starts. It waits for multi-hour native
+jobs without a short client timeout.
+
+The success-gated schedule logic has automated checks for both complete
+success and a failed intermediate scope. A live Discord test delivered
+successfully using the same destination as Proxmox/PBS. The webhook is stored
+in the encrypted controller vault artifact and in root-only `discord.json`
+on TrueNAS. It never enters command arguments or logs. A compact success or
+failure message covers the whole run, rather than sending six separate
+messages. Discord delivery errors are reported separately from the persisted
+backup result; notification delivery does not undo completed backups.
+
+The initial service runs independently of the controller/chat. It is transient
+and does not resume automatically after a host reboot. After successful
+activation, the nightly cron job persists in the TrueNAS configuration.
+The runner stores `last-run.json` and, for the initial run, `initial-run.json`
+in its protected working directory.
+
+Read-only status checks:
+
+```sh
+systemctl status truenas-e2-initial-backup.service
+journalctl -u truenas-e2-initial-backup.service --no-pager -n 20
+```
+
+Inspect native job progress under **Data Protection → Cloud Backup Tasks**.
+Inspect the nightly runner under **System → Advanced Settings → Cron Jobs**.
+The initial live check confirmed successful system/app-settings backups and
+an active application-data backup. The nightly cron entry was still absent,
+as required before all six scopes complete.

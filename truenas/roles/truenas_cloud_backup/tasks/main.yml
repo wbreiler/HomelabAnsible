@@ -7,7 +7,8 @@
       - truenas_cloud_backup_secret_key | default('') | length > 0
       - truenas_cloud_backup_password | default('') | length >= 32
       - not truenas_cloud_backup_enabled | bool
-      - truenas_cloud_backup_keep_last | int >= 1
+      - truenas_cloud_backup_keep_last | int == 30
+      - truenas_cloud_backup_discord_webhook is match('^https://discord\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$')
     fail_msg: Configure secrets and leave tasks disabled until the restore test and initial-run approval.
   no_log: true
 
@@ -40,6 +41,23 @@
     owner: root
     group: root
     mode: '0700'
+
+- name: Install sequential backup runner
+  ansible.builtin.copy:
+    src: run.py
+    dest: '{{ truenas_cloud_backup_root }}/run.py'
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Store Discord webhook in protected configuration
+  ansible.builtin.copy:
+    content: "{{ {'webhook': truenas_cloud_backup_discord_webhook} | to_json }}"
+    dest: '{{ truenas_cloud_backup_root }}/discord.json'
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
 
 - name: Reconcile native TrueNAS cloud credentials and disabled backup tasks
   ansible.builtin.command:
