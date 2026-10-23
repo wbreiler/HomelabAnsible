@@ -1,5 +1,7 @@
 # AnsibleTrueNAS
 
+[Cloud backup restore guide](files/cloud-backup/RESTORE.md)
+
 Ansible-managed desired state for the TrueNAS host `erebus`.
 
 ## Target

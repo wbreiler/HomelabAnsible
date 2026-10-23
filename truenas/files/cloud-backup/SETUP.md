@@ -1,5 +1,7 @@
 # IDrive e2 backups
 
+[Restore and disaster recovery guide](RESTORE.md)
+
 ## Configured and tested — 2026-10-22
 
 TrueNAS 25.10.4 supports generic S3 through its native Cloud Backup API.
