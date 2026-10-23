@@ -25,6 +25,7 @@ The complete offsite copy is not yet established.
 | Remove vanished backups | Disabled |
 | Nightly schedule | 03:00 America/Chicago, enabled only after initial success |
 | Automatic pruning | Not configured |
+| Completion notifications | Discord, on sync success or failure |
 
 The loopback writer `e2-sync@pbs!cloud` and its parent account have
 `DatastoreAdmin` only on `/datastore/pbs-backup`. Push sync encrypts plaintext
@@ -99,12 +100,33 @@ cloud backup history accumulates. The initial local source measurement was
 approximately 761 GB. Cloud usage can differ because encryption during sync
 affects chunk deduplication.
 
+## Discord completion notifications
+
+PBS uses a native webhook target named `discord`, securely reused from the
+existing Proxmox Discord destination. The webhook credential is stored in
+PBS's root-only `notifications-priv.cfg`, not in this repository or command
+arguments. The target reuses the existing compact Discord embed template,
+which contains the notification title, severity, job ID, time, and hostname.
+It does not insert a potentially oversized sync log into the Discord message.
+
+The native matcher `idrive-e2-discord` requires both
+`exact:type=sync` and `exact:job-id=idrive-e2-offsite`. It has no severity
+restriction, so both successful and failed completion events route to
+Discord. This covers the running initial sync and future nightly runs.
+The existing email matcher remains intact.
+
+The Discord target test delivered successfully on 2026-10-22. The matcher
+configuration was read back and verified. The temporary configuration token
+was restricted to `/system/notifications` and revoked afterward. Actual
+initial-sync completion delivery remains pending while the job runs.
+
 Useful read-only checks:
 
 ```sh
 systemctl status pbs-e2-initial-sync.service
 journalctl -u pbs-e2-initial-sync.service --no-pager -n 30
 proxmox-backup-manager sync-job show idrive-e2-offsite --output-format json
+proxmox-backup-manager notification matcher show idrive-e2-discord --output-format json
 proxmox-backup-manager task list --all true --output-format json
 proxmox-backup-debug api get /admin/datastore/pbs-backup/status --output-format json
 zfs get quota,mountpoint mneme/idrive-e2-cache
