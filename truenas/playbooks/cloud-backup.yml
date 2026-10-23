@@ -1,0 +1,7 @@
+---
+- name: Configure encrypted TrueNAS cloud backups without starting an upload
+  hosts: truenas
+  gather_facts: false
+  roles:
+    - role: truenas_cloud_backup
+      tags: [configuration, schedules]

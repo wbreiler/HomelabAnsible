@@ -232,6 +232,9 @@ to make it pass.
 
 ## Application guides
 
+- [IDrive e2 cloud backups](files/cloud-backup/SETUP.md) — encrypted native backups,
+  exclusions, database preparation, and restore validation.
+
 - [YouTube archive](files/pinchflat/SETUP.md) — Pinchflat, a video dataset under
   Archive, and a dedicated Tdarr AV1 library.
 

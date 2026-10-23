@@ -1,0 +1,138 @@
+---
+- name: Require reviewed cloud backup configuration
+  ansible.builtin.assert:
+    that:
+      - ansible_check_mode or truenas_allow_changes | bool
+      - truenas_cloud_backup_access_key | default('') | length > 0
+      - truenas_cloud_backup_secret_key | default('') | length > 0
+      - truenas_cloud_backup_password | default('') | length >= 32
+      - not truenas_cloud_backup_enabled | bool
+      - truenas_cloud_backup_keep_last | int >= 1
+    fail_msg: Configure secrets and leave tasks disabled until the restore test and initial-run approval.
+  no_log: true
+
+- name: Create protected cloud backup working directories
+  ansible.builtin.file:
+    path: '{{ item }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  loop:
+    - '{{ truenas_cloud_backup_root }}'
+    - '{{ truenas_cloud_backup_root }}/cache'
+    - /mnt/gaia/backups/truenas-config
+    - /mnt/gaia/backups/truenas-app-settings
+
+- name: Create a separate cache directory for each repository
+  ansible.builtin.file:
+    path: '{{ truenas_cloud_backup_root }}/cache/{{ item.name }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  loop: '{{ truenas_cloud_backup_scopes }}'
+
+- name: Install consistent database and system export helper
+  ansible.builtin.copy:
+    src: prepare.py
+    dest: '{{ truenas_cloud_backup_root }}/prepare.py'
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Reconcile native TrueNAS cloud credentials and disabled backup tasks
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import json, sys
+        from truenas_api_client import Client
+        data = json.load(sys.stdin)
+        try:
+            def matches(current, desired):
+                if isinstance(desired, dict):
+                    return isinstance(current, dict) and all(matches(current.get(k), v) for k, v in desired.items())
+                return current == desired
+            changed = False
+            check = data.pop('check')
+            with Client() as client:
+                credentials = client.call('cloudsync.credentials.query', [['name', '=', data['credential']['name']]])
+                if len(credentials) > 1:
+                    raise RuntimeError('Duplicate cloud credential names require review')
+                if credentials:
+                    credential = credentials[0]
+                    if not matches(credential, data['credential']):
+                        changed = True
+                        if not check:
+                            credential = client.call('cloudsync.credentials.update', credential['id'], data['credential'])
+                else:
+                    changed = True
+                    credential = {'id': -1}
+                    if not check:
+                        credential = client.call('cloudsync.credentials.create', data['credential'])
+                tasks = client.call('cloud_backup.query')
+                for scope in data['scopes']:
+                    desired = {
+                        'description': 'IDrive e2: ' + scope['name'],
+                        'path': scope['path'],
+                        'credentials': credential['id'],
+                        'attributes': {'bucket': data['bucket'], 'folder': scope['name'], 'region': 'us-east-1', 'encryption': None, 'storage_class': ''},
+                        'schedule': {'minute': '0', 'hour': '4', 'dom': '*', 'month': '*', 'dow': '*'},
+                        'enabled': False, 'password': data['password'],
+                        'keep_last': data['keep_last'], 'snapshot': scope['snapshot'],
+                        'exclude': scope['exclude'], 'pre_script': scope['pre_script'],
+                        'cache_path': data['root'] + '/cache/' + scope['name'],
+                    }
+                    matching_tasks = [t for t in tasks if t['description'] == desired['description']]
+                    if len(matching_tasks) > 1:
+                        raise RuntimeError('Duplicate backup task names require review')
+                    current = matching_tasks[0] if matching_tasks else None
+                    comparable = dict(current or {})
+                    if current:
+                        comparable['credentials'] = current['credentials']['id']
+                    differs = not matches(comparable, desired)
+                    if differs:
+                        changed = True
+                        if not check:
+                            if current:
+                                client.call('cloud_backup.update', current['id'], desired)
+                            else:
+                                client.call('cloud_backup.create', desired)
+            print('changed' if changed else 'unchanged')
+        except Exception as error:
+            message = str(error)
+            for secret in (data['password'], data['credential']['provider']['access_key_id'], data['credential']['provider']['secret_access_key']):
+                message = message.replace(secret, '[REDACTED]')
+            print(type(error).__name__ + ': ' + message[:1200])
+            sys.exit(1)
+    stdin: >-
+      {{ {
+        'check': ansible_check_mode,
+        'credential': {
+          'name': truenas_cloud_backup_credential_name,
+          'provider': {
+            'type': 'S3',
+            'endpoint': truenas_cloud_backup_endpoint,
+            'region': 'us-east-1',
+            'access_key_id': truenas_cloud_backup_access_key,
+            'secret_access_key': truenas_cloud_backup_secret_key
+          }
+        },
+        'bucket': truenas_cloud_backup_bucket,
+        'password': truenas_cloud_backup_password,
+        'keep_last': truenas_cloud_backup_keep_last,
+        'root': truenas_cloud_backup_root,
+        'scopes': truenas_cloud_backup_scopes
+      } | to_json }}
+  register: truenas_cloud_backup_result
+  failed_when: false
+  check_mode: false
+  changed_when: truenas_cloud_backup_result.stdout | trim == 'changed'
+  no_log: true
+
+- name: Require successful native backup configuration
+  ansible.builtin.assert:
+    that: truenas_cloud_backup_result.rc == 0
+    fail_msg: "{{ truenas_cloud_backup_result.stdout | default('Protected command failed') }}"

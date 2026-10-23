@@ -1,0 +1,52 @@
+---
+truenas_cloud_backup_enabled: false
+truenas_cloud_backup_bucket: truenas-backup
+truenas_cloud_backup_endpoint: https://s3.us-east-1.idrivee2.com/
+truenas_cloud_backup_root: /mnt/gaia/appdata/_cloud-backup
+truenas_cloud_backup_credential_name: IDrive e2 TrueNAS
+truenas_cloud_backup_keep_last: 30
+truenas_cloud_backup_scopes:
+  - name: archive
+    path: /mnt/gaia/Archive
+    snapshot: false
+    exclude: [YouTube, .zfs]
+    pre_script: ''
+  - name: clips
+    path: /mnt/gaia/clips
+    snapshot: true
+    exclude: [.zfs]
+    pre_script: ''
+  - name: time-machine
+    path: /mnt/gaia/TimeMachine/MacBook-Pro
+    snapshot: true
+    exclude: [.zfs]
+    pre_script: ''
+  - name: appdata
+    path: /mnt/gaia/appdata
+    snapshot: false
+    exclude:
+      - lancache
+      - ollama
+      - standalone-tools
+      - _cloud-backup/cache
+      - _cloud-backup/test
+      - _cloud-backup/restore-test
+      - tdarr/transcode_cache
+      - '**/.zfs'
+    pre_script: >-
+      /usr/bin/python3 /mnt/gaia/appdata/_cloud-backup/prepare.py sqlite
+      /mnt/gaia/appdata/_cloud-backup/sqlite
+  - name: app-settings
+    path: /mnt/gaia/backups/truenas-app-settings
+    snapshot: false
+    exclude: [.zfs]
+    pre_script: >-
+      /usr/bin/python3 /mnt/gaia/appdata/_cloud-backup/prepare.py apps
+      /mnt/gaia/backups/truenas-app-settings
+  - name: system-config
+    path: /mnt/gaia/backups/truenas-config
+    snapshot: false
+    exclude: []
+    pre_script: >-
+      /usr/bin/python3 /mnt/gaia/appdata/_cloud-backup/prepare.py config
+      /mnt/gaia/backups/truenas-config/truenas-config.tar
