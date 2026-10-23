@@ -1,5 +1,7 @@
 # Proxmox Backup Server Ansible Configuration
 
+[Cloud backup restore guide](RESTORE.md)
+
 Configures an existing Proxmox Backup Server with a local ZFS datastore, PBS
 users, optional pull-style sync jobs, and Tailscale. It does not install the
 PBS product or create/reconfigure the underlying ZFS pool.

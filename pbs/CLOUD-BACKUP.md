@@ -1,5 +1,7 @@
 # PBS cloud backup
 
+[Restore and disaster recovery guide](RESTORE.md)
+
 ## Verified configuration — 2026-10-22
 
 PBS 4.2.8 has an IDrive e2 S3 datastore named `pbs-backup`. Its endpoint is
