@@ -19,6 +19,7 @@ The complete offsite copy is not yet established.
 | Cache mountpoint | `/mnt/datastore/idrive-e2-cache` |
 | Cache quota | 64 GiB |
 | Full sync job | `idrive-e2-offsite` |
+| Parallel groups | 2 (`worker-threads`) |
 | Direction | Push through `e2-local-writer` on localhost |
 | Namespace depth | 7, including source namespaces |
 | Encryption key ID | `idrive-e2` |
@@ -131,3 +132,35 @@ proxmox-backup-manager task list --all true --output-format json
 proxmox-backup-debug api get /admin/datastore/pbs-backup/status --output-format json
 zfs get quota,mountpoint mneme/idrive-e2-cache
 ```
+
+## Parallel sync tuning — 2026-10-23
+
+The user approved restarting the initial cloud sync with two parallel groups.
+The original task was stopped through the native PBS task API, then the job
+was updated with `--worker-threads 2` and the initial service was recreated.
+The service retains its success-gated 03:00 nightly schedule update and
+Discord completion matcher. Encryption, namespace depth, and retention were
+unchanged. This is native PBS configuration, outside the existing Ansible role.
+
+The resumed task skipped completed snapshots and opened two concurrent
+cloud writer tasks. It also included new source snapshots created since
+the original run started; progress percentages therefore restart. An
+unfinished archive can require reprocessing after restart.
+
+A one-minute pre-change sample found no S3 uploads while approximately one
+CPU core was active. This is a processing interval, not a sustained bandwidth
+benchmark. Compare multi-minute S3 counter deltas and CPU/I/O pressure after
+the restart; logical archive throughput in task logs is not network throughput.
+
+The first two-minute follow-up averaged approximately 1.15 MB/s of actual S3
+uploads, with individual 20-second windows ranging from 0.22 to 2.58 MB/s.
+CPU idle time was approximately 49–50%, compared with 74–75% before restart.
+Concurrent archive processing reached approximately 100 and 78 MiB/s, but
+these are logical processing rates and must not be added as network rates.
+Disk wait increased, without persistent queues in the sampled intervals.
+The sync remained active with no errors in the inspected new task log.
+
+These samples covered small incremental updates in previously completed
+groups. They demonstrate functioning concurrency and greater CPU use, but
+do not establish a sustained upload speedup or a revised completion time.
+Two workers remain configured; no additional tuning was applied.
