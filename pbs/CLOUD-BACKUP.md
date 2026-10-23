@@ -6,9 +6,10 @@ PBS 4.2.8 has an IDrive e2 S3 datastore named `pbs-backup`. Its endpoint is
 `s3.us-east-1.idrivee2.com`, in Virginia (`us-east-1`), with HTTPS and path-style
 addressing. The endpoint configuration ID is `idrive-e2-virginia`.
 
-The user approved configuration and synthetic backup/restore tests only.
-**Do not start or schedule the full sync without separate approval.** No
-production backups have been uploaded to this datastore yet.
+The user approved the full sync and a nightly PBS schedule after the initial
+sync succeeds. The initial encrypted sync started on 2026-10-22 at 21:00
+America/Chicago. Live checks confirmed the first production archive uploads.
+The complete offsite copy is not yet established.
 
 | Setting | Configured value |
 | --- | --- |
@@ -22,7 +23,8 @@ production backups have been uploaded to this datastore yet.
 | Namespace depth | 7, including source namespaces |
 | Encryption key ID | `idrive-e2` |
 | Remove vanished backups | Disabled |
-| Schedule and automatic pruning | Not configured |
+| Nightly schedule | 03:00 America/Chicago, enabled only after initial success |
+| Automatic pruning | Not configured |
 
 The loopback writer `e2-sync@pbs!cloud` and its parent account have
 `DatastoreAdmin` only on `/datastore/pbs-backup`. Push sync encrypts plaintext
@@ -48,7 +50,7 @@ content, compressible text, an empty file, and a nested file.
 - S3 counters confirmed 67,111,912 downloaded bytes, demonstrating remote
   object reads rather than only local-cache reads.
 - All temporary administrator tokens were revoked. The synthetic permission
-  probe object was deleted. No full sync was started or scheduled.
+  probe object was deleted. No full sync was started during these tests.
 
 Synthetic snapshots, the small test datastore, and its unscheduled
 `idrive-e2-smoke` job remain available for inspection. They contain no user
@@ -74,17 +76,34 @@ Losing the encryption key prevents restoring the encrypted cloud backups.
 The original IDrive credential export has the old, insufficient key; use the
 current IDrive credential or protected PBS configuration for recovery.
 
-## Before the full sync
+## Initial sync and nightly schedule
 
-Confirm the recovery copy is accessible, obtain explicit user approval, and
-run only `idrive-e2-offsite`. Choose retention and a recurring schedule
-separately. Until retention is configured, cloud backup history accumulates.
-The initial local source measurement was approximately 761 GB. Cloud usage
-can differ because encryption during sync affects chunk deduplication.
+The host-managed `pbs-e2-initial-sync.service` runs the initial
+`idrive-e2-offsite` job independently of the controller and chat. Its shell
+uses `set -eu` and executes the schedule update only after the sync command
+exits successfully:
+
+```sh
+proxmox-backup-manager sync-job run idrive-e2-offsite
+proxmox-backup-manager sync-job update idrive-e2-offsite --schedule '03:00'
+```
+
+Once enabled, PBS itself runs the persistent nightly job at 03:00 in the
+host's verified `America/Chicago` timezone. The service does not install a
+cron job or a separate recurring timer. If the initial sync fails, the
+schedule remains absent. Inspect its task log before retrying. The initial
+service is transient and does not restart automatically after a host reboot.
+
+No pruning or retention policy was added. Until retention is configured,
+cloud backup history accumulates. The initial local source measurement was
+approximately 761 GB. Cloud usage can differ because encryption during sync
+affects chunk deduplication.
 
 Useful read-only checks:
 
 ```sh
+systemctl status pbs-e2-initial-sync.service
+journalctl -u pbs-e2-initial-sync.service --no-pager -n 30
 proxmox-backup-manager sync-job show idrive-e2-offsite --output-format json
 proxmox-backup-manager task list --all true --output-format json
 proxmox-backup-debug api get /admin/datastore/pbs-backup/status --output-format json
