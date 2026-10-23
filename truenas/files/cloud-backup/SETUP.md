@@ -34,7 +34,6 @@ scope's snapshots. The user explicitly approved this retention policy.
 | --- | --- | --- |
 | Archive | `/mnt/gaia/Archive`, excluding `YouTube` | File backup; nested dataset prevents native snapshot mode |
 | Clips | `/mnt/gaia/clips` | Temporary native ZFS snapshot |
-| Time Machine | `/mnt/gaia/TimeMachine/MacBook-Pro` | Temporary native ZFS snapshot |
 | Application data | `/mnt/gaia/appdata` | Consistent SQLite copies plus ordinary application files |
 | Application settings | `/mnt/gaia/backups/truenas-app-settings` | Protected export from the hidden app-config mount |
 | System configuration | `/mnt/gaia/backups/truenas-config` | Supported configuration export with secret seed, pool keys, and root authorized keys |
@@ -130,12 +129,17 @@ per cloud scope. This approval covers the configured backup workflow. No pool,
 dataset, ACL, network, SSH service, or account configuration changes are part
 of this deployment.
 
+Time Machine is excluded at the user's request after its initial snapshot failed.
+Its existing native task remains disabled and is not called by the runner.
+Clips retains native snapshot mode without a `.zfs` exclusion, because that
+pattern matches the snapshot source itself and produces an empty backup.
+
 ## Sequential runner and notifications
 
 `run.py` uses a nonblocking lock to prevent overlapping runs. It validates the
-six repository prefixes, retention, disabled per-scope schedules, and Archive's
+five repository prefixes, retention, disabled per-scope schedules, and Archive's
 YouTube exclusion before starting any scope. The order is system configuration,
-application settings, application data, Time Machine, clips, then Archive.
+application settings, application data, clips, then Archive.
 Each scope must finish before the next starts. It waits for multi-hour native
 jobs without a short client timeout.
 
@@ -144,7 +148,7 @@ success and a failed intermediate scope. A live Discord test delivered
 successfully using the same destination as Proxmox/PBS. The webhook is stored
 in the encrypted controller vault artifact and in root-only `discord.json`
 on TrueNAS. It never enters command arguments or logs. A compact success or
-failure message covers the whole run, rather than sending six separate
+failure message covers the whole run, rather than sending five separate
 messages. Discord delivery errors are reported separately from the persisted
 backup result; notification delivery does not undo completed backups.
 
@@ -165,4 +169,4 @@ Inspect native job progress under **Data Protection → Cloud Backup Tasks**.
 Inspect the nightly runner under **System → Advanced Settings → Cron Jobs**.
 The initial live check confirmed successful system/app-settings backups and
 an active application-data backup. The nightly cron entry was still absent,
-as required before all six scopes complete.
+as required before all five scopes complete.

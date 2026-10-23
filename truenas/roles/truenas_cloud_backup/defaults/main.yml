@@ -14,12 +14,8 @@ truenas_cloud_backup_scopes:
   - name: clips
     path: /mnt/gaia/clips
     snapshot: true
-    exclude: [.zfs]
-    pre_script: ''
-  - name: time-machine
-    path: /mnt/gaia/TimeMachine/MacBook-Pro
-    snapshot: true
-    exclude: [.zfs]
+    # The snapshot source itself is below .zfs; excluding it excludes the backup root.
+    exclude: []
     pre_script: ''
   - name: appdata
     path: /mnt/gaia/appdata

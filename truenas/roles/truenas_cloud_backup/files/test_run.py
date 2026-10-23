@@ -18,7 +18,7 @@ class FakeClient:
             return [{'id': scope, 'description': 'IDrive e2: ' + scope,
                      'attributes': {'bucket': 'truenas-backup', 'folder': scope},
                      'keep_last': 30, 'enabled': False, 'exclude': ['YouTube']}
-                    for scope in runner.SCOPES]
+                    for scope in (*runner.SCOPES, 'time-machine')]
         if method == 'cloud_backup.sync':
             if args[0] == self.fail_scope:
                 raise RuntimeError('Synthetic upload failure')
@@ -37,6 +37,7 @@ class ScheduleGateTest(unittest.TestCase):
     def test_success_enables_nightly_after_all_scopes(self):
         client = FakeClient()
         self.assertEqual(runner.run_backups(client, initial=True), list(runner.SCOPES))
+        self.assertNotIn('time-machine', client.completed)
         self.assertTrue(client.schedule['enabled'])
         self.assertEqual(client.schedule['schedule']['hour'], '4')
 

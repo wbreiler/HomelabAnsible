@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 
 ROOT = Path('/mnt/gaia/appdata/_cloud-backup')
-SCOPES = ('system-config', 'app-settings', 'appdata', 'time-machine', 'clips', 'archive')
+SCOPES = ('system-config', 'app-settings', 'appdata', 'clips', 'archive')
 CRON_DESCRIPTION = 'IDrive e2 nightly backups'
 CRON_COMMAND = '/usr/bin/python3 /mnt/gaia/appdata/_cloud-backup/run.py'
 
@@ -103,7 +103,7 @@ def main():
         if args.initial:
             (ROOT / 'initial-run.json').write_text(json.dumps(result, indent=2) + '\n')
         if result['passed']:
-            message = 'TrueNAS IDrive backup completed successfully: all six scopes. Retention: 30 versions per scope.'
+            message = 'TrueNAS IDrive backup completed successfully: all five scopes. Retention: 30 versions per scope.'
             if args.initial:
                 message += ' Initial upload complete. Nightly backups are now enabled for 04:00 Central.'
         else:
