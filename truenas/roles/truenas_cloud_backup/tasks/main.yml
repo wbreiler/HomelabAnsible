@@ -50,6 +50,14 @@
     group: root
     mode: '0700'
 
+- name: Install clips restore verification helper
+  ansible.builtin.copy:
+    src: verify_clips.py
+    dest: '{{ truenas_cloud_backup_root }}/verify_clips.py'
+    owner: root
+    group: root
+    mode: '0700'
+
 - name: Store Discord webhook in protected configuration
   ansible.builtin.copy:
     content: "{{ {'webhook': truenas_cloud_backup_discord_webhook} | to_json }}"

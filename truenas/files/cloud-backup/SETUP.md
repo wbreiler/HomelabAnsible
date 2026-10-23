@@ -170,3 +170,19 @@ Inspect the nightly runner under **System → Advanced Settings → Cron Jobs**.
 The initial live check confirmed successful system/app-settings backups and
 an active application-data backup. The nightly cron entry was still absent,
 as required before all five scopes complete.
+
+## One-time clips restore verification
+
+The user requested a real restore test after the initial clips upload.
+`verify_clips.py --job-id 80875` waits for that exact native job to succeed.
+It restores three nonempty clips, each at most 256 MiB, into a new protected
+directory under `_cloud-backup/restore-test/`. It compares SHA-256 hashes with
+the originals before and after restore, and checks restored file sizes.
+Original files are never overwritten. The test retains its restored files.
+
+The one-time `truenas-e2-clips-restore-test.service` runs independently of the
+backup runner, so Archive can continue uploading during the restore. It sends
+a Discord result and saves the snapshot ID, file sizes, and hashes in
+`/mnt/gaia/appdata/_cloud-backup/clips-restore-test.json`. A failed upload stops
+the test without restoring. This service does not resume after a host reboot.
+The nightly backup schedule does not repeat this one-time test.
