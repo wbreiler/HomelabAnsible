@@ -376,4 +376,5 @@ This configuration is provided as-is for homelab and personal use.
 
 ## Related Projects
 
+- [Cloud backup preparation and restore test](CLOUD-BACKUP.md)
 - [`../proxmox/`](../proxmox/) - Proxmox VE cluster configuration
