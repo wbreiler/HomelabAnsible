@@ -41,6 +41,17 @@ The controller needs Ansible, the Python requirements, the collection in
 Provisioning expects the configured Debian 13 template/storage to be available
 to Proxmox; the playbook ensures the named template exists on target nodes.
 
+## Retired deployment: Cobbleverse
+
+The user confirmed Cobbleverse is no longer live on 2026-10-24. Its
+`cobbleverse-nash` definition (former VMID 114) was removed from the ignored
+`ansible/servers.yml`. The tracked example contains no Cobbleverse definition.
+Normal `provision.yml`, `site.yml`, and `ha.yml` runs no longer select it.
+Do not restore its definition without an explicit new deployment request.
+
+No guest, backup, world data, DNS record, or router forward was deleted.
+External DNS and forwarding are outside this project's Ansible management.
+
 ## Define servers
 
 Start from `ansible/servers.yml.example`, which is the authoritative variable

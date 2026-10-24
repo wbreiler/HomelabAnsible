@@ -47,7 +47,7 @@ ansible-playbook site.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub --check 
 ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub
 
 # Provision a single server
-ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub -e server_filter=cobbleverse-nash
+ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub -e server_filter=atm10-nash
 ```
 
 Use the configured Bitwarden agent. The public selector `~/.ssh/lxc.pub`
@@ -151,13 +151,19 @@ The router (outside this repo — not Ansible-managed) forwards
 reachable server needs a unique external port both forwarded on the router
 and published in its SRV record.
 
-Last documented assignments. Public DNS SRV answers matched all six ports on
-2026-10-02. Router forwards were not verified. A DNS record does not prove that
-its guest exists or that its server is reachable. Check both before use:
+The user confirmed Cobbleverse is retired on 2026-10-24. Its entry was removed
+from ignored `ansible/servers.yml`, so provisioning, existing-server setup, and
+HA runs no longer select it. Do not restore its definition without an explicit
+new deployment request. Existing backups and live infrastructure were untouched.
+
+The active assignments below exclude Cobbleverse. The historical 2026-10-02
+DNS check covered six records, including its old port 25565. Its external DNS
+and router forward are outside Ansible and were not removed by this change.
+A DNS record does not prove that a guest exists or is reachable. Check both
+before use:
 
 | Server | Subdomain | External port |
 |---|---|---|
-| cobbleverse-nash | cobbleverse.mc.wbreiler.com | 25565 |
 | yabu-nash | yabu.mc.wbreiler.com | 25566 |
 | homestead-nash | homestead.mc.wbreiler.com | 25569 |
 | atm10-nash | atm10.mc.wbreiler.com | 6767 (legacy, inherited from the pre-migration DiscoPanel setup) |
