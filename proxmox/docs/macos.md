@@ -76,7 +76,10 @@ continuing without FileVault. The VM disk is not encrypted by FileVault.
 The final automatic-update screen stalled and did not respond to keyboard or
 menu input. A graceful VM shutdown timed out. Resetting only VM 108 recovered
 the guest, which automatically booted the installed disk and reached the local
-account login screen. Desktop checks require the user to sign in.
+account login screen. The user signed in and the desktop opened.
+`sw_vers` reports macOS 26.7.1, build 25G241. SIP and Gatekeeper are enabled.
+`fdesetup status` confirms FileVault is off, as approved. Application launches
+are slow and the desktop background renders white through the virtual display.
 DHCP requests left Atlas without an offer. The approved `10.10.40.9` reservation was saved on Arista. Recovery
 networking was configured through `scutil --prefs`: the existing
 Ethernet service uses Manual IPv4, address `10.10.40.9/24`, router `10.10.40.1`,
@@ -85,7 +88,17 @@ and DNS server `192.168.1.1`. After committing and applying those preferences,
 enabled. Setup Assistant required the same manual IPv4, router, and DNS
 configuration in the installed OS. After applying it, the installed OS answered
 three pings with zero loss. Arista confirmed `10.10.40.9` belongs to
-`BC:24:11:20:25:AA`. Installed OS DNS and HTTPS still need a desktop check.
+`BC:24:11:20:25:AA`. After the restart, the address and router persisted, but
+the Ethernet service had no saved DNS server. The installed desktop was corrected
+with `networksetup -setdnsservers Ethernet 192.168.1.1`. Reading that setting
+confirmed the saved server. A guest `curl -I https://www.apple.com` returned
+HTTP/2 200 with certificate verification enabled. DNS persistence after another
+restart has not been tested.
+
+The existing VMXNET3 adapter supports a `10Gbase-T` full-duplex media mode.
+macOS currently reports `autoselect (1000baseT <full-duplex>)`. This is a guest
+link label, not a measured throughput result. No throughput benchmark or
+physical NIC passthrough was performed.
 
 During installation preparation, Forgejo held 219 unintended secondary IPv4
 addresses. After approval, those addresses were removed while its primary
