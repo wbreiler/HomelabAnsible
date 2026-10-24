@@ -106,7 +106,9 @@ Check the managed hostname entry:
 dscacheutil -q host -a name erebus
 ```
 
-The result should include `ip_address: 10.10.10.7`.
+The result should include `ip_address: 10.10.10.7`. Deluge uses the separate
+TrueNAS app address `10.10.20.3`. The [hosts audit](HOSTS-AUDIT.md) records the
+remaining entries and five unchanged legacy mappings that lack live confirmation.
 
 ## 5. Confirm macOS remote access — on the Mini
 
@@ -271,5 +273,5 @@ These settings do not unlock FileVault, create a desktop session, or restore
 interrupted tasks. Keep physical recovery available for real power failures.
 
 See [MINI-RECOVERY.md](MINI-RECOVERY.md) if either access path fails. The role
-copies both guides to `~/Developer/` on the Mini. Hardware recovery remains
+copies both guides and the hosts audit to `~/Developer/` on the Mini. Hardware recovery remains
 unverified until these checks pass on the actual Mini.

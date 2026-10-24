@@ -70,7 +70,8 @@ directory, and six public key selectors. Only dev adds incoming authorized keys
 loads the desktop login agent when a GUI session exists. `MINI-BOOTSTRAP.md`
 covers the full fresh-install procedure, including transfer of unpushed commits.
 `MINI-RECOVERY.md` covers recovery and separate restart/cold-boot acceptance
-checks. The dev role copies both guides to `~/Developer/`.
+checks. `HOSTS-AUDIT.md` records verified addresses and unresolved legacy
+entries. The dev role copies all three documents to `~/Developer/`.
 
 ## Managed static files
 

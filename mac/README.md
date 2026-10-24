@@ -92,7 +92,8 @@ supports SSH FileVault unlock after restart when networking is available. Test
 cold boot separately. Follow [MINI-RECOVERY.md](MINI-RECOVERY.md) before treating
 the Mac as unattended infrastructure. The role also copies that guide to
 `~/Developer/MINI-RECOVERY.md`. The bootstrap guide is copied alongside it as
-`~/Developer/MINI-BOOTSTRAP.md`.
+`~/Developer/MINI-BOOTSTRAP.md`. The address audit is also copied there as
+`HOSTS-AUDIT.md`.
 
 The role installs the Codex CLI and the ChatGPT desktop host. A user login agent
 opens `/Applications/ChatGPT.app` after graphical login. It loads the agent
@@ -114,6 +115,10 @@ The dev role replaces `.zshrc`, `.zprofile`, and VS Code settings with backups.
 It configures the existing Git identity and creates `~/Developer`. Its shell
 preserves a forwarded SSH agent unless a local Bitwarden socket exists.
 Review the static hosts in `roles/mac_dev/tasks/hosts.yml` before applying them.
+The [2026-10-24 address audit](HOSTS-AUDIT.md) records two corrected addresses,
+the Seerr compatibility alias, and five unchanged legacy entries that lack live
+confirmation. Deluge uses the TrueNAS app address `10.10.20.3`; the Erebus
+management alias uses `10.10.10.7`.
 
 The main role replaces `~/.ssh/config` with a backup and removes the obsolete
 `~/.config/1Password` directory. It requires App Store sign-in for MAS apps.
