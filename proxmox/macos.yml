@@ -1,0 +1,155 @@
+---
+- name: Create an isolated macOS Tahoe VM without host boot changes
+  hosts: atlas
+  gather_facts: false
+  vars:
+    macos_vmid: 108
+    macos_name: macos-tahoe
+    macos_storage: helios
+    macos_revision: 576ea00a631b416232f5e04cdf6274e227ad82d7
+    macos_source: "https://raw.githubusercontent.com/luchina-gabriel/OSX-PROXMOX/{{ macos_revision }}"
+    macos_work: /var/lib/vz/osx-proxmox
+    macos_iso: /var/lib/vz/template/iso
+    macos_args: >-
+      -device isa-applesmc,osk="ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
+      -smbios type=2 -device qemu-xhci -device usb-kbd -device virtio-tablet-pci
+      -global nec-usb-xhci.msi=off -global ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off
+      -cpu Skylake-Client-v4,kvm=on,vendor=GenuineIntel,+kvm_pv_unhalt,+kvm_pv_eoi,+hypervisor,+invtsc,+vmx,vmware-cpuid-freq=on
+  tasks:
+    - name: Read cluster guest allocation
+      ansible.builtin.command: pvesh get /cluster/resources --type vm --output-format json
+      register: macos_guests
+      changed_when: false
+      check_mode: false
+
+    - name: Refuse to overwrite another guest or duplicate this VM
+      ansible.builtin.assert:
+        that:
+          - >-
+            (macos_guests.stdout | from_json | selectattr('vmid', 'equalto', macos_vmid | int)
+            | rejectattr('name', 'equalto', macos_name) | list | length) == 0
+          - >-
+            (macos_guests.stdout | from_json | selectattr('name', 'equalto', macos_name)
+            | rejectattr('vmid', 'equalto', macos_vmid | int) | list | length) == 0
+
+    - name: Read the host clock source
+      ansible.builtin.command: cat /sys/devices/system/clocksource/clocksource0/current_clocksource
+      register: macos_clock
+      changed_when: false
+      check_mode: false
+
+    - name: Require the verified Atlas host and stable clock
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'atlas'
+          - macos_clock.stdout == 'tsc'
+        fail_msg: Review CPU arguments and clock stability before using another host.
+
+    - name: Create media directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ macos_work }}"
+        - "{{ macos_iso }}"
+
+    - name: Download checksum-pinned upstream assets
+      ansible.builtin.get_url:
+        url: "{{ macos_source }}/{{ item.source }}"
+        dest: "{{ item.dest }}"
+        checksum: "sha256:{{ item.sha256 }}"
+        mode: '0644'
+        timeout: 120
+      when: not ansible_check_mode
+      loop:
+        - source: tools/macrecovery/macrecovery.py
+          dest: "{{ macos_work }}/macrecovery.py"
+          sha256: a36a8be248f8185134ba89d16f738305dd60ddbd74ce6df4cfac542f6ac80d45
+        - source: EFI/opencore-osx-proxmox-vm.iso
+          dest: "{{ macos_iso }}/opencore-osx-proxmox-1.0.8.iso"
+          sha256: 0972a5627895ceef219c5e534af66634baba3c5d3eeebe66b56dee1d261182aa
+
+    - name: Download and verify Apple recovery and build its FAT image
+      ansible.builtin.shell: |
+        set -euo pipefail
+        cd {{ macos_work | quote }}
+        python3 macrecovery.py -b Mac-27AD2F918AE68F61 -m 00000000000000000 -os latest download
+        image={{ (macos_iso ~ '/recovery-tahoe.iso.part') | quote }}
+        mountdir=$(mktemp -d)
+        cleanup() {
+          if mountpoint -q "$mountdir"; then umount "$mountdir"; fi
+          rmdir "$mountdir"
+        }
+        trap cleanup EXIT
+        truncate -s 2G "$image"
+        mkfs.msdos -F 32 -n TAHOE "$image"
+        mount -o loop "$image" "$mountdir"
+        cp -r com.apple.recovery.boot "$mountdir/"
+        sync -f "$mountdir"
+        umount "$mountdir"
+        fsck.fat -n "$image"
+        mv "$image" {{ (macos_iso ~ '/recovery-tahoe.iso') | quote }}
+      args:
+        executable: /bin/bash
+        creates: "{{ macos_iso }}/recovery-tahoe.iso"
+      when: not ansible_check_mode
+
+    - name: Create the VM with upstream Tahoe and Intel settings
+      ansible.builtin.command:
+        argv:
+          - qm
+          - create
+          - "{{ macos_vmid | string }}"
+          - --name
+          - "{{ macos_name }}"
+          - --description
+          - "Tahoe via OSX-PROXMOX {{ macos_revision }}. No host boot changes. Install through the console."
+          - --args
+          - "{{ macos_args }}"
+          - --bios
+          - ovmf
+          - --machine
+          - q35
+          - --cores
+          - '4'
+          - --sockets
+          - '1'
+          - --memory
+          - '8192'
+          - --balloon
+          - '0'
+          - --numa
+          - '0'
+          - --efidisk0
+          - "{{ macos_storage }}:1,efitype=4m,pre-enrolled-keys=0"
+          - --virtio0
+          - "{{ macos_storage }}:128,cache=none,discard=on"
+          - --sata0
+          - local:iso/opencore-osx-proxmox-1.0.8.iso,media=cdrom,cache=none
+          - --sata2
+          - local:iso/recovery-tahoe.iso,media=cdrom,cache=none
+          - --boot
+          - order=sata0;virtio0
+          - --net0
+          - vmxnet3,bridge=vmbr0,tag=40,firewall=1
+          - --vga
+          - vmware
+          - --tablet
+          - '0'
+          - --ostype
+          - other
+          - --onboot
+          - '0'
+          - --tags
+          - macos
+        creates: "/etc/pve/qemu-server/{{ macos_vmid }}.conf"
+      when: not ansible_check_mode
+
+    # Proxmox requires cdrom at creation; OpenCore needs these FAT images as disks.
+    - name: Present the two installation images as disks for OpenCore
+      ansible.builtin.replace:
+        path: "/etc/pve/qemu-server/{{ macos_vmid }}.conf"
+        regexp: '^(sata[02]:[^\n]*),media=cdrom([^\n]*)$'
+        replace: '\1,media=disk\2'
+      when: not ansible_check_mode

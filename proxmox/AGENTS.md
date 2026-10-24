@@ -506,6 +506,15 @@ management, LXC installation, system updates, and PBS restores.
   across the two nodes.
 * Idempotent by VM name.
 
+### macos.yml
+
+* Standalone Atlas-only Tahoe VM creation. See `docs/macos.md`.
+* Pins and checksum-verifies OSX-PROXMOX assets. Never run its host installer.
+* Refuses guest identity collisions and preserves existing VM configuration.
+* Requires TSC, uses the verified Atlas Intel CPU path, and leaves host boot,
+  KVM security parameters, APT repositories, and GPU drivers unchanged.
+* No automatic VM start. Installation and desktop behavior require console checks.
+
 ### network_tuning
 
 * Runs as a separate play on both `proxmox_cluster` and `pbs_nodes`.

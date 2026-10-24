@@ -23,6 +23,7 @@ is in HA maintenance mode; guest placement must be checked again before use.
 - **Managed App LXCs**: Creates or adopts Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Bambuddy, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, Radarr, gallery-dl, Gatus, Diun, and a Tailscale subnet router through repository-owned roles
 - **PBS Backup Job**: Creates/reconciles a scheduled backup job on the PBS storage, opt-in and off by default
 - **VM Deployment**: Deploys full VMs from ISOs with customizable hardware (disk bus, BIOS, TPM, network model)
+- **macOS Tahoe**: Standalone [Atlas VM playbook](docs/macos.md) with pinned OpenCore media and no host boot changes
 - **Network Tuning**: Configures storage VLAN subinterface and 10G TCP sysctl tuning (BBR, large buffers)
 - **IP Tagging**: Tags LXC containers with their IP addresses in the Proxmox UI via a systemd service
 - **Storage Cleanup**: Detects and optionally cleans up stale ZFS orphaned datasets from failed HA migrations
