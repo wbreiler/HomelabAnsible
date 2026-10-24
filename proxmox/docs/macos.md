@@ -1,9 +1,10 @@
 # macOS Tahoe on Atlas
 
 `macos.yml` creates VM 108 (`macos-tahoe`) on Atlas with 8 cores, 32 GiB RAM,
-a 128 GiB Helios disk, and the existing VLAN 40 network. Check cluster allocation
+a 512 GiB Helios disk, and the existing VLAN 40 network. Check cluster allocation
 before changing the ID. The playbook refuses an ID or name collision. It leaves
-an existing VM untouched and does not start it automatically.
+an existing VM untouched and does not start it during deployment. New VMs
+start with Atlas after a host boot.
 
 The VM MAC is pinned to `BC:24:11:20:25:AA`. The approved Arista DHCP
 reservation assigns `10.10.40.9`. Switch configuration is managed separately
@@ -56,9 +57,12 @@ This VM has no GPU passthrough. Desktop performance and graphics features are
 limited by its virtual display. Unique SMBIOS identity and Apple account
 integration are outside this initial installation.
 
-The existing all-guests PBS job includes VM 108. That job protects the VM disks,
-but not the ISO files on `local`. Preserve the pinned OpenCore ISO and recovery
-image separately for disaster recovery. Automatic host startup stays disabled.
+The existing all-guests PBS job includes VM 108. Its images are attached as
+disks, so the live backup includes both OpenCore and recovery media, along with
+the system and EFI disks. The dedicated `macos-dev-hourly` job also backs up
+VM 108 hourly at :15. It does not prune backups. The existing all-guests job
+continues to apply its retention policy. Preserve the pinned upstream sources
+for rebuilding a replacement. Automatic host startup is enabled.
 
 ## Verification on 2026-10-23
 
@@ -204,3 +208,35 @@ download. Certificate-checked HTTPS still returned HTTP/2 200, and SSH key login
 still worked. The temporary source-restricted PBS firewall rule and TCP 5201
 listener were removed. Fresh checks confirmed both were absent. These short
 samples do not prove sustained throughput or identify the receive bottleneck.
+
+## Development host preparation on 2026-10-23
+
+VM 108 now starts with Atlas. Its backing disk was expanded to 512 GiB after
+a successful PBS backup. macOS sees the larger physical disk, but GPT still
+records the old 128 GiB boundary and APFS remains 128 GiB. The user deferred
+the offline GPT repair and filesystem growth. Sleep and disk sleep are
+disabled. The VM remains running. See [the follow-up note](macos-follow-up.md)
+before any further disk work.
+
+The separate [remote development playbook](../../mac/dev-host.yml) installed
+Node/npm, managed Python/uv, Git LFS, GitHub CLI, Ansible with Proxmox
+dependencies, CMake/Ninja, tmux, jq, ripgrep, VS Code, and Zed.
+It preserves the laptop reset playbook and existing guest shell files.
+Vendor binaries have pinned versions and SHA-256 checksums. Homebrew built
+missing Intel dependencies from source. Runtime tests passed for Git, HTTPS
+Git access, Node, Python, C, C++17, CMake/Ninja, and Ansible dependencies.
+A detached tmux session survived disconnect. A repeat run reported `changed=0`.
+Lint and syntax checks passed.
+
+The laptop has a verified `atlas-dev` SSH alias. Laptop Zed opened the VM's
+workspace through SSH. The VM's Metal API returned no device, so the remote
+editor workflow avoids its missing GPU acceleration. Zed 1.25.3 and VS Code
+1.143.1 are installed in the guest's Applications directory.
+Code migration, account sign-ins, and actual project builds remain deferred.
+No private keys or account tokens were copied.
+
+The first macOS backup, `vm/108/2026-10-24T04:11:32Z`, passed PBS verification
+with zero errors. A second development setup backup,
+`vm/108/2026-10-24T04:40:50Z`, completed successfully. Both include the attached
+boot and recovery images. No full restore was tested. The hourly job does not
+prune, and the existing all-guests backup job continues to handle retention.

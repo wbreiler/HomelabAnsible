@@ -135,7 +135,7 @@
           - --efidisk0
           - "{{ macos_storage }}:1,efitype=4m,pre-enrolled-keys=0"
           - --virtio0
-          - "{{ macos_storage }}:128,cache=none,discard=on"
+          - "{{ macos_storage }}:512,cache=none,discard=on"
           - --sata0
           - local:iso/opencore-osx-proxmox-1.0.8.iso,media=cdrom,cache=none
           - --sata2
@@ -151,7 +151,7 @@
           - --ostype
           - other
           - --onboot
-          - '0'
+          - '1'
           - --tags
           - macos
         creates: "/etc/pve/qemu-server/{{ macos_vmid }}.conf"
@@ -164,3 +164,47 @@
         regexp: '^(sata[02]:[^\n]*),media=cdrom([^\n]*)$'
         replace: '\1,media=disk\2'
       when: not ansible_check_mode
+
+    - name: Read backup jobs before adding development protection
+      ansible.builtin.command: pvesh get /cluster/backup --output-format json
+      register: macos_backup_jobs
+      changed_when: false
+      check_mode: false
+
+    - name: Refuse a conflicting development backup job
+      ansible.builtin.assert:
+        that:
+          - >-
+            macos_backup_jobs.stdout | from_json | selectattr('id', 'equalto', 'macos-dev-hourly')
+            | rejectattr('vmid', 'equalto', macos_vmid | string) | list | length == 0
+
+    - name: Add an hourly backup for this development VM
+      ansible.builtin.command:
+        argv:
+          - pvesh
+          - create
+          - /cluster/backup
+          - --id
+          - macos-dev-hourly
+          - --vmid
+          - "{{ macos_vmid | string }}"
+          - --storage
+          - mnemosyne
+          - --schedule
+          - '*:15'
+          - --mode
+          - snapshot
+          - --compress
+          - zstd
+          - --repeat-missed
+          - '1'
+          - --remove
+          - '0'
+          - --comment
+          - Hourly development VM protection; existing all-guests job handles retention
+      changed_when: true
+      when:
+        - not ansible_check_mode
+        - >-
+          macos_backup_jobs.stdout | from_json | selectattr('id', 'equalto', 'macos-dev-hourly')
+          | list | length == 0
