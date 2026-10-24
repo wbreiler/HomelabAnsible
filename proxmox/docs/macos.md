@@ -71,8 +71,12 @@ user authorization, Apple's license was accepted and installation completed on
 that volume. The VM restarted automatically and reached Setup Assistant.
 The user created the local account and approved the separate Setup Assistant
 license acceptance. Central Time is selected. Location services and diagnostic
-sharing are disabled, and Screen Time is deferred. The FileVault choice awaits
-explicit user authorization. Setup completion and desktop checks remain pending.
+sharing are disabled, and Screen Time is deferred. The user explicitly approved
+continuing without FileVault. The VM disk is not encrypted by FileVault.
+The final automatic-update screen stalled and did not respond to keyboard or
+menu input. A graceful VM shutdown timed out. Resetting only VM 108 recovered
+the guest, which automatically booted the installed disk and reached the local
+account login screen. Desktop checks require the user to sign in.
 DHCP requests left Atlas without an offer. The approved `10.10.40.9` reservation was saved on Arista. Recovery
 networking was configured through `scutil --prefs`: the existing
 Ethernet service uses Manual IPv4, address `10.10.40.9/24`, router `10.10.40.1`,
