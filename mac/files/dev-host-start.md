@@ -44,3 +44,21 @@ can leave an older recovery point. Unsaved editor buffers are not protected.
 The PBS copy is on another homelab machine. It is not an offsite backup.
 Before deleting any laptop originals, verify the copy, local Git branches,
 untracked and ignored files, and a recoverable backup of the migrated data.
+
+## Codex remote host
+
+Open `~/Applications/ChatGPT.app` in this VM and sign in to your ChatGPT
+account. This app includes Codex. Under **Settings > Connections > Control
+this Mac**, enable remote access and pair your phone. On your laptop, use
+**Control other devices** to pair with this VM. Use the same account and
+workspace on all devices. Add the repositories in this directory as projects.
+
+The app opens after a graphical macOS login. After a VM restart, sign into
+macOS to make the desktop host available. Keep the app running. Your laptop
+can then disconnect while the VM remains the independent host.
+
+The laptop and phone were paired on 2026-10-24. The imported Codex history
+contains 496 chats. The laptop originals remain available as a fallback.
+Old chats can reference deleted workspaces or laptop file paths. The active
+conversation was copied as a snapshot. New messages do not synchronize through
+this one-time import.

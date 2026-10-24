@@ -176,15 +176,39 @@
         HOMEBREW_NO_AUTO_UPDATE: '1'
         HOMEBREW_NO_ASK: '1'
 
-    - name: Install editors in the user Applications directory
+    - name: Install editors and Codex desktop app in user Applications
       community.general.homebrew_cask:
-        name: [visual-studio-code, zed]
+        name: [visual-studio-code, zed, chatgpt]
         state: present
         path: /usr/local/bin
         install_options: ["appdir={{ dev_home }}/Applications"]
       environment:
         HOMEBREW_NO_AUTO_UPDATE: '1'
         HOMEBREW_NO_ASK: '1'
+
+    - name: Create the user launch agents directory
+      ansible.builtin.file:
+        path: "{{ dev_home }}/Library/LaunchAgents"
+        state: directory
+        mode: '0755'
+
+    - name: Start Codex desktop after graphical login
+      ansible.builtin.copy:
+        dest: "{{ dev_home }}/Library/LaunchAgents/com.wbreiler.codex-desktop.plist"
+        mode: '0644'
+        content: |
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>Label</key><string>com.wbreiler.codex-desktop</string>
+            <key>ProgramArguments</key><array>
+              <string>/usr/bin/open</string><string>-g</string><string>-a</string>
+              <string>{{ dev_home | e }}/Applications/ChatGPT.app</string>
+            </array>
+            <key>RunAtLoad</key><true/>
+            <key>LimitLoadToSessionType</key><string>Aqua</string>
+          </dict></plist>
+        validate: /usr/bin/plutil -lint %s
 
     - name: Add the workspace guide
       ansible.builtin.copy:

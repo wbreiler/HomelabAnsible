@@ -68,6 +68,58 @@ are not installed.
 Mineways' source Makefile hardcodes ARM64 flags. The separate Intel validation
 build and its architecture overrides are documented below.
 
+## Independent Codex host
+
+The remote playbook installs the current `chatgpt` Homebrew cask into
+`~/Applications/ChatGPT.app`. This desktop app includes Codex. The former
+`codex-app` cask is discontinued. The Intel build installed on 2026-10-24 is
+26.1021.31345. Its x86_64 executable and OpenAI Developer ID signature passed
+verification. The app also has a stapled notarization ticket.
+
+The managed user LaunchAgent
+`~/Library/LaunchAgents/com.wbreiler.codex-desktop.plist` opens the app after a
+graphical macOS login. It uses `RunAtLoad` in an Aqua session. It does not
+force the app to reopen after an intentional quit. Its plist is validated
+before installation. After a VM restart, sign into macOS before expecting
+desktop remote access. Automatic macOS login remains disabled.
+
+Complete authentication inside the VM. Do not copy the laptop's auth cache.
+Then use **Settings > Connections > Control this Mac** to enable access and
+pair the phone. Use **Control other devices** on the laptop to add this VM.
+Use the same ChatGPT account and workspace on each device. Complete MFA and
+any pairing verification directly in the app. Keep the VM app running.
+Save individual repositories under `~/Developer` as Codex projects.
+
+The user signed in and paired the laptop and phone on 2026-10-24.
+The user confirmed imported history appeared after reopening the VM app.
+The reopened app retained its remote enrollment record. A new remote task
+from each client and startup after another VM reboot remain untested.
+See the [official remote connection guide](https://learn.chatgpt.com/docs/remote-connections).
+No public app-server listener, router port-forward, or firewall change is
+required for this relay-based desktop workflow.
+
+### Imported Codex history
+
+The 2026-10-24 import contains 496 chats, 3,077 turns, and 34,803 history
+items. These counts remained intact after the app reopened. It also includes
+the two saved projects and history assets. The laptop originals remain intact.
+The current conversation is a snapshot, not a transfer of its active execution.
+
+The importer used a consistent SQLite snapshot and verified all package
+checksums. It copied selected history tables and assets without replacing the
+VM's remote enrollment, authentication, or machine configuration. Database
+integrity and foreign-key checks passed. The original VM state is preserved at
+`~/.codex/history-before-import-20261024T142001Z/state_5.sqlite` on the VM.
+Keep this private backup until the imported history has been used successfully.
+
+Workspace metadata maps the laptop home directory to `/Users/pve`. All
+source workspaces that still existed were verified on the VM. Another 95
+chats reference older workspace directories already absent from the laptop.
+Their history remains readable, but their deleted files were not recovered.
+Historical message text is unchanged, so old absolute file links can still
+refer to laptop paths. The laptop's `~/Documents/Codex` task files were also
+copied without overwriting existing VM files.
+
 ## Protection and migration
 
 VM 108 starts with Atlas. `proxmox/macos.yml` creates new VMs with 8 vCPUs,
