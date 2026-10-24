@@ -1,6 +1,6 @@
 # macOS Tahoe on Atlas
 
-`macos.yml` creates VM 108 (`macos-tahoe`) on Atlas with 4 cores, 8 GiB RAM,
+`macos.yml` creates VM 108 (`macos-tahoe`) on Atlas with 8 cores, 32 GiB RAM,
 a 128 GiB Helios disk, and the existing VLAN 40 network. Check cluster allocation
 before changing the ID. The playbook refuses an ID or name collision. It leaves
 an existing VM untouched and does not start it automatically.
@@ -92,13 +92,41 @@ three pings with zero loss. Arista confirmed `10.10.40.9` belongs to
 the Ethernet service had no saved DNS server. The installed desktop was corrected
 with `networksetup -setdnsservers Ethernet 192.168.1.1`. Reading that setting
 confirmed the saved server. A guest `curl -I https://www.apple.com` returned
-HTTP/2 200 with certificate verification enabled. DNS persistence after another
-restart has not been tested.
+HTTP/2 200 with certificate verification enabled. After the resource upgrade and a full VM power cycle, the saved DNS server
+remained `192.168.1.1` and certificate-checked HTTPS again returned HTTP/2 200.
 
 The existing VMXNET3 adapter supports a `10Gbase-T` full-duplex media mode.
 macOS currently reports `autoselect (1000baseT <full-duplex>)`. This is a guest
-link label, not a measured throughput result. No throughput benchmark or
-physical NIC passthrough was performed.
+link label, not a measured throughput result. Physical NIC passthrough was
+not performed.
+
+## Homebrew and network baseline on 2026-10-23
+
+Homebrew 7.0.10 and iperf3 3.22 are installed for the local `pve` account.
+The current installer rejects Intel macOS. The official Intel-compatible
+installer revision `f4aa1b1ca5b256954dbde0315455fb259cdfc45a` installed current
+Homebrew under `/usr/local`. Apple Command Line Tools 26.6 are installed.
+Homebrew analytics are disabled, and `.zprofile` contains its shell environment.
+Intel macOS is a Tier 3 Homebrew configuration. OpenSSL 4.0.3 and iperf3
+required source builds.
+
+Two 10-second, single-stream TCP tests used Mnemosyne at `10.10.20.2:5201`,
+with the original 4-vCPU, 8-GiB allocation. Upload received 3.89 Gbit/s at the
+server. Reverse download received 890 Mbit/s in macOS (893 Mbit/s at the
+sender). These results do not establish a 10-Gbit/s maximum, but upload
+exceeded the guest media label.
+The approved temporary server firewall rule allowed only `10.10.40.9` to TCP
+5201. The rule and temporary listener were removed and their absence verified.
+
+After the tests, Atlas had about 312 GiB available RAM and 40 physical cores.
+VM 108 was configured for 8 vCPUs and 32 GiB RAM. The previous VM configuration
+is saved on Atlas at `/root/macos108-before-resources-20261023.conf`.
+The guest shut down through its Apple menu after the host ACPI request timed
+out. Proxmox started the VM with the new allocation and macOS returned to its
+desktop. Guest `sysctl` confirmed `hw.ncpu: 8` and `hw.memsize: 34359738368`.
+No disk, CPU model, network, or other guest allocation was changed. Lint and
+syntax checks passed. A repeat deployment completed with `changed=0`. The
+network test has not been repeated with the larger allocation.
 
 During installation preparation, Forgejo held 219 unintended secondary IPv4
 addresses. After approval, those addresses were removed while its primary

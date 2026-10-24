@@ -123,11 +123,11 @@
           - --keyboard
           - en-us
           - --cores
-          - '4'
+          - '8'
           - --sockets
           - '1'
           - --memory
-          - '8192'
+          - '32768'
           - --balloon
           - '0'
           - --numa
