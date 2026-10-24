@@ -30,8 +30,8 @@ inside its own directory.
   admin account without a confirmed out-of-band path.
 - `desktop/` — Windows 11 gaming PC (`gaming-pc`) over WinRM
   (`desktop/README.md`).
-- `mac/` — macOS fresh-install provisioning, runs on `localhost` only, no
-  inventory (`mac/AGENTS.md`).
+- `mac/` — Local macOS fresh-install provisioning plus the separate remote
+  Intel development-host playbook (`mac/AGENTS.md`).
 
 Always `cd` into the documented project directory before running Ansible so its
 local configuration and relative paths apply. Most projects have their own
