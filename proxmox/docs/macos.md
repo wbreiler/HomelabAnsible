@@ -131,9 +131,26 @@ The same two 10-second, single-stream TCP tests were repeated with 8 vCPUs and
 32 GiB RAM. Upload received 5.51 Gbit/s at the server, about 42% above the
 earlier result. Reverse download received 898 Mbit/s in macOS, compared with
 890 Mbit/s earlier. These short samples do not establish that the resource
-increase alone caused the difference. No parallel-stream or sustained-load
-test was run. The temporary firewall exception and server listener were again
+increase alone caused the difference. The temporary firewall exception and
+server listener were again
 removed, with their absence verified.
+
+## Throughput diagnosis on 2026-10-23
+
+Both Atlas and Mnemosyne physical NICs report 10,000 Mbit/s, full duplex.
+Mnemosyne reports zero NIC errors and drops. The VM has no configured Proxmox
+NIC rate limit. Two additional 10-second tests with four TCP streams measured
+5.51 Gbit/s upload and 875 Mbit/s download at the receivers. Parallel streams
+did not improve aggregate throughput. The temporary firewall rule and listener
+were removed and their absence verified again.
+
+During the upload, iperf3 reported 19.9% local CPU utilization, including
+19.3% system time. Per-thread host sampling observed a guest vCPU peak at
+100%, while QEMU's main thread peaked at 25%. Peaks are one-second samples,
+not proof of sustained saturation. This evidence points toward macOS kernel
+and virtual NIC processing as the likely bottleneck. It does not identify a
+specific driver function, queue, or offload defect. No guest tuning, physical
+NIC passthrough, or sustained-load benchmark was performed.
 
 During installation preparation, Forgejo held 219 unintended secondary IPv4
 addresses. After approval, those addresses were removed while its primary
