@@ -98,6 +98,12 @@ See the [official remote connection guide](https://learn.chatgpt.com/docs/remote
 No public app-server listener, router port-forward, or firewall change is
 required for this relay-based desktop workflow.
 
+The user installed the ChatGPT Chrome extension on 2026-10-24. The VM's
+**Settings > Computer Use** shows **Browser extension installed**, a green
+status indicator, **Manage**, and an enabled Chrome toggle. This confirms
+browser setup. An actual browser task from Dot remains untested. Select
+`@Chrome` in a chat on the VM host to use that browser.
+
 ### Imported Codex history
 
 The 2026-10-24 import contains 496 chats, 3,077 turns, and 34,803 history
