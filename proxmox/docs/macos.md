@@ -66,11 +66,12 @@ VM 108 booted into the **Reinstall macOS Tahoe** recovery screen on Atlas.
 The host retained `ignore_msrs=N`. Repository-wide `ansible-lint`, syntax checks,
 and the deployment repeat run passed (`changed=0`). A check-mode attempt with
 unrelated VM ID 122 failed at the identity guard with zero changes, as expected.
-The new disk was initialized as an APFS volume named `macos`. Installation,
-license acceptance, account setup, and desktop checks remain pending. The installer
-is open at Apple's license agreement, awaiting user confirmation. Recovery
-boot alone does not prove those steps. DHCP requests left Atlas without an
-offer. The approved `10.10.40.9` reservation was saved on Arista. Recovery networking was configured through `scutil --prefs`: the existing
+The new disk was initialized as an APFS volume named `macos`. After explicit
+user authorization, Apple's license was accepted and installation started on
+that volume. Account setup and desktop checks remain pending. Installation
+progress alone does not prove those steps. DHCP requests left Atlas without an
+offer. The approved `10.10.40.9` reservation was saved on Arista. Recovery
+networking was configured through `scutil --prefs`: the existing
 Ethernet service uses Manual IPv4, address `10.10.40.9/24`, router `10.10.40.1`,
 and DNS server `192.168.1.1`. After committing and applying those preferences,
 `curl -I https://www.apple.com` returned HTTP 200 with certificate verification
