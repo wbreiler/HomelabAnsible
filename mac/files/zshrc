@@ -1,6 +1,6 @@
 # Environment and command paths.
 export ZSH="$HOME/.oh-my-zsh"
-export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
+[[ -S "$HOME/.bitwarden-ssh-agent.sock" ]] && export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
 export PYENV_ROOT="$HOME/.pyenv"
 
 # Zsh keeps PATH synchronized with this array and removes duplicates.

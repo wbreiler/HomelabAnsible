@@ -337,27 +337,27 @@
 # ============================================================
 
 - name: Set display sleep to 20 minutes
-  command: pmset -a displaysleep 20
+  ansible.builtin.command: pmset -a displaysleep 20
   become: true
   changed_when: true
 
 - name: Set system sleep to 1 minute
-  command: pmset -a sleep 1
+  ansible.builtin.command: pmset -a sleep 1
   become: true
   changed_when: true
 
 - name: Enable Power Nap
-  command: pmset -a powernap 1
+  ansible.builtin.command: pmset -a powernap 1
   become: true
   changed_when: true
 
 - name: Enable Wake on LAN
-  command: pmset -a womp 1
+  ansible.builtin.command: pmset -a womp 1
   become: true
   changed_when: true
 
 - name: Set disk sleep to 10 minutes
-  command: pmset -a disksleep 10
+  ansible.builtin.command: pmset -a disksleep 10
   become: true
   changed_when: true
 
@@ -384,12 +384,12 @@
 # ============================================================
 
 - name: Set computer name
-  command: scutil --set ComputerName "Will's MacBook Pro"
+  ansible.builtin.command: scutil --set ComputerName "Will's MacBook Pro"
   become: true
   changed_when: true
 
 - name: Set local hostname
-  command: scutil --set LocalHostName "Wills-MacBook-Pro"
+  ansible.builtin.command: scutil --set LocalHostName "Wills-MacBook-Pro"
   become: true
   changed_when: true
 
@@ -431,18 +431,18 @@
     key: SudoTouchIdEnabled
     type: bool
     value: true
-  ignore_errors: true
+  ignore_errors: true # noqa ignore-errors -- preserve optional personal app and defaults behavior
 
 # ============================================================
 # Restart affected services
 # ============================================================
 
 - name: Restart Finder
-  command: killall Finder
+  ansible.builtin.command: killall Finder
   changed_when: true
   failed_when: false
 
 - name: Restart SystemUIServer (menu bar)
-  command: killall SystemUIServer
+  ansible.builtin.command: killall SystemUIServer
   changed_when: true
   failed_when: false

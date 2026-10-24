@@ -1,19 +1,33 @@
-.PHONY: install run run-tags check
+.PHONY: install run run-main run-dev run-both run-tags check validate
 
 export PATH := /opt/homebrew/bin:$(PATH)
+PROFILE ?= main
+MAC_PROFILES = ["$(PROFILE)"]
+ifeq ($(PROFILE),both)
+MAC_PROFILES = ["main","dev"]
+endif
 
 install:
 	ansible-galaxy collection install -r requirements.yml
 
-run:
-	ansible-playbook main.yml --ask-become-pass
+run: run-$(PROFILE)
+
+run-main:
+	ansible-playbook main.yml --ask-become-pass -e '{"mac_profiles":["main"]}'
+
+run-dev:
+	ansible-playbook main.yml --ask-become-pass -e '{"mac_profiles":["dev"]}'
+
+run-both:
+	ansible-playbook main.yml --ask-become-pass -e '{"mac_profiles":["main","dev"]}'
 
 run-tags:
-	ansible-playbook main.yml --ask-become-pass --tags "$(TAGS)"
+	ansible-playbook main.yml --ask-become-pass -e '{"mac_profiles":$(MAC_PROFILES)}' --tags "$(TAGS)"
 
 check:
-	ansible-playbook main.yml --ask-become-pass --check
+	ansible-playbook main.yml --ask-become-pass -e '{"mac_profiles":$(MAC_PROFILES)}' --check --diff
 
-# Examples:
-#   make run-tags TAGS=homebrew
-#   make run-tags TAGS=defaults,dock
+validate:
+	ansible-playbook main.yml --syntax-check
+	ansible-lint main.yml
+	ansible-playbook tests/roles.yml

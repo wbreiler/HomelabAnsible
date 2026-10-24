@@ -1,0 +1,33 @@
+---
+- name: Prepare xcode_clt
+  ansible.builtin.import_tasks: ../../../tasks/xcode_clt.yml
+  tags:
+    - xcode
+- name: Prepare homebrew
+  ansible.builtin.import_tasks: ../../../tasks/homebrew.yml
+  tags:
+    - homebrew
+- name: Configure homebrew
+  ansible.builtin.import_tasks: homebrew.yml
+  tags:
+    - homebrew
+- name: Configure shell
+  ansible.builtin.import_tasks: shell.yml
+  tags:
+    - shell
+- name: Configure git
+  ansible.builtin.import_tasks: git.yml
+  tags:
+    - git
+- name: Configure vscode
+  ansible.builtin.import_tasks: vscode.yml
+  tags:
+    - vscode
+- name: Configure hosts
+  ansible.builtin.import_tasks: hosts.yml
+  tags:
+    - hosts
+- name: Configure remote_access
+  ansible.builtin.import_tasks: remote_access.yml
+  tags:
+    - remote_access

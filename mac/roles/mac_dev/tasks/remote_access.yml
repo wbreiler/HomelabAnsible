@@ -1,0 +1,121 @@
+---
+# Retain existing allowed users. Never replace an administrator's access list.
+- name: Configure authenticated remote access
+  become: true
+  block:
+    - name: Inspect remote access groups
+      ansible.builtin.command:
+        argv: [/usr/bin/dscl, ".", -read, "/Groups/{{ item }}"]
+      loop: [com.apple.access_ssh, com.apple.access_screensharing]
+      register: mac_dev_groups
+      changed_when: false
+      failed_when: mac_dev_groups.rc != 0 and 'eDSRecordNotFound' not in mac_dev_groups.stdout + mac_dev_groups.stderr
+      check_mode: false
+
+    - name: Create missing remote access groups
+      ansible.builtin.command:
+        argv: [/usr/sbin/dseditgroup, -o, create, "{{ item.item }}"]
+      loop: "{{ mac_dev_groups.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.rc != 0
+      changed_when: true
+
+    - name: Inspect development user access
+      ansible.builtin.command:
+        argv: [/usr/sbin/dseditgroup, -o, checkmember, -m, "{{ username }}", "{{ item }}"]
+      loop: [com.apple.access_ssh, com.apple.access_screensharing]
+      register: mac_dev_membership
+      changed_when: false
+      failed_when: mac_dev_membership.rc not in [0, 64, 67]
+      check_mode: false
+
+    - name: Allow the development user remote access
+      ansible.builtin.command:
+        argv: [/usr/sbin/dseditgroup, -o, edit, -a, "{{ username }}", -t, user, "{{ item.item }}"]
+      loop: "{{ mac_dev_membership.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.rc != 0
+      changed_when: true
+
+    - name: Inspect Remote Login
+      ansible.builtin.command: /usr/sbin/systemsetup -getremotelogin
+      register: mac_dev_remote_login
+      changed_when: false
+      check_mode: false
+      environment:
+        LC_ALL: C
+
+    - name: Enable Remote Login
+      ansible.builtin.command: /usr/sbin/systemsetup -setremotelogin on
+      when: "'Remote Login: On' not in mac_dev_remote_login.stdout"
+      register: mac_dev_enable_login
+      changed_when: true
+      failed_when: >-
+        mac_dev_enable_login.rc != 0 or
+        'Error' in mac_dev_enable_login.stdout or
+        'Full Disk Access' in mac_dev_enable_login.stdout
+
+    - name: Inspect Screen Sharing launch overrides
+      ansible.builtin.command: /bin/launchctl print-disabled system
+      register: mac_dev_launch_overrides
+      changed_when: false
+      check_mode: false
+
+    - name: Enable Screen Sharing at boot
+      ansible.builtin.command: /bin/launchctl enable system/com.apple.screensharing
+      when: "'\"com.apple.screensharing\" => false' not in mac_dev_launch_overrides.stdout"
+      changed_when: true
+
+    - name: Inspect Screen Sharing service
+      ansible.builtin.command: /bin/launchctl print system/com.apple.screensharing
+      register: mac_dev_screen_service
+      changed_when: false
+      failed_when: mac_dev_screen_service.rc not in [0, 113]
+      check_mode: false
+
+    - name: Load Screen Sharing service
+      ansible.builtin.command:
+        argv: [/bin/launchctl, bootstrap, system, /System/Library/LaunchDaemons/com.apple.screensharing.plist]
+      when: mac_dev_screen_service.rc != 0
+      changed_when: true
+
+    - name: Inspect AC power settings
+      ansible.builtin.command: /usr/bin/pmset -g custom
+      register: mac_dev_power
+      changed_when: false
+      check_mode: false
+
+    - name: Keep development tasks available on AC power
+      ansible.builtin.command: /usr/bin/pmset -c sleep 0 womp 1 autorestart 1
+      # pmset output includes other power profiles. Check only the AC section.
+      vars:
+        mac_dev_ac_power: "{{ mac_dev_power.stdout.split('AC Power:')[-1] }}"
+      when: >-
+        not (mac_dev_ac_power is search('(?m)^\\s+sleep\\s+0\\s*$') and
+             mac_dev_ac_power is search('(?m)^\\s+womp\\s+1\\s*$') and
+             mac_dev_ac_power is search('(?m)^\\s+autorestart\\s+1\\s*$'))
+      changed_when: true
+
+- name: Create development workspace
+  ansible.builtin.file:
+    path: "{{ home_dir }}/Developer"
+    state: directory
+    mode: "0755"
+
+- name: Install development host verification command
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/files/mac-dev-check.sh"
+    dest: "{{ home_dir }}/Developer/mac-dev-check.sh"
+    mode: "0755"
+
+- name: Explain macOS consent and login requirements
+  ansible.builtin.debug:
+    msg: >-
+      Verify Screen Sharing control from another Mac. If macOS blocks control,
+      enable Screen Sharing in System Settings > General > Sharing, with Only
+      these users and your development account. Remote Management must be off.
+      Remote Login changes may require Full Disk Access for the terminal.
+      Sign into Codex manually. FileVault can require a local unlock after boot.
+      Run ~/Developer/mac-dev-check.sh after installation.

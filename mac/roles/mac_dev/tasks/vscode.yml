@@ -1,17 +1,19 @@
 ---
 - name: Ensure VS Code User directory exists
-  file:
+  ansible.builtin.file:
     path: "{{ home_dir }}/Library/Application Support/Code/User"
     state: directory
+    mode: "0755"
 
 - name: Copy VS Code settings
-  copy:
-    src: files/vscode_settings.json
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/files/vscode_settings.json"
     dest: "{{ home_dir }}/Library/Application Support/Code/User/settings.json"
     backup: true
+    mode: "0644"
 
 - name: Install VS Code extensions
-  command: >
+  ansible.builtin.command: >
     code --install-extension {{ item }} --force
   loop:
     - alexcvzz.vscode-sqlite
@@ -49,6 +51,6 @@
     - tommasov.hosts
   environment:
     PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
-  register: vscode_ext_result
-  changed_when: "'already installed' not in vscode_ext_result.stdout"
+  register: mac_dev_vscode_ext_result
+  changed_when: "'already installed' not in mac_dev_vscode_ext_result.stdout"
   failed_when: false

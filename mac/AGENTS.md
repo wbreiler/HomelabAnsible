@@ -12,8 +12,13 @@ drifted.
   It never imports the local reset tasks. Vendor archives are version-pinned
   and checksum-verified in `dev-tools.yml`. Use the normal remote user, not
   root. See `DEV-HOST.md` for installation and recovery boundaries.
-- `main.yml` runs only against `localhost` with `connection: local` and imports
-  the task files in `tasks/`.
+- `main.yml` runs only against `localhost` with `connection: local`. It selects
+  `mac_main`, `mac_dev`, or both through `mac_profiles` (default: `[main]`).
+  Each role imports the shared CLT/Homebrew bootstrap in `tasks/`.
+  `mac_main` owns personal apps, SSH client config, Dock, and desktop defaults.
+  `mac_dev` owns development tools, shell, Git, VS Code, hosts, remote access,
+  and AC power settings. Both roles can run independently. Run dev last when
+  combining roles so its AC sleep policy takes precedence.
 - This playbook is Apple-silicon-specific: its Homebrew prefix and executable
   paths are `/opt/homebrew`. Preserve native arm64 paths and packages unless a
   requested change explicitly broadens platform support.
@@ -25,10 +30,12 @@ drifted.
 
 ```bash
 make install                       # Install requirements.yml collections
-make run                           # Apply the full playbook; prompts for sudo
-make run-tags TAGS=homebrew        # Apply one tag
+make run-main                      # Apply everyday setup; prompts for sudo
+make run-dev                       # Apply dedicated development setup
+make run-both                      # Apply both, with dev power settings last
+make run-tags PROFILE=dev TAGS=homebrew        # Apply one tag
 make run-tags TAGS=defaults,dock   # Apply multiple tags
-make check                         # Full check-mode run; prompts for sudo
+make check PROFILE=dev             # Development check mode; prompts for sudo
 ansible-lint main.yml              # Lint from this directory
 ansible-playbook main.yml --syntax-check
 ```
@@ -43,15 +50,16 @@ post-change checks.
 | File | Tag(s) | Current behavior |
 | --- | --- | --- |
 | `tasks/xcode_clt.yml` | `xcode` | Detects and, when absent, installs Xcode Command Line Tools with `softwareupdate`. |
-| `tasks/homebrew.yml` | `homebrew` | Installs Homebrew if needed, then taps, formulae, casks, Dock prerequisites, and sudo-touchid setup. Formula and cask loops tolerate failures. |
-| `tasks/mas.yml` | `mas` | Installs App Store apps as root with `mas`; the user must already be signed in and some apps depend on account entitlement. |
-| `tasks/shell.yml` | `shell` | Installs Oh My Zsh, deploys `zshrc`/`zprofile`, manages pyenv Python and selected global pip/npm packages, and sets zsh as the login shell. |
-| `tasks/git.yml` | `git` | Sets the global Git name/email and installs Git LFS hooks; commit signing is not configured. |
-| `tasks/ssh.yml` | `ssh` | Deploys SSH configuration for the Bitwarden agent and removes obsolete 1Password agent configuration; it does not manage private keys. |
-| `tasks/vscode.yml` | `vscode` | Deploys VS Code settings and installs extensions through `code`. |
-| `tasks/hosts.yml` | `hosts` | Replaces the Ansible-managed block in `/etc/hosts`; requires privilege escalation. |
-| `tasks/dock.yml` | `dock` | Destructively replaces the user's Dock layout, then restarts Dock. |
-| `tasks/macos_defaults.yml` | `defaults`, `macos` | Applies user and privileged defaults, power settings, and host naming, then restarts Finder and SystemUIServer. Some settings require logout or reboot. |
+| `tasks/homebrew.yml`, `roles/*/tasks/homebrew.yml` | `homebrew` | Shared Homebrew bootstrap plus role package lists. Main owns taps, Dock prerequisites, and sudo-touchid. Only main package loops tolerate failures. |
+| `roles/mac_dev/tasks/remote_access.yml` | `remote_access` | Adds the current user to SSH/Screen Sharing access groups, enables services, configures AC power, and installs a read-only smoke check. macOS privacy consent can require manual setup. |
+| `roles/mac_main/tasks/mas.yml` | `mas` | Installs App Store apps as root with `mas`; the user must already be signed in and some apps depend on account entitlement. |
+| `roles/mac_dev/tasks/shell.yml` | `shell` | Installs Oh My Zsh, deploys `zshrc`/`zprofile`, manages pyenv Python and selected global pip/npm packages, and sets zsh as the login shell. |
+| `roles/mac_dev/tasks/git.yml` | `git` | Sets the global Git name/email and installs Git LFS hooks; commit signing is not configured. |
+| `roles/mac_main/tasks/ssh.yml` | `ssh` | Deploys SSH configuration for the Bitwarden agent and removes obsolete 1Password agent configuration; it does not manage private keys. |
+| `roles/mac_dev/tasks/vscode.yml` | `vscode` | Deploys VS Code settings and installs extensions through `code`. |
+| `roles/mac_dev/tasks/hosts.yml` | `hosts` | Replaces the Ansible-managed block in `/etc/hosts`; requires privilege escalation. |
+| `roles/mac_main/tasks/dock.yml` | `dock` | Destructively replaces the user's Dock layout, then restarts Dock. |
+| `roles/mac_main/tasks/macos_defaults.yml` | `defaults`, `macos` | Applies user and privileged defaults, power settings, and host naming, then restarts Finder and SystemUIServer. Some settings require logout or reboot. |
 
 ## Managed static files
 

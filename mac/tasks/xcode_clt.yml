@@ -1,6 +1,6 @@
 ---
 - name: Check if Xcode CLT is installed
-  command: xcode-select -p
+  ansible.builtin.command: xcode-select -p
   register: xcode_clt_check
   changed_when: false
   failed_when: false
@@ -9,20 +9,23 @@
   when: xcode_clt_check.rc != 0
   block:
     - name: Create softwareupdate trigger file
-      file:
+      ansible.builtin.file:
         path: /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
         state: touch
+        mode: "0644"
 
-    - name: Find Xcode CLT package label
-      shell: softwareupdate -l | grep -B1 "Command Line Tools" | awk -F"*" '/^\*/{print $2}' | sed 's/^ *//' | tail -1
+    - name: Find Xcode CLT package label # noqa risky-shell-pipe -- grep has no match until Apple offers CLT
+      ansible.builtin.shell: softwareupdate -l | grep -B1 "Command Line Tools" | awk -F"*" '/^\*/{print $2}' | sed 's/^ *//' | tail -1
       register: xcode_clt_label
       changed_when: false
 
     - name: Install Xcode CLT via softwareupdate
-      command: softwareupdate -i "{{ xcode_clt_label.stdout }}" --verbose
+      ansible.builtin.command: softwareupdate -i "{{ xcode_clt_label.stdout }}" --verbose
       when: xcode_clt_label.stdout != ""
+      become: true
+      changed_when: true
 
     - name: Remove trigger file
-      file:
+      ansible.builtin.file:
         path: /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
         state: absent

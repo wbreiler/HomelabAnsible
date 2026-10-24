@@ -1,0 +1,56 @@
+---
+- name: Add Homebrew taps
+  community.general.homebrew_tap:
+    name: "{{ item }}"
+    state: present
+  environment:
+    PATH: /opt/homebrew/bin:{{ ansible_facts.env.PATH }}
+  loop:
+    - artginzburg/tap
+    - minacle/chntpw
+    - teamookla/speedtest
+- name: Trust Homebrew taps
+  ansible.builtin.command: /opt/homebrew/bin/brew trust "{{ item }}"
+  environment:
+    PATH: /opt/homebrew/bin:{{ ansible_facts.env.PATH }}
+  loop:
+    - artginzburg/tap
+    - minacle/chntpw
+    - teamookla/speedtest
+  register: mac_main_trust_result
+  changed_when: mac_main_trust_result.rc == 0
+  failed_when: false
+- name: Install mac_main Homebrew formulae
+  community.general.homebrew:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ mac_main_formulae }}"
+  environment:
+    PATH: /opt/homebrew/bin:{{ ansible_facts.env.PATH }}
+  ignore_errors: true # noqa ignore-errors -- preserve optional personal app and defaults behavior
+- name: Install mac_main Homebrew casks
+  community.general.homebrew_cask:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ mac_main_casks }}"
+  environment:
+    PATH: /opt/homebrew/bin:{{ ansible_facts.env.PATH }}
+  ignore_errors: true # noqa ignore-errors -- preserve optional personal app and defaults behavior
+- name: Install dockutil (for dock management)
+  community.general.homebrew:
+    name: dockutil
+    state: present
+  environment:
+    PATH: /opt/homebrew/bin:{{ ansible_facts.env.PATH }}
+- name: Bootstrap sudo Touch ID PAM config
+  ansible.builtin.command: /opt/homebrew/opt/sudo-touchid/bin/sudo-touchid
+  become: true
+  args:
+    creates: /etc/pam.d/sudo_local
+- name: Enable sudo-touchid login service (must run as the normal user, not root)
+  ansible.builtin.command: /opt/homebrew/bin/brew services start sudo-touchid
+  register: mac_main_touchid_result
+  changed_when: "'Successfully started' in mac_main_touchid_result.stdout"
+  failed_when: false
+  environment:
+    PATH: /opt/homebrew/bin:{{ ansible_facts.env.PATH }}

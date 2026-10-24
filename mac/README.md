@@ -1,109 +1,117 @@
 # macOS provisioning
 
-This Apple-silicon-specific playbook provisions a fresh Mac locally: Xcode
-Command Line Tools, Homebrew software, App Store apps, shell and editor files,
-Git/SSH configuration, homelab hosts, Dock layout, and macOS defaults. It uses
-`/opt/homebrew` paths and has no inventory or `ansible.cfg`.
+Two independent Ansible roles provision an Apple silicon Mac locally. Both use
+`/opt/homebrew`. Neither role removes software installed by the other role.
 
-## Read-only verification: 2026-10-02
+| Role | Purpose | Managed areas |
+| --- | --- | --- |
+| `mac_main` | Everyday personal Mac | Personal Homebrew apps, App Store apps, Bitwarden SSH configuration, Dock, desktop defaults, Touch ID |
+| `mac_dev` | Dedicated Codex/dev Mac Mini | Build tools, language runtimes, Codex and editors, shell, Git, VS Code, homelab hosts, SSH server, Screen Sharing, AC power settings |
 
-The local Mac reported macOS 27.0.1 (26A434), arm64, Homebrew 7.0.7, and
-Command Line Tools at `/Library/Developer/CommandLineTools`. The four managed
-user files listed below matched their tracked sources. The Bitwarden agent
-socket existed, and `~/.config/1Password` was absent.
+Each role installs Command Line Tools and Homebrew when absent. Package lists
+are in `roles/mac_main/defaults/main.yml` and `roles/mac_dev/defaults/main.yml`.
+The existing Intel remote playbook remains separate. See [DEV-HOST.md](DEV-HOST.md).
 
-These checks do not establish package, Dock, defaults, or host-entry
-convergence. The task lists define desired state, not a live inventory. Review
-static host entries against current guest addresses before applying `hosts`.
-This verification did not apply the playbook.
+## Choose a role
 
-## Bootstrap and run
-
-Install Ansible first. The playbook can install Xcode Command Line Tools and
-Homebrew when absent, so they are not separate prerequisites. Sign into the Mac
-App Store before running the `mas` tasks.
+Install Ansible on the target Mac as its normal development user. Complete
+macOS Setup Assistant first. Use an administrator account for sudo tasks.
 
 ```bash
 cd mac
 make install
-make check
-make run
+make check PROFILE=dev
+make run-dev                  # Dedicated Mac Mini
 ```
 
-`make install` installs `community.general`. `make run` applies `main.yml` to
-`localhost` and prompts for sudo. `make check` is check mode only; command,
-Homebrew, MAS, Dock, and defaults tasks may be incomplete or noisy there, and it
-does not prove convergence.
-
-To run a subset:
+Other selections:
 
 ```bash
-make run-tags TAGS=homebrew
-make run-tags TAGS=defaults,dock
-make run-tags TAGS=shell
+make run-main                 # Everyday Mac, also the default for make run
+make run-both                 # Everyday Mac plus development tools
+make check PROFILE=both
+make run-tags PROFILE=dev TAGS=remote_access
 ```
 
-Available tags are `xcode`, `homebrew`, `mas`, `shell`, `git`, `ssh`, `vscode`,
-`hosts`, `dock`, `defaults`, and `macos`. Inspect the selected tasks before a
-live run: they mutate user or system state, and Dock/defaults tasks visibly
-alter the current session.
+`make run` now selects only `main`. Use `make run-both` for the old combined
+software selection plus the new remote-access settings. A combined run applies
+`mac_dev` last, so its AC sleep settings take precedence. After a separate main
+run on a dev Mac, reapply `make run-tags PROFILE=dev TAGS=remote_access` because
+main defaults restore the personal sleep policy.
 
-## Managed areas
+Direct invocation also supports both roles:
 
-| Tag | Current behavior |
-| --- | --- |
-| `xcode` | Detects and installs Xcode Command Line Tools through `softwareupdate` when absent |
-| `homebrew` | Updates Homebrew metadata and ensures taps, formulae, casks, `dockutil`, and sudo Touch ID support are present; package tasks use `state: present`, not `latest` |
-| `mas` | Installs IDs in `tasks/mas.yml`; requires a signed-in, entitled account and runs installs as root |
-| `shell` | Installs Oh My Zsh, replaces `.zshrc`/`.zprofile` with backups, manages pyenv Python 3.14 and selected pip/npm packages, and selects zsh |
-| `git` | Sets the global name/email and installs Git LFS hooks; it does not configure commit signing |
-| `ssh` | Replaces `~/.ssh/config` with backup, configures the Bitwarden SSH agent, and removes obsolete 1Password agent configuration; private keys are not managed |
-| `vscode` | Replaces VS Code `settings.json` with backup and attempts every extension in `tasks/vscode.yml` |
-| `hosts` | Replaces the marked Ansible block in `/etc/hosts` with the tracked homelab entries |
-| `dock` | Removes every Dock item, installs the tracked application order and Downloads folder, then restarts Dock |
-| `defaults`, `macos` | Applies user/system defaults, power settings, computer names, and restarts Finder/SystemUIServer |
+```bash
+ansible-playbook main.yml --ask-become-pass -e '{"mac_profiles":["main","dev"]}'
+```
 
-The formula, cask, MAS app, extension, Dock, host, and defaults lists change over
-time; their task files are authoritative. Homebrew formula/cask loops and VS
-Code extension installation intentionally tolerate individual failures, so a
-successful play does not prove every requested item installed.
+Tags retain their previous names. Main tags are `xcode`, `homebrew`, `mas`,
+`ssh`, `dock`, `defaults`, and `macos`. Dev tags are `xcode`, `homebrew`, `shell`,
+`git`, `vscode`, `hosts`, and `remote_access`. Select `PROFILE=dev` or
+`PROFILE=both` when using dev tags.
 
-Homebrew installs `dockutil` before a full run reaches Dock configuration.
-The sudo Touch ID bootstrap runs its binary with privilege, but its Homebrew
-service starts as the normal user; do not start `brew services` under sudo.
+## Dedicated Mac Mini access
 
-## Files and safety
+The dev role enables Remote Login with `systemsetup` and enables the native
+Screen Sharing launch service. It creates missing access groups and adds the
+current user. Existing allowed users remain. It does not enable a shared VNC
+password or copy private keys. Review existing access lists in Sharing settings.
 
-Tracked files under `files/` replace these user files:
+macOS can require consent that Ansible cannot grant. Before an unattended run,
+grant the terminal Full Disk Access if `systemsetup` requires it. If Screen
+Sharing does not permit control, complete the following once at the Mac:
 
-- `~/.zshrc` and `~/.zprofile`
-- `~/.ssh/config`
-- `~/Library/Application Support/Code/User/settings.json`
+1. Open **System Settings > General > Sharing**.
+2. Disable **Remote Management** if it is enabled.
+3. Enable **Screen Sharing**.
+4. Select **Only these users** and add the development account.
+5. Verify **Remote Login** permits the development account.
 
-Configured copies use backups where the tasks specify them. Review both the
-task and source file before editing or running those sections. Do not add
-private keys, tokens, passwords, or machine-local secrets to this project.
+Apple documents the access controls in its [Screen Sharing guide](https://support.apple.com/guide/mac-help/turn-screen-sharing-on-or-off-mh11848/mac)
+and [Remote Login guide](https://support.apple.com/guide/mac-help/allow-a-remote-computer-to-access-your-mac-mchlp1066/mac).
+Screen Sharing and Remote Management cannot operate together.
 
-The defaults task includes power settings and the hard-coded computer names in
-`tasks/macos_defaults.yml`; some changes require logout or reboot. The Dock task
-is destructive to the current layout. Obtain explicit approval immediately
-before a live application of those changes.
+From another Mac on the trusted LAN or VPN, use `ssh <user>@<mac-address>` for
+the terminal. Open `vnc://<mac-address>` in Finder's **Go > Connect to Server**
+to use Screen Sharing. Authenticate with the development account. No router
+port forwards or firewall bypasses are installed.
 
-## Manual follow-up
+The dev role disables system sleep on AC power and enables network wake and
+restart after power loss. It preserves display sleep and battery settings.
+FileVault remains enabled if already configured. A cold boot can require a
+local disk unlock before SSH or Screen Sharing becomes available. Test recovery
+with physical access before treating the Mac as unattended infrastructure.
 
-- Restore private SSH and GPG keys outside the playbook.
-- Sign into Bitwarden and enable its SSH agent before relying on agent-backed keys.
-- Activate licensed applications such as Parallels Desktop and CrossOver.
-- Install applications absent from the current Homebrew cask and MAS lists.
+Sign into Codex and other apps through Screen Sharing. Complete any macOS
+privacy prompts there. The role does not copy authentication tokens, enable
+automatic login, or require Bitwarden for incoming SSH. Add trusted public keys
+to `~/.ssh/authorized_keys` separately if key authentication is desired.
+
+## Files and existing behavior
+
+The dev role replaces `.zshrc`, `.zprofile`, and VS Code settings with backups.
+It configures the existing Git identity and creates `~/Developer`. Its shell
+preserves a forwarded SSH agent unless a local Bitwarden socket exists.
+Review the static hosts in `roles/mac_dev/tasks/hosts.yml` before applying them.
+
+The main role replaces `~/.ssh/config` with a backup and removes the obsolete
+`~/.config/1Password` directory. It requires App Store sign-in for MAS apps.
+Its Dock task removes the current layout. Its defaults retain the existing
+MacBook computer names, power policy, and UI restarts. Review these files before
+applying main to another machine. Personal package loops still tolerate failures.
+Dev Homebrew package failures stop the play.
+
+Obtain explicit approval immediately before any live application. No live run
+is part of a code change. Check mode can be incomplete when required software
+is absent. It does not establish convergence.
 
 ## Validation
 
 ```bash
 cd mac
-ansible-lint main.yml
-ansible-playbook main.yml --syntax-check
+make validate
 ```
 
-These are local structural checks. Only an authorized live run plus checks of
-the affected files, packages, services, defaults, and UI can verify runtime
-state.
+After an authorized live installation, run `~/Developer/mac-dev-check.sh` on the
+Mac. Then verify SSH authentication and Screen Sharing control from another Mac.
+The local smoke check cannot prove network reachability or graphical control.

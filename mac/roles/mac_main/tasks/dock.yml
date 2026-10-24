@@ -38,13 +38,13 @@
     value: 14
 
 - name: Remove all existing Dock items
-  command: /opt/homebrew/bin/dockutil --remove all --no-restart
+  ansible.builtin.command: /opt/homebrew/bin/dockutil --remove all --no-restart
   changed_when: true
   environment:
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
 
 - name: Add Dock apps in order
-  command: >
+  ansible.builtin.command: >
     /opt/homebrew/bin/dockutil --add "{{ item.path }}" --no-restart
   loop:
     - { path: "/Applications/Safari.app" }
@@ -57,7 +57,7 @@
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
 
 - name: Add Downloads folder to Dock (fan/list view)
-  command: >
+  ansible.builtin.command: >
     /opt/homebrew/bin/dockutil
     --add "{{ home_dir }}/Downloads"
     --view list
@@ -69,6 +69,6 @@
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
 
 - name: Restart Dock to apply changes
-  command: killall Dock
+  ansible.builtin.command: killall Dock
   changed_when: true
   failed_when: false

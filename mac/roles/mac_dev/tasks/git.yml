@@ -12,7 +12,7 @@
     scope: global
 
 - name: Install git-lfs hooks
-  command: /opt/homebrew/bin/git-lfs install
+  ansible.builtin.command: /opt/homebrew/bin/git-lfs install
   changed_when: false
   environment:
     PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"

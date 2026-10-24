@@ -1,0 +1,55 @@
+---
+- name: Verify role boundaries without provisioning a Mac
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    mac_test_root: '{{ playbook_dir }}/..'
+    mac_test_main: "{{ lookup('file', mac_test_root ~ '/roles/mac_main/tasks/main.yml') | from_yaml }}"
+    mac_test_dev: "{{ lookup('file', mac_test_root ~ '/roles/mac_dev/tasks/main.yml') | from_yaml }}"
+    mac_test_main_packages: "{{ lookup('file', mac_test_root ~ '/roles/mac_main/defaults/main.yml') | from_yaml }}"
+    mac_test_dev_packages: "{{ lookup('file', mac_test_root ~ '/roles/mac_dev/defaults/main.yml') | from_yaml }}"
+    mac_test_remote: "{{ lookup('file', mac_test_root ~ '/roles/mac_dev/tasks/remote_access.yml') | from_yaml }}"
+  tasks:
+    - name: Verify that either role bootstraps a fresh machine
+      ansible.builtin.assert:
+        that:
+          - "item[0]['ansible.builtin.import_tasks'] == '../../../tasks/xcode_clt.yml'"
+          - "item[1]['ansible.builtin.import_tasks'] == '../../../tasks/homebrew.yml'"
+      loop: '{{ [mac_test_main, mac_test_dev] }}'
+      loop_control:
+        label: role bootstrap
+
+    - name: Verify dev cannot apply personal desktop or SSH client settings
+      ansible.builtin.assert:
+        that:
+          - "item not in mac_test_dev | to_json"
+      loop: [dock.yml, macos_defaults.yml, mas.yml, ssh.yml]
+
+    - name: Verify development tools and personal apps remain separate
+      ansible.builtin.assert:
+        that:
+          - "['git', 'git-lfs', 'gh', 'cmake', 'ninja', 'node', 'uv', 'ansible'] | difference(mac_test_dev_packages.mac_dev_formulae) | length == 0"
+          - "['codex', 'visual-studio-code'] | difference(mac_test_dev_packages.mac_dev_casks) | length == 0"
+          - "['discord', 'spotify', 'curseforge'] | difference(mac_test_main_packages.mac_main_casks) | length == 0"
+          - "'discord' not in mac_test_dev_packages.mac_dev_casks"
+          - "'codex' not in mac_test_main_packages.mac_main_casks"
+
+    - name: Verify check mode only executes remote access discovery commands
+      ansible.builtin.assert:
+        that:
+          - item.changed_when == false
+      loop: "{{ mac_test_remote[0].block | selectattr('check_mode', 'defined') | list }}"
+      loop_control:
+        label: '{{ item.name }}'
+
+    - name: Verify remote access preserves user membership and scopes power to AC
+      vars:
+        mac_test_membership: "{{ mac_test_remote[0].block | selectattr('name', 'equalto', 'Allow the development user remote access') | first }}"
+        mac_test_power: "{{ mac_test_remote[0].block | selectattr('name', 'equalto', 'Keep development tasks available on AC power') | first }}"
+      ansible.builtin.assert:
+        that:
+          - "'-a' in mac_test_membership['ansible.builtin.command'].argv"
+          - "'-d' not in mac_test_membership['ansible.builtin.command'].argv"
+          - "mac_test_power['ansible.builtin.command'] == '/usr/bin/pmset -c sleep 0 womp 1 autorestart 1'"
+          - mac_test_power.when is defined

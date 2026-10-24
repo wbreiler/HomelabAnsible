@@ -1,0 +1,15 @@
+---
+- name: Install mac_dev Homebrew formulae
+  community.general.homebrew:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ mac_dev_formulae }}"
+  environment:
+    PATH: /opt/homebrew/bin:{{ ansible_facts.env.PATH }}
+- name: Install mac_dev Homebrew casks
+  community.general.homebrew_cask:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ mac_dev_casks }}"
+  environment:
+    PATH: /opt/homebrew/bin:{{ ansible_facts.env.PATH }}

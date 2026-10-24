@@ -1,0 +1,30 @@
+---
+- name: Prepare xcode_clt
+  ansible.builtin.import_tasks: ../../../tasks/xcode_clt.yml
+  tags:
+    - xcode
+- name: Prepare homebrew
+  ansible.builtin.import_tasks: ../../../tasks/homebrew.yml
+  tags:
+    - homebrew
+- name: Configure homebrew
+  ansible.builtin.import_tasks: homebrew.yml
+  tags:
+    - homebrew
+- name: Configure mas
+  ansible.builtin.import_tasks: mas.yml
+  tags:
+    - mas
+- name: Configure ssh
+  ansible.builtin.import_tasks: ssh.yml
+  tags:
+    - ssh
+- name: Configure dock
+  ansible.builtin.import_tasks: dock.yml
+  tags:
+    - dock
+- name: Configure macos_defaults
+  ansible.builtin.import_tasks: macos_defaults.yml
+  tags:
+    - defaults
+    - macos
