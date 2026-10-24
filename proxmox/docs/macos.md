@@ -69,8 +69,11 @@ unrelated VM ID 122 failed at the identity guard with zero changes, as expected.
 The new disk was initialized as an APFS volume named `macos`. After explicit
 user authorization, Apple's license was accepted and installation completed on
 that volume. The VM restarted automatically and reached Setup Assistant.
-Account setup and desktop checks remain pending. DHCP requests left Atlas without an
-offer. The approved `10.10.40.9` reservation was saved on Arista. Recovery
+The user created the local account and approved the separate Setup Assistant
+license acceptance. Central Time is selected. Location services and diagnostic
+sharing are disabled, and Screen Time is deferred. The FileVault choice awaits
+explicit user authorization. Setup completion and desktop checks remain pending.
+DHCP requests left Atlas without an offer. The approved `10.10.40.9` reservation was saved on Arista. Recovery
 networking was configured through `scutil --prefs`: the existing
 Ethernet service uses Manual IPv4, address `10.10.40.9/24`, router `10.10.40.1`,
 and DNS server `192.168.1.1`. After committing and applying those preferences,
