@@ -2,8 +2,9 @@
 
 All 28 original aliases in `roles/mac_dev/tasks/hosts.yml` were checked.
 Twenty-three have current address evidence. The DHCP/retirement follow-up
-removed three obsolete aliases. Two legacy mappings remain unverified and
-unchanged. The managed block now has 26 aliases, including the added Seerr name.
+removed five obsolete aliases. The user confirmed that Gallery and Cobbleverse
+are no longer live on 2026-10-24, resolving the final two uncertain entries.
+The managed block now has 24 aliases, including the added Seerr name.
 This audit changed repository files only.
 No live host, application, DNS record, or local `/etc/hosts` file was modified.
 
@@ -66,7 +67,7 @@ nor current leases. The switch's DHCP configuration has no VLAN 30 or VLAN 70
 scope, so it cannot establish reservations for Nyx or Arachne.
 
 A fresh PVE resource query lists only Atlas and Prometheus as cluster nodes.
-None of the five unresolved names appears as a current guest. This corroborates
+None of the five legacy names appears as a current guest. This corroborates
 retirement records but does not, by itself, prove retirement.
 
 The UniFi gateway at `192.168.1.1` refused SSH. Its unauthenticated API routes
@@ -81,22 +82,20 @@ were not committed.
 | `nyx` | `10.10.30.2` | Commit `f0a1297` intentionally removed Nyx from cluster desired state and reassigned its fallback roles. The current inventory and live cluster contain only Atlas and Prometheus. This removes the obsolete cluster alias; it does not claim that the physical server was destroyed. |
 | `stash` | `10.10.40.228` | Commit `36049dd` removed the Stash role and playbook entry. The root `TODO.md` security record explicitly describes the deployment as retired. Current PVE resources and Arista DHCP have no matching guest or address allocation. |
 | `arachne` | `10.10.70.50` | Commit `62fbdf3` replaced the OctoPi project with Kuma. Historical local Kuma inventory associates its `tx` host with this address. The `kuma/README.md` retirement record states that the user confirmed its retirement on 2026-10-02 and that inventory entries are stale. The old OctoPi alias was removed; no new use of the physical device was inferred. |
+| `gallery-dl` | `10.10.40.118` | The user confirmed on 2026-10-24 that the deployment is no longer live. Earlier checks found no current PVE guest, Arista reservation, or lease. |
+| `cobbleverse-nash` | `10.10.40.248` | The user confirmed on 2026-10-24 that the deployment is no longer live. Earlier checks found no live VMID 114, Arista reservation, or lease. |
 
 These removals affect only the Ansible-managed Mac hosts block. No live guest,
 physical server, reservation, DNS record, backup, or unmanaged hosts entry was
 deleted.
 
-### Still unverified
+### Resolution of the final two entries
 
-| Retained alias | Unchanged address | Current evidence and limit |
-| --- | --- | --- |
-| `gallery-dl` | `10.10.40.118` | No current PVE guest, Arista reservation, or Arista lease. The role remains enabled in local desired state. No explicit retirement record or replacement address was found. |
-| `cobbleverse-nash` | `10.10.40.248` | Local Minecraft configuration still declares VMID 114 here. Live PVE resources have no such guest, and Arista has no reservation or lease for the address. The dated `LIVE_AUDIT.md` report also records the absent guest, but no explicit retirement or replacement address was found. |
-
-The earlier TCP checks failed for both retained mappings. A failed connection,
-missing lease, or absent guest is not sufficient evidence to delete a declared
-host. Confirm retirement or a replacement address before changing these two
-entries. Their addresses remain unverified.
+Gallery and Cobbleverse were initially retained because missing guests, leases,
+and reservations alone did not prove retirement. The user's 2026-10-24
+confirmation supplies the missing evidence. Both aliases are now removed.
+Local desired-state declarations were not used as proof that the deployments
+remain active. No unresolved legacy aliases remain from this audit.
 
 ## Scope and maintenance
 

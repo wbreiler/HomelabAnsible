@@ -108,8 +108,8 @@ dscacheutil -q host -a name erebus
 
 The result should include `ip_address: 10.10.10.7`. Deluge uses the separate
 TrueNAS app address `10.10.20.3`. The [hosts audit](HOSTS-AUDIT.md) records the
-remaining entries and retirement evidence. Only Gallery and Cobbleverse remain
-unverified. Their legacy mappings remain unchanged.
+remaining entries and retirement evidence. All five obsolete legacy aliases
+were removed, including Gallery and Cobbleverse after user confirmation.
 
 ## 5. Confirm macOS remote access — on the Mini
 

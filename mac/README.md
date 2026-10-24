@@ -155,9 +155,9 @@ It configures the existing Git identity and creates `~/Developer`. Its shell
 preserves a forwarded SSH agent unless a local Bitwarden socket exists.
 Review the static hosts in `roles/mac_dev/tasks/hosts.yml` before applying them.
 The [2026-10-24 address audit](HOSTS-AUDIT.md) records two corrected addresses,
-the Seerr compatibility alias, and the DHCP/retirement follow-up. Three obsolete
-aliases were removed. Gallery and Cobbleverse remain unchanged because neither
-has an explicit retirement record or a confirmed replacement address. Deluge
+the Seerr compatibility alias, and the DHCP/retirement follow-up. Five obsolete
+aliases were removed. The user confirmed that Gallery and Cobbleverse are no
+longer live, resolving the final two uncertain entries. Deluge
 uses the TrueNAS app address `10.10.20.3`. The Erebus management alias uses
 `10.10.10.7`.
 
