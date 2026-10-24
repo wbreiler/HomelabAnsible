@@ -149,8 +149,8 @@ During the upload, iperf3 reported 19.9% local CPU utilization, including
 100%, while QEMU's main thread peaked at 25%. Peaks are one-second samples,
 not proof of sustained saturation. This evidence points toward macOS kernel
 and virtual NIC processing as the likely bottleneck. It does not identify a
-specific driver function, queue, or offload defect. No guest tuning, physical
-NIC passthrough, or sustained-load benchmark was performed.
+specific driver function, queue, or offload defect. Physical NIC passthrough
+and a sustained-load benchmark were not performed. Guest tuning results follow.
 
 During installation preparation, Forgejo held 219 unintended secondary IPv4
 addresses. After approval, those addresses were removed while its primary
@@ -160,3 +160,47 @@ Prometheus at `/root/forgejo-ipv4-before-macos-20261023.json`, with routes in
 on subsequent checks. Forgejo's filesystem was full. No files were deleted and
 no services were restarted. The cause of the secondary addresses remains
 unconfirmed and the full filesystem needs separate attention.
+
+
+## SSH access and tuning on 2026-10-23
+
+The user enabled Remote Login in macOS. The controller's existing
+`~/.ssh/lxc.pub` key was added to `/Users/pve/.ssh/authorized_keys`.
+The directory is mode 0700 and the file is mode 0600. The installed public-key
+fingerprint is `SHA256:8yiS0Ud2yTaLA82yYk0PyA47q4hryeOJ5LM3uetPRZQ`.
+SSH key authentication succeeded with the configured SSH agent:
+
+```bash
+ssh -i ~/.ssh/lxc.pub pve@10.10.40.9
+```
+
+The private key remains in the controller's SSH agent. Administrator commands
+still require the guest password. Password authentication was not disabled.
+
+All tuning comparisons used 10-second TCP tests against Mnemosyne. The first
+baseline measured 5.95 Gbit/s upload and 0.888 Gbit/s download. A 1-MiB socket
+window measured 5.48 Gbit/s upload and 0.890 Gbit/s download. A 4-MiB window
+measured 0.900 Gbit/s download. Zero-copy upload measured 5.93 Gbit/s.
+These per-socket options provided no useful gain.
+
+The user authenticated a bounded administrator script in the VM. Each test
+changed one setting, and an exit trap restored all original settings:
+
+| Guest setting | Upload Gbit/s | Download Gbit/s |
+| --- | ---: | ---: |
+| Baseline | 5.78 | 0.905 |
+| `net.inet.tcp.delayed_ack=0` | Not tested | 0.907 |
+| `net.inet.tcp.do_ack_compression=0` | Not tested | 0.911 |
+| `net.inet.tcp.tso=0` | 0.454 | 0.893 |
+
+Disabling TSO severely reduced upload. ACK changes did not materially improve
+download. Forcing `10Gbase-T` through `ifconfig` failed with
+`Operation not supported on socket`. The exit trap then restored the original
+values: `delayed_ack=3`, `do_ack_compression=1`, `tso=1`, and media `autoselect`.
+Fresh reads verified all four values. No persistent tuning was installed.
+
+A final test after restoration measured 6.08 Gbit/s upload and 0.898 Gbit/s
+download. Certificate-checked HTTPS still returned HTTP/2 200, and SSH key login
+still worked. The temporary source-restricted PBS firewall rule and TCP 5201
+listener were removed. Fresh checks confirmed both were absent. These short
+samples do not prove sustained throughput or identify the receive bottleneck.
