@@ -92,8 +92,8 @@ three pings with zero loss. Arista confirmed `10.10.40.9` belongs to
 the Ethernet service had no saved DNS server. The installed desktop was corrected
 with `networksetup -setdnsservers Ethernet 192.168.1.1`. Reading that setting
 confirmed the saved server. A guest `curl -I https://www.apple.com` returned
-HTTP/2 200 with certificate verification enabled. After the resource upgrade and a full VM power cycle, the saved DNS server
-remained `192.168.1.1` and certificate-checked HTTPS again returned HTTP/2 200.
+HTTP/2 200 with certificate verification enabled. After the resource upgrade
+and a full VM power cycle, the saved DNS server remained `192.168.1.1` and certificate-checked HTTPS again returned HTTP/2 200.
 
 The existing VMXNET3 adapter supports a `10Gbase-T` full-duplex media mode.
 macOS currently reports `autoselect (1000baseT <full-duplex>)`. This is a guest
@@ -125,8 +125,15 @@ The guest shut down through its Apple menu after the host ACPI request timed
 out. Proxmox started the VM with the new allocation and macOS returned to its
 desktop. Guest `sysctl` confirmed `hw.ncpu: 8` and `hw.memsize: 34359738368`.
 No disk, CPU model, network, or other guest allocation was changed. Lint and
-syntax checks passed. A repeat deployment completed with `changed=0`. The
-network test has not been repeated with the larger allocation.
+syntax checks passed. A repeat deployment completed with `changed=0`.
+
+The same two 10-second, single-stream TCP tests were repeated with 8 vCPUs and
+32 GiB RAM. Upload received 5.51 Gbit/s at the server, about 42% above the
+earlier result. Reverse download received 898 Mbit/s in macOS, compared with
+890 Mbit/s earlier. These short samples do not establish that the resource
+increase alone caused the difference. No parallel-stream or sustained-load
+test was run. The temporary firewall exception and server listener were again
+removed, with their absence verified.
 
 During installation preparation, Forgejo held 219 unintended secondary IPv4
 addresses. After approval, those addresses were removed while its primary
