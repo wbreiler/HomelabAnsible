@@ -67,8 +67,17 @@
           dest: "{{ macos_work }}/macrecovery.py"
           sha256: a36a8be248f8185134ba89d16f738305dd60ddbd74ce6df4cfac542f6ac80d45
         - source: EFI/opencore-osx-proxmox-vm.iso
-          dest: "{{ macos_iso }}/opencore-osx-proxmox-1.0.8.iso"
+          dest: "{{ macos_work }}/opencore-source-1.0.8.iso"
           sha256: 0972a5627895ceef219c5e534af66634baba3c5d3eeebe66b56dee1d261182aa
+
+    - name: Seed the writable boot image without replacing guest changes
+      ansible.builtin.copy:
+        src: "{{ macos_work }}/opencore-source-1.0.8.iso"
+        dest: "{{ macos_iso }}/opencore-osx-proxmox-1.0.8.iso"
+        remote_src: true
+        force: false
+        mode: '0644'
+      when: not ansible_check_mode
 
     - name: Download and verify Apple recovery and build its FAT image
       ansible.builtin.shell: |
@@ -111,6 +120,8 @@
           - ovmf
           - --machine
           - q35
+          - --keyboard
+          - en-us
           - --cores
           - '4'
           - --sockets
@@ -132,7 +143,7 @@
           - --boot
           - order=sata0;virtio0
           - --net0
-          - vmxnet3,bridge=vmbr0,tag=40,firewall=1
+          - vmxnet3=BC:24:11:20:25:AA,bridge=vmbr0,tag=40,firewall=1
           - --vga
           - vmware
           - --tablet
