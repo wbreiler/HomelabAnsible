@@ -1,0 +1,32 @@
+---
+- name: Create versioned tool directory
+  ansible.builtin.file:
+    path: "{{ dev_tools }}/{{ dev_tool.name }}"
+    state: directory
+    mode: '0755'
+
+- name: Download checksum-pinned vendor archive
+  ansible.builtin.get_url:
+    url: "{{ dev_tool.url }}"
+    dest: "{{ dev_home }}/.cache/dev-host/{{ dev_tool.name }}.archive"
+    checksum: "sha256:{{ dev_tool.sha256 }}"
+    mode: '0644'
+
+- name: Extract vendor archive
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/tar
+      - -xf
+      - "{{ dev_home }}/.cache/dev-host/{{ dev_tool.name }}.archive"
+      - -C
+      - "{{ dev_tools }}/{{ dev_tool.name }}"
+      - --strip-components
+      - "{{ dev_tool.strip | default(1) | string }}"
+    creates: "{{ dev_tools }}/{{ dev_tool.name }}/{{ dev_tool.binaries[0].path }}"
+
+- name: Link user executables
+  ansible.builtin.file:
+    src: "{{ dev_tools }}/{{ dev_tool.name }}/{{ item.path }}"
+    dest: "{{ dev_bin }}/{{ item.name }}"
+    state: link
+  loop: "{{ dev_tool.binaries }}"

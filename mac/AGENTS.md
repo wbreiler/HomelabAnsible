@@ -7,6 +7,11 @@ drifted.
 ## Scope and entry point
 
 - Run commands from `mac/`; this project has no inventory file.
+- `dev-host.yml` is a separate, explicitly selected remote Intel development
+  host entry point. Supply an inline `dev_host` inventory and SSH parameters.
+  It never imports the local reset tasks. Vendor archives are version-pinned
+  and checksum-verified in `dev-tools.yml`. Use the normal remote user, not
+  root. See `DEV-HOST.md` for installation and recovery boundaries.
 - `main.yml` runs only against `localhost` with `connection: local` and imports
   the task files in `tasks/`.
 - This playbook is Apple-silicon-specific: its Homebrew prefix and executable

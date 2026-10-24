@@ -1,0 +1,200 @@
+---
+# Remote Intel development host. Does not import the localhost reset playbook.
+- name: Prepare a remote macOS development host
+  hosts: dev_host
+  gather_facts: true
+  become: false
+  vars:
+    dev_home: "{{ ansible_facts.env.HOME }}"
+    dev_bin: "{{ dev_home }}/.local/bin"
+    dev_tools: "{{ dev_home }}/.local/share/dev-tools"
+  vars_files:
+    - dev-tools.yml
+  tasks:
+    - name: Require an explicitly selected remote Intel Mac
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.system == 'Darwin'
+          - ansible_facts.architecture == 'x86_64'
+          - inventory_hostname != 'localhost'
+          - ansible_connection | default('ssh') != 'local'
+          - dev_home != '/var/root'
+        fail_msg: Use a remote Intel Mac and its normal development account.
+
+    - name: Create development directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ dev_bin }}"
+        - "{{ dev_tools }}"
+        - "{{ dev_home }}/.cache/dev-host"
+        - "{{ dev_home }}/Developer"
+        - "{{ dev_home }}/Applications"
+
+    - name: Install verified vendor binaries
+      ansible.builtin.include_tasks: tasks/dev-tool.yml
+      when: not ansible_check_mode
+      loop: "{{ dev_vendor_tools }}"
+      loop_control:
+        loop_var: dev_tool
+        label: "{{ dev_tool.name }}"
+
+    - name: Preserve shell files and add development tools to PATH
+      diff: false
+      ansible.builtin.blockinfile:
+        path: "{{ dev_home }}/{{ item }}"
+        create: true
+        mode: '0644'
+        backup: true
+        marker: '# {mark} ANSIBLE DEVELOPMENT HOST'
+        block: |
+          export PATH="$HOME/.local/bin:/usr/local/bin:/usr/local/sbin:$PATH"
+      loop: [.zshenv, .zprofile, .zshrc]
+
+    - name: Install managed Python
+      ansible.builtin.command:
+        argv: ["{{ dev_bin }}/uv", python, install, '3.13']
+      register: dev_python
+      changed_when: "'Installed Python' in dev_python.stderr"
+
+    - name: Make managed Python the user Python command
+      ansible.builtin.file:
+        src: "{{ dev_bin }}/python3.13"
+        dest: "{{ dev_bin }}/python3"
+        state: link
+
+    - name: Keep global npm installations in the user account
+      diff: false
+      ansible.builtin.lineinfile:
+        path: "{{ dev_home }}/.npmrc"
+        regexp: '^prefix='
+        line: "prefix={{ dev_home }}/.local"
+        create: true
+        mode: '0600'
+        backup: true
+
+    - name: Set the requested Git author name
+      community.general.git_config:
+        name: user.name
+        value: "{{ dev_git_name }}"
+        scope: global
+      when: dev_git_name is defined
+
+    - name: Set the requested Git author email
+      community.general.git_config:
+        name: user.email
+        value: "{{ dev_git_email }}"
+        scope: global
+      when: dev_git_email is defined
+
+    - name: Inspect installed Python tools
+      ansible.builtin.command:
+        argv: ["{{ dev_bin }}/uv", tool, list]
+      register: dev_python_tools
+      changed_when: false
+
+    - name: Install isolated Ansible tools
+      ansible.builtin.command:
+        argv:
+          - "{{ dev_bin }}/uv"
+          - tool
+          - install
+          - --python
+          - '3.13'
+          - "{{ 'ansible-core>=2.18,<2.22' if item == 'ansible-core' else item }}"
+      loop: [ansible-core, ansible-lint]
+      when: "not ansible_check_mode and item not in dev_python_tools.stdout"
+      changed_when: true
+
+    - name: Inspect Ansible Proxmox dependencies
+      ansible.builtin.command:
+        argv:
+          - "{{ dev_home }}/.local/share/uv/tools/ansible-core/bin/python"
+          - -c
+          - import proxmoxer, requests
+      register: dev_ansible_imports
+      changed_when: false
+      failed_when: false
+
+    - name: Add required Proxmox dependencies to the Ansible environment
+      ansible.builtin.command:
+        argv:
+          - "{{ dev_bin }}/uv"
+          - tool
+          - install
+          - --force
+          - --python
+          - '3.13'
+          - --with
+          - proxmoxer
+          - --with
+          - requests
+          - ansible-core>=2.18,<2.22
+      when: not ansible_check_mode and dev_ansible_imports.rc != 0
+      changed_when: true
+
+    - name: Install the homelab Ansible collections
+      ansible.builtin.command:
+        argv:
+          - "{{ dev_bin }}/ansible-galaxy"
+          - collection
+          - install
+          - community.general:>=13.0.0,<14.0.0
+          - ansible.posix:>=2.2.0,<3.0.0
+          - nils_ost.bambuddy:1.1.0
+      environment:
+        PATH: "{{ dev_bin }}:/usr/local/bin:/usr/bin:/bin"
+      register: dev_collections
+      changed_when: "'was installed successfully' in dev_collections.stdout"
+
+    - name: Inspect Git LFS user configuration
+      ansible.builtin.command: git config --global --get filter.lfs.process # noqa command-instead-of-module -- git module cannot read global config
+      register: dev_lfs_config
+      failed_when: dev_lfs_config.rc not in [0, 1]
+      changed_when: false
+
+    - name: Install Git LFS user hooks
+      ansible.builtin.command:
+        argv: ["{{ dev_bin }}/git-lfs", install, --skip-repo]
+      when: not ansible_check_mode and dev_lfs_config.rc == 1
+      changed_when: true
+
+    - name: Copy smoke test
+      ansible.builtin.copy:
+        src: dev-host-check.sh
+        dest: "{{ dev_bin }}/dev-host-check"
+        mode: '0755'
+
+    - name: Install terminal and search tools
+      community.general.homebrew:
+        name: [tmux, jq, ripgrep]
+        state: present
+        path: /usr/local/bin
+      environment:
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+        HOMEBREW_NO_ASK: '1'
+
+    - name: Install editors in the user Applications directory
+      community.general.homebrew_cask:
+        name: [visual-studio-code, zed]
+        state: present
+        path: /usr/local/bin
+        install_options: ["appdir={{ dev_home }}/Applications"]
+      environment:
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+        HOMEBREW_NO_ASK: '1'
+
+    - name: Add the workspace guide
+      ansible.builtin.copy:
+        src: dev-host-start.md
+        dest: "{{ dev_home }}/Developer/START-HERE.md"
+        mode: '0644'
+        force: false
+
+    - name: Verify real development workflows
+      ansible.builtin.command: "{{ dev_bin }}/dev-host-check"
+      changed_when: false
+      environment:
+        PATH: "{{ dev_bin }}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"

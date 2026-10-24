@@ -1,0 +1,96 @@
+---
+{
+  "dev_vendor_tools": [
+    {
+      "name": "uv-0.13.5",
+      "url": "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-apple-darwin.tar.gz",
+      "sha256": "b0f52b0e3945b4107d89024ea38e625683011fbfc05a0d98f9fa2d6dcee28c66",
+      "strip": 1,
+      "binaries": [
+        {
+          "name": "uv",
+          "path": "uv"
+        },
+        {
+          "name": "uvx",
+          "path": "uvx"
+        }
+      ]
+    },
+    {
+      "name": "cli-v2.103.2",
+      "url": "https://github.com/cli/cli/releases/download/v2.103.2/gh_2.103.2_macOS_amd64.zip",
+      "sha256": "2dc7f1fc4761f96732995f6e4f4c6b4d705f2635da4126620c8b30eaa67b9c98",
+      "strip": 1,
+      "binaries": [
+        {
+          "name": "gh",
+          "path": "bin/gh"
+        }
+      ]
+    },
+    {
+      "name": "git-lfs-v3.8.1",
+      "url": "https://github.com/git-lfs/git-lfs/releases/download/v3.8.1/git-lfs-darwin-amd64-v3.8.1.zip",
+      "sha256": "4292b3518e717e53c20a6c2c0696e2069a21e97500ad14b80b06bd52de8f3b72",
+      "strip": 1,
+      "binaries": [
+        {
+          "name": "git-lfs",
+          "path": "git-lfs"
+        }
+      ]
+    },
+    {
+      "name": "cmake-v4.4.4",
+      "url": "https://github.com/Kitware/CMake/releases/download/v4.4.4/cmake-4.4.4-macos-universal.tar.gz",
+      "sha256": "4b7b73704b1db9b374e5c9ab8e17ac6148b817b6396ee75cd94a852cbac9d305",
+      "strip": 1,
+      "binaries": [
+        {
+          "name": "cmake",
+          "path": "CMake.app/Contents/bin/cmake"
+        },
+        {
+          "name": "ctest",
+          "path": "CMake.app/Contents/bin/ctest"
+        },
+        {
+          "name": "cpack",
+          "path": "CMake.app/Contents/bin/cpack"
+        }
+      ]
+    },
+    {
+      "name": "ninja-v1.13.2",
+      "url": "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-mac.zip",
+      "sha256": "c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b",
+      "strip": 0,
+      "binaries": [
+        {
+          "name": "ninja",
+          "path": "ninja"
+        }
+      ]
+    },
+    {
+      "name": "node-24.22.1",
+      "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-darwin-x64.tar.gz",
+      "sha256": "d132557e7ee2b85af08b0c8c34338e65c6430f2238d01f727728ef42dc83b035",
+      "binaries": [
+        {
+          "name": "node",
+          "path": "bin/node"
+        },
+        {
+          "name": "npm",
+          "path": "bin/npm"
+        },
+        {
+          "name": "npx",
+          "path": "bin/npx"
+        }
+      ]
+    }
+  ]
+}
