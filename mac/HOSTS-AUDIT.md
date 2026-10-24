@@ -1,8 +1,10 @@
 # Mac hosts address audit — 2026-10-24
 
 All 28 original aliases in `roles/mac_dev/tasks/hosts.yml` were checked.
-Twenty-three have current address evidence. Five legacy mappings remain
-unverified and unchanged. This audit changed repository files only.
+Twenty-three have current address evidence. The DHCP/retirement follow-up
+removed three obsolete aliases. Two legacy mappings remain unverified and
+unchanged. The managed block now has 26 aliases, including the added Seerr name.
+This audit changed repository files only.
 No live host, application, DNS record, or local `/etc/hosts` file was modified.
 
 ## Corrections
@@ -53,24 +55,48 @@ commands inside the running LXCs. Proxmox IP tags were not treated as proof.
 | `spoolman-nash` | `10.10.40.223` | Live LXC 102 address |
 | `apt-nash` | `10.10.40.175` | Live LXC 106 address |
 
-## Unverified legacy entries
+## DHCP and retirement follow-up — 2026-10-24
 
-No replacement address was inferred from a failed connection. These entries
-remain in the managed block because a timeout or absent guest does not prove
-that a hostname was retired or moved.
+The Arista switch is the DHCP server for VLAN 40. Read-only discovery used
+`show dhcp server leases` and the privileged command
+`show running-config section dhcp`. The configured DHCP scope is
+`10.10.40.0/24`; its dynamic range is `10.10.40.6` through `10.10.40.254`.
+The old Gallery, Stash, and Cobbleverse addresses have neither reservations
+nor current leases. The switch's DHCP configuration has no VLAN 30 or VLAN 70
+scope, so it cannot establish reservations for Nyx or Arachne.
 
-| Alias | Unchanged address | Audit result |
+A fresh PVE resource query lists only Atlas and Prometheus as cluster nodes.
+None of the five unresolved names appears as a current guest. This corroborates
+retirement records but does not, by itself, prove retirement.
+
+The UniFi gateway at `192.168.1.1` refused SSH. Its unauthenticated API routes
+returned HTTP 401. Gateway DHCP reservations were therefore not available.
+No gateway or switch settings were changed. Raw discovery and local inventories
+were not committed.
+
+### Removed obsolete aliases
+
+| Removed alias | Previous address | Retirement evidence |
 | --- | --- | --- |
-| `nyx` | `10.10.30.2` | Absent from the current two-node cluster and local Proxmox inventory; TCP 22 and 8006 did not connect |
-| `gallery-dl` | `10.10.40.118` | No matching guest in current cluster resources; TCP 22 did not connect |
-| `stash` | `10.10.40.228` | No matching guest in current cluster resources; TCP 22 and 9999 did not connect |
-| `cobbleverse-nash` | `10.10.40.248` | Ignored Minecraft configuration still lists VMID 114 here, but that guest is absent from live cluster resources; TCP 22 and 25565 did not connect |
-| `arachne` | `10.10.70.50` | Outside Proxmox; no current authoritative address source found; TCP 22 and 80 did not connect |
+| `nyx` | `10.10.30.2` | Commit `f0a1297` intentionally removed Nyx from cluster desired state and reassigned its fallback roles. The current inventory and live cluster contain only Atlas and Prometheus. This removes the obsolete cluster alias; it does not claim that the physical server was destroyed. |
+| `stash` | `10.10.40.228` | Commit `36049dd` removed the Stash role and playbook entry. The root `TODO.md` security record explicitly describes the deployment as retired. Current PVE resources and Arista DHCP have no matching guest or address allocation. |
+| `arachne` | `10.10.70.50` | Commit `62fbdf3` replaced the OctoPi project with Kuma. Historical local Kuma inventory associates its `tx` host with this address. The `kuma/README.md` retirement record states that the user confirmed its retirement on 2026-10-02 and that inventory entries are stale. The old OctoPi alias was removed; no new use of the physical device was inferred. |
 
-Confirm these hosts against current DHCP reservations, their consoles, or
-retirement records before changing or deleting their mappings. An unreachable
-port can indicate an offline device or filtering. It does not establish that
-an address is stale.
+These removals affect only the Ansible-managed Mac hosts block. No live guest,
+physical server, reservation, DNS record, backup, or unmanaged hosts entry was
+deleted.
+
+### Still unverified
+
+| Retained alias | Unchanged address | Current evidence and limit |
+| --- | --- | --- |
+| `gallery-dl` | `10.10.40.118` | No current PVE guest, Arista reservation, or Arista lease. The role remains enabled in local desired state. No explicit retirement record or replacement address was found. |
+| `cobbleverse-nash` | `10.10.40.248` | Local Minecraft configuration still declares VMID 114 here. Live PVE resources have no such guest, and Arista has no reservation or lease for the address. The dated `LIVE_AUDIT.md` report also records the absent guest, but no explicit retirement or replacement address was found. |
+
+The earlier TCP checks failed for both retained mappings. A failed connection,
+missing lease, or absent guest is not sufficient evidence to delete a declared
+host. Confirm retirement or a replacement address before changing these two
+entries. Their addresses remain unverified.
 
 ## Scope and maintenance
 
