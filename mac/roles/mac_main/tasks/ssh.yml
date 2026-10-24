@@ -1,16 +1,6 @@
 ---
-- name: Ensure ~/.ssh directory exists
-  ansible.builtin.file:
-    path: "{{ home_dir }}/.ssh"
-    state: directory
-    mode: "0700"
-
-- name: Copy SSH config
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/files/ssh_config"
-    dest: "{{ home_dir }}/.ssh/config"
-    mode: "0600"
-    backup: true
+- name: Install homelab SSH client configuration and public keys
+  ansible.builtin.import_tasks: ../../../tasks/ssh_client.yml
 
 - name: Remove obsolete 1Password SSH agent configuration
   ansible.builtin.file:

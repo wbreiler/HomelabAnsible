@@ -6,7 +6,7 @@ Two independent Ansible roles provision an Apple silicon Mac locally. Both use
 | Role | Purpose | Managed areas |
 | --- | --- | --- |
 | `mac_main` | Everyday personal Mac | Personal Homebrew apps, App Store apps, Bitwarden SSH configuration, Dock, desktop defaults, Touch ID |
-| `mac_dev` | Dedicated Codex/dev Mac Mini | Build tools, language runtimes, Codex and editors, shell, Git, VS Code, homelab hosts, SSH server, Screen Sharing, AC power settings |
+| `mac_dev` | Dedicated Codex/dev Mac Mini | Build tools, language runtimes, Codex and editors, shell, Git, VS Code, homelab SSH/public keys, SSH server, Screen Sharing, desktop startup, AC power settings |
 
 Each role installs Command Line Tools and Homebrew when absent. Package lists
 are in `roles/mac_main/defaults/main.yml` and `roles/mac_dev/defaults/main.yml`.
@@ -35,9 +35,10 @@ make run-tags PROFILE=dev TAGS=remote_access
 
 `make run` now selects only `main`. Use `make run-both` for the old combined
 software selection plus the new remote-access settings. A combined run applies
-`mac_dev` last, so its AC sleep settings take precedence. After a separate main
-run on a dev Mac, reapply `make run-tags PROFILE=dev TAGS=remote_access` because
-main defaults restore the personal sleep policy.
+`mac_dev` last. The dev role records a marker at
+`/Library/Application Support/HomelabAnsible/mac-dev`. Later main-role runs
+preserve the dev sleep policy. A combined run also skips personal sleep settings
+before that marker exists.
 
 Direct invocation also supports both roles:
 
@@ -47,7 +48,7 @@ ansible-playbook main.yml --ask-become-pass -e '{"mac_profiles":["main","dev"]}'
 
 Tags retain their previous names. Main tags are `xcode`, `homebrew`, `mas`,
 `ssh`, `dock`, `defaults`, and `macos`. Dev tags are `xcode`, `homebrew`, `shell`,
-`git`, `vscode`, `hosts`, and `remote_access`. Select `PROFILE=dev` or
+`ssh`, `git`, `vscode`, `hosts`, `startup`, and `remote_access`. Select `PROFILE=dev` or
 `PROFILE=both` when using dev tags.
 
 ## Dedicated Mac Mini access
@@ -55,7 +56,11 @@ Tags retain their previous names. Main tags are `xcode`, `homebrew`, `mas`,
 The dev role enables Remote Login with `systemsetup` and enables the native
 Screen Sharing launch service. It creates missing access groups and adds the
 current user. Existing allowed users remain. It does not enable a shared VNC
-password or copy private keys. Review existing access lists in Sharing settings.
+password or copy private keys. It installs all six public key selectors from
+`files/ssh_public_keys/` and the homelab SSH client configuration. The cluster
+public key grants incoming access through a managed `authorized_keys` block.
+Existing keys remain. Override `mac_dev_authorized_key_files` to select other
+tracked public key filenames. Review existing access lists in Sharing settings.
 
 macOS can require consent that Ansible cannot grant. Before an unattended run,
 grant the terminal Full Disk Access if `systemsetup` requires it. If Screen
@@ -78,14 +83,25 @@ port forwards or firewall bypasses are installed.
 
 The dev role disables system sleep on AC power and enables network wake and
 restart after power loss. It preserves display sleep and battery settings.
-FileVault remains enabled if already configured. A cold boot can require a
-local disk unlock before SSH or Screen Sharing becomes available. Test recovery
-with physical access before treating the Mac as unattended infrastructure.
+FileVault remains enabled if already configured. Apple silicon with macOS 26+
+supports SSH FileVault unlock after restart when networking is available. Test
+cold boot separately. Follow [MINI-RECOVERY.md](MINI-RECOVERY.md) before treating
+the Mac as unattended infrastructure. The role also copies that guide to
+`~/Developer/MINI-RECOVERY.md`.
 
-Sign into Codex and other apps through Screen Sharing. Complete any macOS
-privacy prompts there. The role does not copy authentication tokens, enable
-automatic login, or require Bitwarden for incoming SSH. Add trusted public keys
-to `~/.ssh/authorized_keys` separately if key authentication is desired.
+The role installs the Codex CLI and the ChatGPT desktop host. A user login agent
+opens `/Applications/ChatGPT.app` after graphical login. It loads the agent
+immediately when a graphical session exists. Otherwise, the next desktop login
+loads it. Sign into the desktop app, pair Remote Control, and run `codex login`
+once. Complete macOS privacy prompts through Screen Sharing. The role does not
+enable automatic macOS login. A restart still requires desktop login before Remote
+Control returns.
+
+Bitwarden is included for outbound Git and homelab authentication. Enable its
+SSH agent and unlock it after login. Incoming SSH needs only the trusted public
+key and the controller agent. A local Bitwarden socket takes precedence when
+present. Otherwise, the SSH config preserves the default or forwarded agent.
+Private keys, passwords, tokens, and authenticated sessions are never copied.
 
 ## Files and existing behavior
 
@@ -114,4 +130,7 @@ make validate
 
 After an authorized live installation, run `~/Developer/mac-dev-check.sh` on the
 Mac. Then verify SSH authentication and Screen Sharing control from another Mac.
-The local smoke check cannot prove network reachability or graphical control.
+The check verifies CLI sign-in, the desktop app and login agent, public keys,
+access groups, and the AC power policy. It cannot prove network reachability,
+Screen Sharing control, desktop sign-in, or Remote Control pairing. The recovery
+guide supplies the external checks and separate restart/cold-boot procedures.

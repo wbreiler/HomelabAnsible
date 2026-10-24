@@ -341,8 +341,16 @@
   become: true
   changed_when: true
 
+- name: Inspect the dedicated development host marker
+  ansible.builtin.stat:
+    path: /Library/Application Support/HomelabAnsible/mac-dev
+  register: mac_main_dev_marker
+
 - name: Set system sleep to 1 minute
   ansible.builtin.command: pmset -a sleep 1
+  when:
+    - "'dev' not in mac_profiles | default([])"
+    - not mac_main_dev_marker.stat.exists
   become: true
   changed_when: true
 

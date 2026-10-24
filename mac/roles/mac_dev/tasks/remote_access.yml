@@ -93,10 +93,17 @@
       vars:
         mac_dev_ac_power: "{{ mac_dev_power.stdout.split('AC Power:')[-1] }}"
       when: >-
-        not (mac_dev_ac_power is search('(?m)^\\s+sleep\\s+0\\s*$') and
+        not (mac_dev_ac_power is search('(?m)^\\s+sleep\\s+0(?:\\s|$)') and
              mac_dev_ac_power is search('(?m)^\\s+womp\\s+1\\s*$') and
              mac_dev_ac_power is search('(?m)^\\s+autorestart\\s+1\\s*$'))
       changed_when: true
+
+- name: Preserve the dedicated host power policy across later main runs
+  ansible.builtin.file:
+    path: /Library/Application Support/HomelabAnsible/mac-dev
+    state: directory
+    mode: "0755"
+  become: true
 
 - name: Create development workspace
   ansible.builtin.file:
@@ -110,6 +117,12 @@
     dest: "{{ home_dir }}/Developer/mac-dev-check.sh"
     mode: "0755"
 
+- name: Install the recovery guide
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/MINI-RECOVERY.md"
+    dest: "{{ home_dir }}/Developer/MINI-RECOVERY.md"
+    mode: "0644"
+
 - name: Explain macOS consent and login requirements
   ansible.builtin.debug:
     msg: >-
@@ -117,5 +130,7 @@
       enable Screen Sharing in System Settings > General > Sharing, with Only
       these users and your development account. Remote Management must be off.
       Remote Login changes may require Full Disk Access for the terminal.
-      Sign into Codex manually. FileVault can require a local unlock after boot.
+      Sign into the desktop app and Codex CLI manually, then pair Remote Control.
+      On Apple silicon with macOS 26+, test FileVault SSH unlock after restart.
+      Cold boot still needs a separate recovery test. See MINI-RECOVERY.md.
       Run ~/Developer/mac-dev-check.sh after installation.

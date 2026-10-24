@@ -1,0 +1,46 @@
+---
+- name: Create the user launch agents directory
+  ansible.builtin.file:
+    path: "{{ home_dir }}/Library/LaunchAgents"
+    state: directory
+    mode: "0755"
+
+- name: Start the Codex desktop host after graphical login
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/files/com.wbreiler.codex-desktop.plist"
+    dest: "{{ home_dir }}/Library/LaunchAgents/com.wbreiler.codex-desktop.plist"
+    mode: "0644"
+    validate: /usr/bin/plutil -lint %s
+  register: mac_dev_launch_agent
+
+- name: Inspect the current graphical session
+  ansible.builtin.command: /bin/launchctl print gui/{{ ansible_facts.user_uid }}
+  register: mac_dev_gui
+  changed_when: false
+  failed_when: mac_dev_gui.rc not in [0, 113]
+  check_mode: false
+
+- name: Activate startup in the current graphical session when available
+  when: mac_dev_gui.rc == 0
+  block:
+    - name: Inspect the desktop login agent
+      ansible.builtin.command: /bin/launchctl print gui/{{ ansible_facts.user_uid }}/com.wbreiler.codex-desktop
+      register: mac_dev_loaded_agent
+      changed_when: false
+      failed_when: mac_dev_loaded_agent.rc not in [0, 113]
+      check_mode: false
+
+    - name: Unload a changed desktop login agent
+      ansible.builtin.command: /bin/launchctl bootout gui/{{ ansible_facts.user_uid }}/com.wbreiler.codex-desktop
+      when: mac_dev_launch_agent.changed and mac_dev_loaded_agent.rc == 0
+      changed_when: true
+
+    - name: Load the desktop login agent
+      ansible.builtin.command:
+        argv:
+          - /bin/launchctl
+          - bootstrap
+          - gui/{{ ansible_facts.user_uid }}
+          - '{{ home_dir }}/Library/LaunchAgents/com.wbreiler.codex-desktop.plist'
+      when: mac_dev_launch_agent.changed or mac_dev_loaded_agent.rc != 0
+      changed_when: true

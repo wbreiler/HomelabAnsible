@@ -1,3 +1,9 @@
+Host atlas-dev
+  HostName 10.10.40.9
+  User pve
+  IdentityFile ~/.ssh/lxc.pub
+  IdentitiesOnly yes
+
 # Storage VLAN
 Host 10.10.20.2
 	IdentityFile ~/.ssh/cluster.pub
@@ -55,5 +61,6 @@ Host 192.168.1.222
   PreferredAuthentications publickey,password
   PubkeyAuthentication yes
 
-Host *
+# Use a local Bitwarden agent when present. Otherwise keep SSH_AUTH_SOCK.
+Match exec "/bin/test -S ~/.bitwarden-ssh-agent.sock"
   IdentityAgent "~/.bitwarden-ssh-agent.sock"

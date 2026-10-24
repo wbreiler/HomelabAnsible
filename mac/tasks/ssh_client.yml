@@ -1,0 +1,22 @@
+---
+- name: Create SSH client directories
+  ansible.builtin.file:
+    path: "{{ home_dir }}/.ssh{{ item }}"
+    state: directory
+    mode: "0700"
+  loop: ['', /sockets]
+
+- name: Install public identity selectors
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ home_dir }}/.ssh/{{ item | basename }}"
+    mode: "0644"
+  with_fileglob: "{{ playbook_dir }}/files/ssh_public_keys/*.pub"
+
+- name: Install homelab SSH client configuration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/files/ssh_config"
+    dest: "{{ home_dir }}/.ssh/config"
+    mode: "0600"
+    backup: true
+    validate: /usr/bin/ssh -G -F %s github.com

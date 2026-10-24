@@ -20,11 +20,11 @@
       loop_control:
         label: role bootstrap
 
-    - name: Verify dev cannot apply personal desktop or SSH client settings
+    - name: Verify dev cannot apply personal desktop settings
       ansible.builtin.assert:
         that:
           - "item not in mac_test_dev | to_json"
-      loop: [dock.yml, macos_defaults.yml, mas.yml, ssh.yml]
+      loop: [dock.yml, macos_defaults.yml, mas.yml]
 
     - name: Verify development tools and personal apps remain separate
       ansible.builtin.assert:
@@ -53,3 +53,8 @@
           - "'-d' not in mac_test_membership['ansible.builtin.command'].argv"
           - "mac_test_power['ansible.builtin.command'] == '/usr/bin/pmset -c sleep 0 womp 1 autorestart 1'"
           - mac_test_power.when is defined
+
+    - name: Exercise SSH, startup, power, and readiness regressions
+      ansible.builtin.command:
+        argv: ["{{ ansible_playbook_python }}", "{{ playbook_dir }}/test_mac_dev.py"]
+      changed_when: false

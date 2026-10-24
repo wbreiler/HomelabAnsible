@@ -1,14 +1,36 @@
 #!/bin/bash
-# Read-only smoke check. Run as the development user after a live installation.
+# Read-only readiness check. Run as the development user after installation/login.
 set -eu
-for tool in git gh cmake ninja node uv ansible ansible-lint; do
-    /usr/bin/env PATH="/opt/homebrew/bin:$PATH" /usr/bin/which "$tool" >/dev/null
+export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+
+for tool in git gh cmake ninja node uv ansible ansible-lint codex; do
+    command -v "$tool" >/dev/null || fail "Missing command: $tool"
 done
-test -d /Applications/Codex.app
-/bin/launchctl print system/com.openssh.sshd >/dev/null
-/bin/launchctl print system/com.apple.screensharing >/dev/null
+test -d /Applications/ChatGPT.app || fail 'Missing desktop host: /Applications/ChatGPT.app'
+codex login status >/dev/null 2>&1 || fail 'Codex CLI is not signed in. Run codex login.'
+
+/bin/launchctl print system/com.openssh.sshd >/dev/null 2>&1 || fail 'Remote Login is not loaded.'
+/bin/launchctl print system/com.apple.screensharing >/dev/null 2>&1 || fail 'Screen Sharing is not loaded.'
 for group in com.apple.access_ssh com.apple.access_screensharing; do
-    /usr/sbin/dseditgroup -o checkmember -m "$(id -un)" "$group"
+    /usr/sbin/dseditgroup -o checkmember -m "$(id -un)" "$group" >/dev/null || fail "User is not allowed in $group"
 done
-/usr/bin/pmset -g custom
-printf '%s\n' 'Local checks passed. Verify SSH and Screen Sharing from another Mac.'
+test -s "$HOME/.ssh/authorized_keys" || fail 'No incoming SSH keys are installed.'
+/usr/bin/ssh-keygen -lf "$HOME/.ssh/authorized_keys" >/dev/null || fail 'Incoming SSH keys are invalid.'
+for key in arachne cluster erebus github lxc monitoring-atl; do
+    /usr/bin/ssh-keygen -lf "$HOME/.ssh/$key.pub" >/dev/null || fail "Missing or invalid public key: $key.pub"
+done
+
+power="$(/usr/bin/pmset -g custom)"
+ac_power="${power##*AC Power:}"
+for setting in 'sleep 0' 'womp 1' 'autorestart 1'; do
+    read -r key value <<< "$setting"
+    /usr/bin/grep -Eq "^[[:space:]]+$key[[:space:]]+$value([[:space:]]|$)" <<< "$ac_power" || fail "AC power requires $setting"
+done
+
+agent="$HOME/Library/LaunchAgents/com.wbreiler.codex-desktop.plist"
+/usr/bin/plutil -lint "$agent" >/dev/null || fail 'Desktop login agent is missing or invalid.'
+/bin/launchctl print "gui/$(id -u)/com.wbreiler.codex-desktop" >/dev/null 2>&1 || fail 'Desktop login agent is not loaded. Log into the desktop.'
+/usr/bin/pgrep -u "$(id -u)" -x ChatGPT >/dev/null || fail 'Desktop host is not running. Open ChatGPT.'
+printf '%s\n' 'Local readiness checks passed.' \
+    'Still required: verify SSH from another Mac, Screen Sharing control, desktop sign-in, and Remote Control pairing.'

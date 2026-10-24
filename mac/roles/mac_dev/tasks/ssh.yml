@@ -1,0 +1,26 @@
+---
+- name: Install homelab SSH client configuration and public keys
+  ansible.builtin.import_tasks: ../../../tasks/ssh_client.yml
+
+- name: Validate incoming key selection
+  ansible.builtin.assert:
+    that:
+      - mac_dev_authorized_key_files is sequence and mac_dev_authorized_key_files is not string
+      - mac_dev_authorized_key_files | length > 0
+      - >-
+        mac_dev_authorized_key_files | difference(
+        query('ansible.builtin.fileglob', playbook_dir ~ '/files/ssh_public_keys/*.pub')
+        | map('basename') | list) | length == 0
+    fail_msg: Select one or more tracked public key filenames for incoming SSH access.
+
+- name: Authorize controller keys without removing existing keys
+  ansible.builtin.blockinfile:
+    path: "{{ home_dir }}/.ssh/authorized_keys"
+    create: true
+    mode: "0600"
+    backup: true
+    marker: '# {mark} ANSIBLE MAC DEV PUBLIC KEYS'
+    block: |
+      {% for key_file in mac_dev_authorized_key_files %}
+      {{ lookup('ansible.builtin.file', playbook_dir ~ '/files/ssh_public_keys/' ~ key_file) }}
+      {% endfor %}

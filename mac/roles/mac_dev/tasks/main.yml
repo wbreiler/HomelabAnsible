@@ -15,6 +15,9 @@
   ansible.builtin.import_tasks: shell.yml
   tags:
     - shell
+- name: Configure SSH authentication and homelab client
+  ansible.builtin.import_tasks: ssh.yml
+  tags: [ssh, remote_access]
 - name: Configure git
   ansible.builtin.import_tasks: git.yml
   tags:
@@ -31,3 +34,6 @@
   ansible.builtin.import_tasks: remote_access.yml
   tags:
     - remote_access
+- name: Configure desktop startup
+  ansible.builtin.import_tasks: startup.yml
+  tags: [startup, remote_access]

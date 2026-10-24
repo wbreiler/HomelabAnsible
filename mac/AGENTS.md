@@ -17,8 +17,10 @@ drifted.
   Each role imports the shared CLT/Homebrew bootstrap in `tasks/`.
   `mac_main` owns personal apps, SSH client config, Dock, and desktop defaults.
   `mac_dev` owns development tools, shell, Git, VS Code, hosts, remote access,
-  and AC power settings. Both roles can run independently. Run dev last when
-  combining roles so its AC sleep policy takes precedence.
+  and AC power settings. Both roles can run independently. The dev marker at
+  `/Library/Application Support/HomelabAnsible/mac-dev` prevents later main
+  runs from resetting sleep. Combined runs skip personal sleep before the
+  marker exists.
 - This playbook is Apple-silicon-specific: its Homebrew prefix and executable
   paths are `/opt/homebrew`. Preserve native arm64 paths and packages unless a
   requested change explicitly broadens platform support.
@@ -61,13 +63,23 @@ post-change checks.
 | `roles/mac_main/tasks/dock.yml` | `dock` | Destructively replaces the user's Dock layout, then restarts Dock. |
 | `roles/mac_main/tasks/macos_defaults.yml` | `defaults`, `macos` | Applies user and privileged defaults, power settings, and host naming, then restarts Finder and SystemUIServer. Some settings require logout or reboot. |
 
+Dev `ssh` and `remote_access` also import `roles/mac_dev/tasks/ssh.yml`.
+Both roles reuse `tasks/ssh_client.yml` for the homelab client config, socket
+directory, and six public key selectors. Only dev adds incoming authorized keys
+(default: cluster.pub), preserving existing entries. `startup` installs and
+loads the desktop login agent when a GUI session exists. See `MINI-RECOVERY.md`
+for manual account setup and separate restart/cold-boot acceptance checks.
+
 ## Managed static files
 
 Files under `files/` are copied into the user's home directory:
 
 - `zshrc` and `zprofile` provide the shell environment, aliases, Homebrew and
   pyenv setup.
-- `ssh_config` contains homelab host/network rules and Bitwarden agent wiring.
+- `ssh_config` contains homelab host/network rules and conditional Bitwarden
+  agent wiring. Without the local socket it preserves the default agent.
+- `ssh_public_keys/*.pub` are user-authorized public selectors. Never add
+  private keys to this directory. Validate public files with `ssh-keygen -lf`.
 - `vscode_settings.json` is the complete managed VS Code settings file.
 
 Do not add private keys, tokens, passwords, or machine-local secrets. Private

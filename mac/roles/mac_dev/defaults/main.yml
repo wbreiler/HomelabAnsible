@@ -69,6 +69,7 @@ mac_dev_formulae:
   - libpq
   - libmaxminddb
 mac_dev_casks:
+  - bitwarden
   - visual-studio-code
   - markedit
   - iterm2
@@ -84,3 +85,6 @@ mac_dev_casks:
   - claude
   - claude-code@latest
   - antigravity-cli
+
+# Only the controller/cluster key grants incoming access by default.
+mac_dev_authorized_key_files: [cluster.pub]
