@@ -47,7 +47,7 @@ and open VM 108's console.
 1. Start VM 108 and open its Proxmox console.
 2. Select the recovery image in OpenCore.
 3. Open Disk Utility and select **View > Show All Devices**.
-4. Erase only the new 128 GiB virtual disk as APFS with a GUID partition map.
+4. Erase only the new system disk as APFS with a GUID partition map.
 5. Close Disk Utility and install macOS on that disk.
 
 During installation, select **macOS Installer** in OpenCore after each restart.
@@ -212,11 +212,12 @@ samples do not prove sustained throughput or identify the receive bottleneck.
 ## Development host preparation on 2026-10-23
 
 VM 108 now starts with Atlas. Its backing disk was expanded to 512 GiB after
-a successful PBS backup. macOS sees the larger physical disk, but GPT still
-records the old 128 GiB boundary and APFS remains 128 GiB. The user deferred
-the offline GPT repair and filesystem growth. Sleep and disk sleep are
-disabled. The VM remains running. See [the follow-up note](macos-follow-up.md)
-before any further disk work.
+a successful PBS backup. The authorized offline GPT repair and APFS growth
+completed on October 24.
+APFS now uses 549546057728 bytes and initially had about 485 GiB available.
+Both partition entries and checked payloads survived the GPT repair unchanged.
+Sleep and disk sleep are disabled. The VM remains running. See
+[the follow-up note](macos-follow-up.md) for recovery metadata and copy checks.
 
 The separate [remote development playbook](../../mac/dev-host.yml) installed
 Node/npm, managed Python/uv, Git LFS, GitHub CLI, Ansible with Proxmox
@@ -232,11 +233,17 @@ The laptop has a verified `atlas-dev` SSH alias. Laptop Zed opened the VM's
 workspace through SSH. The VM's Metal API returned no device, so the remote
 editor workflow avoids its missing GPU acceleration. Zed 1.25.3 and VS Code
 1.143.1 are installed in the guest's Applications directory.
-Code migration, account sign-ins, and actual project builds remain deferred.
-No private keys or account tokens were copied.
+The laptop Developer directory was copied on October 24 with originals intact.
+Checksum and Git state comparisons passed after documented cache and credential
+exclusions. Archive, Python, and AppleModels checks passed on the VM.
+Account sign-ins remain manual. Private SSH keys remain in the agent.
+See the follow-up note for the initial credential exclusion correction.
 
 The first macOS backup, `vm/108/2026-10-24T04:11:32Z`, passed PBS verification
 with zero errors. A second development setup backup,
 `vm/108/2026-10-24T04:40:50Z`, completed successfully. Both include the attached
-boot and recovery images. No full restore was tested. The hourly job does not
-prune, and the existing all-guests backup job continues to handle retention.
+boot and recovery images. On October 24, a new backup containing the expanded
+filesystem and migrated code completed at `2026-10-24T05:29:23Z`. A full
+network-isolated restore reached the macOS login screen on Atlas. The temporary
+restore VM was removed. The hourly job does not prune, and the existing
+all-guests backup job continues to handle retention.
