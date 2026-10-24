@@ -5,9 +5,21 @@
     state: directory
     mode: "0755"
 
-- name: Start the Codex desktop host after graphical login
+- name: Create the browser setup guide directory
+  ansible.builtin.file:
+    path: "{{ home_dir }}/Developer"
+    state: directory
+    mode: "0755"
+
+- name: Install browser consent and pairing instructions
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/files/com.wbreiler.codex-desktop.plist"
+    src: "{{ playbook_dir }}/files/mac-browser-setup.md"
+    dest: "{{ home_dir }}/Developer/BROWSER-SETUP.md"
+    mode: "0644"
+
+- name: Start the Codex desktop host after graphical login
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/com.wbreiler.codex-desktop.plist.j2"
     dest: "{{ home_dir }}/Library/LaunchAgents/com.wbreiler.codex-desktop.plist"
     mode: "0644"
     validate: /usr/bin/plutil -lint %s

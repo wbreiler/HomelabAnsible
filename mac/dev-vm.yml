@@ -1,0 +1,27 @@
+---
+# Full development role for an explicitly selected remote Intel macOS VM.
+- name: Provision an Intel macOS development VM
+  hosts: dev_host
+  gather_facts: true
+  become: false
+  vars:
+    home_dir: "{{ ansible_facts.env.HOME }}"
+    username: "{{ ansible_facts.env.USER }}"
+    homebrew_prefix: /usr/local
+    mac_profiles: [dev]
+    mac_dev_vm: true
+    mac_dev_app_dir: "{{ home_dir }}/Applications"
+  pre_tasks:
+    - name: Require an explicitly selected remote Intel Mac account
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.system == 'Darwin'
+          - ansible_facts.architecture == 'x86_64'
+          - inventory_hostname != 'localhost'
+          - ansible_connection | default('ssh') != 'local'
+          - home_dir != '/var/root'
+          - ansible_facts.user_uid | int != 0
+        fail_msg: Select a remote Intel macOS VM and its normal development account.
+      tags: [always]
+  roles:
+    - mac_dev

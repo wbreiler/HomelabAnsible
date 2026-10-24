@@ -1,16 +1,18 @@
 # macOS provisioning
 
-Two independent Ansible roles provision an Apple silicon Mac locally. Both use
-`/opt/homebrew`. Neither role removes software installed by the other role.
+Two independent Ansible roles provision an Apple silicon Mac locally with
+`/opt/homebrew`. The development role also supports a remote Intel macOS VM
+with `/usr/local` through `dev-vm.yml`. Neither role removes the other role's software.
 
 | Role | Purpose | Managed areas |
 | --- | --- | --- |
 | `mac_main` | Everyday personal Mac | Personal Homebrew apps, App Store apps, Bitwarden SSH configuration, Dock, desktop defaults, Touch ID |
-| `mac_dev` | Dedicated Codex/dev Mac Mini | Build tools, language runtimes, Codex and editors, shell, Git, VS Code, homelab SSH/public keys, SSH server, Screen Sharing, desktop startup, AC power settings |
+| `mac_dev` | Dedicated development Mac or Intel VM | Build tools, language runtimes, Codex, Chrome and editors, shell, Git, VS Code, homelab SSH/public keys, SSH server, Screen Sharing, desktop startup, AC power settings |
 
 Each role installs Command Line Tools and Homebrew when absent. Package lists
 are in `roles/mac_main/defaults/main.yml` and `roles/mac_dev/defaults/main.yml`.
-The existing Intel remote playbook remains separate. See [DEV-HOST.md](DEV-HOST.md).
+The minimal Intel bootstrap remains separate in `dev-host.yml`.
+Use `dev-vm.yml` for the full development role. See [DEV-HOST.md](DEV-HOST.md).
 
 For a fresh dedicated Mini, follow [MINI-BOOTSTRAP.md](MINI-BOOTSTRAP.md).
 It covers tool installation, transfer of unpushed commits, manual sign-ins,
@@ -54,6 +56,39 @@ Tags retain their previous names. Main tags are `xcode`, `homebrew`, `mas`,
 `ssh`, `dock`, `defaults`, and `macos`. Dev tags are `xcode`, `homebrew`, `shell`,
 `ssh`, `git`, `vscode`, `hosts`, `startup`, and `remote_access`. Select `PROFILE=dev` or
 `PROFILE=both` when using dev tags.
+
+## Intel development VM
+
+Run the full role from this directory on the controller. The SSH alias must
+identify the VM and its normal development user. For the existing Atlas VM:
+
+```bash
+ansible-playbook -i 'dev_host,' dev-vm.yml -e ansible_host=atlas-dev -u pve --ask-become-pass --check --diff
+# Apply only after reviewing the changes and approving the live run:
+ansible-playbook -i 'dev_host,' dev-vm.yml -e ansible_host=atlas-dev -u pve --ask-become-pass
+```
+
+This entry point rejects localhost, local connections, root, and non-Intel
+targets. It imports only `mac_dev`. Its apps use `~/Applications`, matching
+the existing VM installation. Shell, Homebrew, VS Code, readiness checks, and
+desktop startup use native Intel paths. The local `main.yml` retains its
+Apple silicon guard and `/Applications` default.
+
+Intel does not install ARM-only `container-compose`. VM runs also skip
+OrbStack because nested hardware virtualization is unavailable. Docker CLI
+tools remain available for a separately configured remote engine. Packages
+without compatible bottles can require source builds and extra disk space.
+Homebrew failures stop the role rather than silently skipping development tools.
+
+The role installs Chrome and copies `~/Developer/BROWSER-SETUP.md`. Install the
+official ChatGPT extension through **Settings > Computer Use**, review its
+permissions, and confirm Chrome shows **Manage**. Account sign-in, device
+pairing, browser site permissions, and macOS privacy consent remain manual.
+The role does not copy authenticated profiles or modify the TCC database.
+
+This is a full provisioning role. It backs up and replaces shell and editor
+configuration, manages homelab SSH access, edits hosts, and enables remote
+services. Review the complete diff before applying it to an existing VM.
 
 ## Dedicated Mac Mini access
 
@@ -103,6 +138,9 @@ once. Complete macOS privacy prompts through Screen Sharing. The role does not
 enable automatic macOS login. A restart still requires desktop login before Remote
 Control returns.
 
+The role also installs Chrome and a browser setup guide in `~/Developer/`.
+Browser extension permissions require the user's direct consent.
+
 Bitwarden is included for outbound Git and homelab authentication. Enable its
 SSH agent and unlock it after login. Incoming SSH needs only the trusted public
 key and the controller agent. A local Bitwarden socket takes precedence when
@@ -111,7 +149,8 @@ Private keys, passwords, tokens, and authenticated sessions are never copied.
 
 ## Files and existing behavior
 
-The dev role replaces `.zshrc`, `.zprofile`, and VS Code settings with backups.
+The dev role renders `.zshrc`, `.zprofile`, and VS Code settings from templates,
+with backups of existing files.
 It configures the existing Git identity and creates `~/Developer`. Its shell
 preserves a forwarded SSH agent unless a local Bitwarden socket exists.
 Review the static hosts in `roles/mac_dev/tasks/hosts.yml` before applying them.

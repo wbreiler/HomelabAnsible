@@ -112,8 +112,8 @@
     mode: "0755"
 
 - name: Install development host verification command
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/files/mac-dev-check.sh"
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/mac-dev-check.sh.j2"
     dest: "{{ home_dir }}/Developer/mac-dev-check.sh"
     mode: "0755"
 

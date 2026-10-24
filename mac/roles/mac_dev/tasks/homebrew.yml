@@ -1,15 +1,27 @@
 ---
+- name: Create the development applications directory
+  ansible.builtin.file:
+    path: "{{ mac_dev_app_dir }}"
+    state: directory
+    mode: "0755"
+  when: mac_dev_app_dir != '/Applications'
+
 - name: Install mac_dev Homebrew formulae
   community.general.homebrew:
     name: "{{ item }}"
     state: present
-  loop: "{{ mac_dev_formulae }}"
+    path: "{{ homebrew_prefix }}/bin"
+  loop: "{{ mac_dev_formulae + (mac_dev_arm_formulae if ansible_facts.architecture == 'arm64' else []) }}"
   environment:
-    PATH: /opt/homebrew/bin:{{ ansible_facts.env.PATH }}
+    PATH: "{{ homebrew_prefix }}/bin:{{ ansible_facts.env.PATH }}"
 - name: Install mac_dev Homebrew casks
   community.general.homebrew_cask:
     name: "{{ item }}"
     state: present
+    path: "{{ homebrew_prefix }}/bin"
+    install_options: ["appdir={{ mac_dev_app_dir }}"]
   loop: "{{ mac_dev_casks }}"
+  # OrbStack needs hardware virtualization unavailable in this macOS VM.
+  when: not (mac_dev_vm | bool and item == 'orbstack')
   environment:
-    PATH: /opt/homebrew/bin:{{ ansible_facts.env.PATH }}
+    PATH: "{{ homebrew_prefix }}/bin:{{ ansible_facts.env.PATH }}"

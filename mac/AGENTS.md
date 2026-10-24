@@ -12,6 +12,10 @@ drifted.
   It never imports the local reset tasks. Vendor archives are version-pinned
   and checksum-verified in `dev-tools.yml`. Use the normal remote user, not
   root. See `DEV-HOST.md` for installation and recovery boundaries.
+- `dev-vm.yml` applies the full `mac_dev` role to an explicitly selected remote
+  Intel macOS VM. It uses `/usr/local` and `~/Applications`, rejects root and
+  local execution, skips ARM-only container-compose and VM-incompatible
+  OrbStack, and preserves the original minimal bootstrap entry point.
 - `main.yml` runs only against `localhost` with `connection: local`. It selects
   `mac_main`, `mac_dev`, or both through `mac_profiles` (default: `[main]`).
   Each role imports the shared CLT/Homebrew bootstrap in `tasks/`.
@@ -21,11 +25,12 @@ drifted.
   `/Library/Application Support/HomelabAnsible/mac-dev` prevents later main
   runs from resetting sleep. Combined runs skip personal sleep before the
   marker exists.
-- This playbook is Apple-silicon-specific: its Homebrew prefix and executable
-  paths are `/opt/homebrew`. Preserve native arm64 paths and packages unless a
-  requested change explicitly broadens platform support.
-- Several tasks overwrite user configuration files with the tracked files in
-  `files/`, using Ansible backups where configured. Review both the task and
+- `main.yml` remains Apple-silicon-specific with `/opt/homebrew`. Shared
+  Homebrew bootstrap and `mac_dev` tasks use `homebrew_prefix`, supplied by
+  each entry point. Preserve the local platform guard. Platform-dependent
+  shell, editor, startup, and readiness files are in `templates/`.
+- Several tasks overwrite user configuration files from `files/` or
+  `templates/`, using Ansible backups where configured. Review both the task and
   source file before changing such behavior.
 
 ## Common commands
@@ -73,17 +78,19 @@ covers the full fresh-install procedure, including transfer of unpushed commits.
 checks. `HOSTS-AUDIT.md` records verified addresses and unresolved legacy
 entries. The dev role copies all three documents to `~/Developer/`.
 
-## Managed static files
+## Managed user files
 
-Files under `files/` are copied into the user's home directory:
+Files under `files/` are copied, and files under `templates/` are rendered:
 
-- `zshrc` and `zprofile` provide the shell environment, aliases, Homebrew and
-  pyenv setup.
+- `templates/zshrc.j2` and `templates/zprofile.j2` provide the shell environment,
+  aliases, Homebrew, and pyenv setup.
 - `ssh_config` contains homelab host/network rules and conditional Bitwarden
   agent wiring. Without the local socket it preserves the default agent.
 - `ssh_public_keys/*.pub` are user-authorized public selectors. Never add
   private keys to this directory. Validate public files with `ssh-keygen -lf`.
-- `vscode_settings.json` is the complete managed VS Code settings file.
+- `templates/vscode_settings.json.j2` provides the complete VS Code settings.
+- The browser setup guide documents manual extension, privacy consent, and
+  account pairing. Never force-install an extension or grant TCC permissions.
 
 Do not add private keys, tokens, passwords, or machine-local secrets. Private
 SSH keys must remain outside this project.

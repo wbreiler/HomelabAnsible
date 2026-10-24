@@ -1,6 +1,6 @@
 {
   "editor.minimap.enabled": false,
-  "vscode-neovim.neovimExecutablePaths.darwin": "/opt/homebrew/bin/nvim",
+  "vscode-neovim.neovimExecutablePaths.darwin": "{{ homebrew_prefix }}/bin/nvim",
   "editor.renderWhitespace": "all",
   "workbench.editorAssociations": {
     "*.ipynb": "jupyter.notebook.ipynb"
@@ -13,8 +13,8 @@
   "security.workspace.trust.untrustedFiles": "open",
   "C_Cpp.updateChannel": "Insiders",
   "liveshare.presence": true,
-  "python.defaultInterpreterPath": "/opt/homebrew/bin/python3",
-  "python.pythonPath": "/opt/homebrew/bin/python3",
+  "python.defaultInterpreterPath": "{{ homebrew_prefix }}/bin/python3",
+  "python.pythonPath": "{{ homebrew_prefix }}/bin/python3",
   "git.enableSmartCommit": true,
   "github.copilot.enable": {
     "*": false,
@@ -47,7 +47,7 @@
   "editor.cursorBlinking": "smooth",
   "bracket-pair-colorizer-2.depreciation-notice": false,
   "editor.fontFamily": "Google Sans Code",
-  "zigLanguageClient.path": "/Users/wbreiler/Developer/zls/bin/zls",
+  "zigLanguageClient.path": "{{ home_dir }}/Developer/zls/bin/zls",
   "go.toolsManagement.autoUpdate": true,
   "editor.fontLigatures": true,
   "git.confirmSync": false,
@@ -76,9 +76,9 @@
   ],
   "workbench.iconTheme": "bearded-icons",
   "vs-kubernetes": {
-    "vscode-kubernetes.kubectl-path-mac": "/Users/wbreiler/.vs-kubernetes/tools/kubectl/kubectl",
-    "vscode-kubernetes.minikube-path-mac": "/Users/wbreiler/.vs-kubernetes/tools/minikube/darwin-arm64/minikube",
-    "vscode-kubernetes.helm-path-mac": "/Users/wbreiler/.vs-kubernetes/tools/helm/darwin-arm64/helm",
+    "vscode-kubernetes.kubectl-path-mac": "{{ home_dir }}/.vs-kubernetes/tools/kubectl/kubectl",
+    "vscode-kubernetes.minikube-path-mac": "{{ home_dir }}/.vs-kubernetes/tools/minikube/darwin-{{ "arm64" if ansible_facts.architecture == "arm64" else "amd64" }}/minikube",
+    "vscode-kubernetes.helm-path-mac": "{{ home_dir }}/.vs-kubernetes/tools/helm/darwin-{{ "arm64" if ansible_facts.architecture == "arm64" else "amd64" }}/helm",
     "vs-kubernetes.minikube-show-information-expiration": "2024-11-13T02:15:39.933Z"
   },
   "[yaml]": {

@@ -6,8 +6,8 @@
     mode: "0755"
 
 - name: Copy VS Code settings
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/files/vscode_settings.json"
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/vscode_settings.json.j2"
     dest: "{{ home_dir }}/Library/Application Support/Code/User/settings.json"
     backup: true
     mode: "0644"
@@ -50,7 +50,7 @@
     - tamasfe.even-better-toml
     - tommasov.hosts
   environment:
-    PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+    PATH: "/usr/local/bin:{{ homebrew_prefix }}/bin:{{ ansible_facts.env.PATH }}"
   register: mac_dev_vscode_ext_result
   changed_when: "'already installed' not in mac_dev_vscode_ext_result.stdout"
   failed_when: false

@@ -1,4 +1,7 @@
 ---
+mac_dev_app_dir: /Applications
+mac_dev_vm: false
+mac_dev_arm_formulae: [container-compose]
 mac_dev_formulae:
   - coreutils
   - curl
@@ -57,7 +60,6 @@ mac_dev_formulae:
   - lnav
   - xcodes
   - ipatool
-  - container-compose
   - ccusage
   - cliproxyapi
   - dylibbundler
@@ -80,6 +82,7 @@ mac_dev_casks:
   - codex
   - codexbar
   - chatgpt
+  - google-chrome
   - zed
   - android-platform-tools
   - claude

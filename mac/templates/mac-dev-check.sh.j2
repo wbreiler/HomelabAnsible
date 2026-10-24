@@ -1,13 +1,13 @@
 #!/bin/bash
 # Read-only readiness check. Run as the development user after installation/login.
 set -eu
-export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+export PATH="{{ homebrew_prefix }}/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
 for tool in git gh cmake ninja node uv ansible ansible-lint codex; do
     command -v "$tool" >/dev/null || fail "Missing command: $tool"
 done
-test -d /Applications/ChatGPT.app || fail 'Missing desktop host: /Applications/ChatGPT.app'
+test -d "{{ mac_dev_app_dir }}/ChatGPT.app" || fail 'Missing desktop host: {{ mac_dev_app_dir }}/ChatGPT.app'
 codex login status >/dev/null 2>&1 || fail 'Codex CLI is not signed in. Run codex login.'
 
 /bin/launchctl print system/com.openssh.sshd >/dev/null 2>&1 || fail 'Remote Login is not loaded.'

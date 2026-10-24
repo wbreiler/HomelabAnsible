@@ -29,5 +29,6 @@ check:
 
 validate:
 	ansible-playbook main.yml --syntax-check
-	ansible-lint main.yml
+	ansible-playbook -i 'dev_host,' dev-vm.yml --syntax-check
+	ansible-lint main.yml dev-vm.yml
 	ansible-playbook tests/roles.yml

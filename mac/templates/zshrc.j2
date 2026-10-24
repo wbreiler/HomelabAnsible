@@ -9,7 +9,7 @@ path=(
     "$HOME/.local/bin"
     "$HOME/.antigravity/antigravity/bin"
     "$HOME/.cargo/bin"
-    /opt/homebrew/opt/openjdk/bin
+    {{ homebrew_prefix }}/opt/openjdk/bin
     $path
     "$HOME/.lmstudio/bin"
     /usr/local/go/bin
@@ -45,7 +45,9 @@ alias bs="brew status"
 alias gaa="git add --all"
 alias gcm="git commit -m"
 alias gp="git push"
+{% if ansible_facts.architecture == 'arm64' %}
 alias compose="container-compose"
+{% endif %}
 alias mhud="launchctl setenv MTL_HUD_ENABLED"
 alias python="python3"
 
@@ -181,7 +183,7 @@ ghce() {
 # Claude Code routed through the local CLIProxyAPI Codex connection.
 _cliproxyapi_token() {
     setopt localoptions pipefail
-    local config=/opt/homebrew/etc/cliproxyapi.conf token
+    local config={{ homebrew_prefix }}/etc/cliproxyapi.conf token
     if [[ ! -r "$config" ]]; then
         print -u2 -- "claudex: cannot read $config"
         return 1
@@ -210,8 +212,8 @@ claudex() {
 }
 
 # Syntax highlighting must load after plugins and custom functions.
-if [[ -r /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
-    source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+if [[ -r {{ homebrew_prefix }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
+    source {{ homebrew_prefix }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 fi
 
 # Compact Mac machine report for interactive terminals.

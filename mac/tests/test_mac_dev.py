@@ -1,5 +1,6 @@
 """Offline regression checks. Uses the Python environment that runs Ansible."""
 import os
+import json
 from pathlib import Path
 import plistlib
 import re
@@ -16,6 +17,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def load(path):
     return yaml.safe_load((ROOT / path).read_text())
+
+
+def render(name, architecture='arm64', home='/Users/developer', app_dir='/Applications'):
+    return jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(
+        (ROOT / 'templates' / (name + '.j2')).read_text()).render(
+            homebrew_prefix='/usr/local' if architecture == 'x86_64' else '/opt/homebrew',
+            home_dir=home, mac_dev_app_dir=app_dir,
+            ansible_facts={'architecture': architecture})
 
 
 class MacDevTests(unittest.TestCase):
@@ -47,7 +56,7 @@ class MacDevTests(unittest.TestCase):
                 self.assertTrue(condition(mac_dev_ac_power=power))
 
     def test_startup_opens_the_installed_app_after_login(self):
-        agent = plistlib.loads((ROOT / 'files/com.wbreiler.codex-desktop.plist').read_bytes())
+        agent = plistlib.loads(render('com.wbreiler.codex-desktop.plist').encode())
         packages = load('roles/mac_dev/defaults/main.yml')['mac_dev_casks']
         self.assertIn('chatgpt', packages)
         self.assertIn('codex', packages)
@@ -55,6 +64,52 @@ class MacDevTests(unittest.TestCase):
         self.assertEqual(agent['LimitLoadToSessionType'], 'Aqua')
         self.assertTrue(agent['RunAtLoad'])
         self.assertNotIn('KeepAlive', agent)  # open exits immediately. Do not create a restart loop.
+
+    def test_intel_entrypoint_is_remote_dev_only(self):
+        play = load('dev-vm.yml')[0]
+        self.assertEqual(play['hosts'], 'dev_host')
+        self.assertEqual(play['roles'], ['mac_dev'])
+        self.assertTrue(play['vars']['mac_dev_vm'])
+        self.assertIn("ansible_connection | default('ssh') != 'local'",
+                      play['pre_tasks'][0]['ansible.builtin.assert']['that'])
+        self.assertIn("ansible_facts.architecture == 'arm64'",
+                      load('main.yml')[0]['pre_tasks'][0]['ansible.builtin.assert']['that'])
+
+    def test_platform_templates_use_native_paths(self):
+        for arch, prefix, app_dir in [('arm64', '/opt/homebrew', '/Applications'),
+                                      ('x86_64', '/usr/local', '/Users/VM User/Applications')]:
+            with self.subTest(architecture=arch):
+                home = '/Users/VM User'
+                agent = plistlib.loads(render('com.wbreiler.codex-desktop.plist', arch, home, app_dir).encode())
+                self.assertEqual(agent['ProgramArguments'][-1], app_dir + '/ChatGPT.app')
+                settings = json.loads(render('vscode_settings.json', arch, home, app_dir))
+                self.assertEqual(settings['python.defaultInterpreterPath'], prefix + '/bin/python3')
+                self.assertTrue(settings['vs-kubernetes']['vscode-kubernetes.helm-path-mac'].startswith(home + '/'))
+                self.assertIn('darwin-' + ('arm64' if arch == 'arm64' else 'amd64'),
+                              settings['vs-kubernetes']['vscode-kubernetes.helm-path-mac'])
+                for name in ['zprofile', 'zshrc', 'mac-dev-check.sh']:
+                    source = render(name, arch, home, app_dir)
+                    self.assertIn(prefix, source)
+                    if arch == 'x86_64':
+                        self.assertNotIn('/opt/homebrew', source)
+                    result = subprocess.run(['/bin/bash' if name.endswith('.sh') else '/bin/zsh', '-n'],
+                                            input=source, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual('alias compose="container-compose"' in render('zshrc', arch), arch == 'arm64')
+
+    def test_intel_skips_arm_containers_and_vm_skips_orbstack(self):
+        defaults = load('roles/mac_dev/defaults/main.yml')
+        self.assertNotIn('container-compose', defaults['mac_dev_formulae'])
+        self.assertEqual(defaults['mac_dev_arm_formulae'], ['container-compose'])
+        self.assertIn('google-chrome', defaults['mac_dev_casks'])
+        tasks = load('roles/mac_dev/tasks/homebrew.yml')
+        casks = next(t for t in tasks if t['name'] == 'Install mac_dev Homebrew casks')
+        env = jinja2.Environment()
+        env.filters['bool'] = bool
+        condition = env.compile_expression(casks['when'])
+        for vm, item, expected in [(True, 'orbstack', False), (False, 'orbstack', True),
+                                   (True, 'chatgpt', True), (True, 'google-chrome', True)]:
+            self.assertEqual(condition(mac_dev_vm=vm, item=item), expected)
 
     def test_only_valid_public_keys_are_distributed(self):
         keys = ROOT / 'files/ssh_public_keys'
@@ -126,7 +181,7 @@ class MacDevTests(unittest.TestCase):
             app.mkdir()
             (home / '.ssh').mkdir()
             (home / '.ssh/authorized_keys').write_text('fixture public key\n')
-            source = (ROOT / 'files/mac-dev-check.sh').read_text()
+            source = render('mac-dev-check.sh')
             source = source.replace('/Applications/ChatGPT.app', str(app))
             source = source.replace('export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"',
                                     f'export PATH="{tools}:/usr/bin:/bin"')

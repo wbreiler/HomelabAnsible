@@ -70,6 +70,12 @@ build and its architecture overrides are documented below.
 
 ## Independent Codex host
 
+The full development role now supports this Intel VM through `dev-vm.yml`.
+See [the VM role instructions](README.md#intel-development-vm) before applying
+it. The original `dev-host.yml` remains a smaller, separate bootstrap that
+preserves shell files. The full role replaces shell and editor files with
+backups and manages SSH access, hosts, remote services, and power settings.
+
 The remote playbook installs the current `chatgpt` Homebrew cask into
 `~/Applications/ChatGPT.app`. This desktop app includes Codex. The former
 `codex-app` cask is discontinued. The Intel build installed on 2026-10-24 is

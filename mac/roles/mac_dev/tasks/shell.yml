@@ -14,15 +14,15 @@
     HOME: "{{ home_dir }}"
 
 - name: Copy .zshrc
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/files/zshrc"
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/zshrc.j2"
     dest: "{{ home_dir }}/.zshrc"
     backup: true
     mode: "0644"
 
 - name: Copy .zprofile
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/files/zprofile"
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/zprofile.j2"
     dest: "{{ home_dir }}/.zprofile"
     backup: true
     mode: "0644"
@@ -32,22 +32,22 @@
     name: zsh-syntax-highlighting
     state: present
   environment:
-    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+    PATH: "{{ homebrew_prefix }}/bin:{{ ansible_facts.env.PATH }}"
 
 - name: Install pyenv Python 3.14.0
   ansible.builtin.command: >
-    /opt/homebrew/bin/pyenv install 3.14.0
+    {{ homebrew_prefix }}/bin/pyenv install 3.14.0
   args:
     creates: "{{ home_dir }}/.pyenv/versions/3.14.0"
   environment:
-    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+    PATH: "{{ homebrew_prefix }}/bin:{{ ansible_facts.env.PATH }}"
     PYENV_ROOT: "{{ home_dir }}/.pyenv"
   ignore_errors: true # noqa ignore-errors -- retain existing optional language package behavior
 
 - name: Set pyenv global Python version
-  ansible.builtin.command: /opt/homebrew/bin/pyenv global 3.14.0
+  ansible.builtin.command: "{{ homebrew_prefix }}/bin/pyenv global 3.14.0"
   environment:
-    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+    PATH: "{{ homebrew_prefix }}/bin:{{ ansible_facts.env.PATH }}"
     PYENV_ROOT: "{{ home_dir }}/.pyenv"
   register: mac_dev_pyenv_global
   changed_when: mac_dev_pyenv_global.rc == 0 and 'already' not in mac_dev_pyenv_global.stdout
@@ -70,11 +70,11 @@
   community.general.npm:
     name: "{{ item }}"
     global: true
-    executable: /opt/homebrew/bin/npm
+    executable: "{{ homebrew_prefix }}/bin/npm"
   loop:
     - wrangler
   environment:
-    PATH: "/opt/homebrew/bin:{{ ansible_facts.env.PATH }}"
+    PATH: "{{ homebrew_prefix }}/bin:{{ ansible_facts.env.PATH }}"
   ignore_errors: true # noqa ignore-errors -- retain existing optional language package behavior
 
 - name: Set zsh as default shell
