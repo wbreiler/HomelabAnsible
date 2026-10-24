@@ -47,7 +47,6 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
   * `forgejo`: Creates or adopts the Forgejo LXC with a pinned release binary and strict upgrade guards.
   * `sonarr`: Creates or adopts the Sonarr LXC with a pinned, checksum-verified release.
   * `radarr`: Creates or adopts the Radarr LXC with a pinned, checksum-verified release.
-  * `gallery_dl`: Creates or adopts the privileged, NFS-mounting gallery-dl LXC.
   * `gatus`: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain.
   * `diun`: Creates or adopts the Diun image-update watcher LXC.
   * `centralized_logging`: Creates Loki and Grafana and deploys Alloy.
@@ -116,23 +115,22 @@ local variable files before changing behavior.
 19. **forgejo**: Manages the Forgejo LXC with strict upgrade guards.
 20. **sonarr**: Manages the Sonarr LXC.
 21. **radarr**: Manages the Radarr LXC.
-22. **gallery_dl**: Manages the privileged, NFS-mounting gallery-dl LXC.
-23. **speedtest_tracker**: Creates or adopts the Internet monitoring LXC.
-24. **gatus**: Manages the Gatus status-page LXC.
-25. **diun**: Manages the Diun image-update watcher LXC.
-26. **centralized_logging**: Creates Loki and Grafana and deploys Alloy.
-27. **tailscale_router**: Manages the Tailscale subnet-router LXC.
-28. **update_apps**: Installs the wrapper for eligible unmanaged application updates.
-29. **update_all**: Updates Proxmox nodes and LXC operating systems.
-30. **update_reminder**: Installs per-node Discord update reminders.
-31. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
-32. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
-33. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
-34. **vm_deploy**: Deploys full VMs from ISOs.
+22. **speedtest_tracker**: Creates or adopts the Internet monitoring LXC.
+23. **gatus**: Manages the Gatus status-page LXC.
+24. **diun**: Manages the Diun image-update watcher LXC.
+25. **centralized_logging**: Creates Loki and Grafana and deploys Alloy.
+26. **tailscale_router**: Manages the Tailscale subnet-router LXC.
+27. **update_apps**: Installs the wrapper for eligible unmanaged application updates.
+28. **update_all**: Updates Proxmox nodes and LXC operating systems.
+29. **update_reminder**: Installs per-node Discord update reminders.
+30. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
+31. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
+32. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
+33. **vm_deploy**: Deploys full VMs from ISOs.
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
-35. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
+34. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
 
 ### PBS Storage Pattern
 
@@ -299,8 +297,8 @@ management, LXC installation, system updates, and PBS restores.
 ### Managed application LXCs
 
 * Repository-owned application roles use the shared `tasks/create_lxc.yml`
-  bootstrap. New containers default to unprivileged; `gallery_dl` is
-  privileged because its kernel NFS mount requires that mode.
+  bootstrap. New containers default to unprivileged. A kernel NFS mount
+  requires privileged mode.
 * Existing HA-managed containers are located at run time through
   `tasks/resolve_lxc_node.yml`. A role's `<role>_node` value is therefore the
   fresh-install fallback, not a reliable statement of its current location.
@@ -395,14 +393,14 @@ management, LXC installation, system updates, and PBS restores.
 * Pins and checksum-verifies the release tarball, backs up config and database state before atomically swapping the install directory, rolls back automatically when the upgraded service fails its `/ping` check, removes the remote updater, and verifies the API-reported version.
 * Skipped by default unless `install_radarr: true`.
 
-### gallery_dl
+### gallery_dl (retired)
 
-* Creates or adopts the configured gallery-dl LXC through the shared bootstrap;
-  the non-empty NFS settings make a newly created container privileged.
-* Installs gallery-dl, manages its config and weekly cron job, mounts the
-  configured NFS export, and optionally copies the gitignored cookies file.
-  The application itself is not version-pinned by this role.
-* Skipped by default unless `install_gallery_dl: true`.
+* The user confirmed retirement on 2026-10-24. The role remains as reference
+  code only and is not imported by `site.yml`.
+* The local active variables and tracked example no longer contain its enable
+  flag or profiles. The old tag/enable flag cannot deploy it through `site.yml`.
+* Do not reconnect it to active playbooks without an explicit new deployment
+  request. Preserve existing data, backups, and the ignored cookies file.
 
 ### update_all
 

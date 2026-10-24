@@ -20,7 +20,7 @@ is in HA maintenance mode; guest placement must be checked again before use.
 - **PBS Storage Configuration**: Connects Proxmox nodes to your Proxmox Backup Server with shared namespace support
 - **ISO Management**: Automatically downloads ISOs from HTTP server, direct URLs, NFS, or SMB shares with real-time progress display
 - **LXC Template Downloads**: Automatically downloads latest LXC OS templates on all nodes
-- **Managed App LXCs**: Creates or adopts Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Bambuddy, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, Radarr, gallery-dl, Gatus, Diun, and a Tailscale subnet router through repository-owned roles
+- **Managed App LXCs**: Creates or adopts Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Bambuddy, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, Radarr, Gatus, Diun, and a Tailscale subnet router through repository-owned roles
 - **PBS Backup Job**: Creates/reconciles a scheduled backup job on the PBS storage, opt-in and off by default
 - **VM Deployment**: Deploys full VMs from ISOs with customizable hardware (disk bus, BIOS, TPM, network model)
 - **macOS Tahoe**: Standalone [Atlas VM playbook](docs/macos.md) with pinned OpenCore media and no host boot changes
@@ -83,7 +83,7 @@ proxmox-ansible/
 │   ├── forgejo/             # Managed Forgejo LXC
 │   ├── sonarr/              # Managed Sonarr LXC
 │   ├── radarr/              # Managed Radarr LXC
-│   ├── gallery_dl/          # gallery-dl LXC (custom install)
+│   ├── gallery_dl/          # retired reference role; not in site.yml
 │   ├── gatus/               # Managed Gatus LXC (uptime monitoring/status page)
 │   ├── diun/                # Managed Diun LXC (Docker image update watcher)
 │   ├── tailscale_router/    # Managed Tailscale subnet router LXC
@@ -388,7 +388,11 @@ Repository-owned roles in this section manage single-purpose LXCs; the Tailscale
 - **`forgejo`** — Forgejo Git hosting. Its defaults identify `forgejo-nash`, VMID 103, and `prometheus` as the fresh-install fallback. It pins and verifies the Forgejo 16.0.6 release binary, refuses downgrades and skipped major versions, preserves `app.ini` and repository data, checks SQLite integrity, backs up before upgrades and rolls back automatically on a failed health check, removes the remote update hook, and verifies the binary-reported version.
 - **`sonarr`** — Sonarr TV manager. Its defaults identify `sonarr-nash`, VMID 110, and `atlas` as the fresh-install fallback. It pins and verifies Sonarr 4.0.20.3014, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
 - **`radarr`** — Radarr movie manager. Its defaults identify `radarr-nash`, VMID 111, and `prometheus` as the fresh-install fallback. It pins and verifies Radarr 6.4.4.10685, preserves `config.xml` and the SQLite databases, backs up before upgrades and rolls back automatically on a failed `/ping` health check, removes the remote update hook, and verifies the API-reported version.
-- **`gallery_dl`** — gallery-dl on a cron schedule, NFS-mounted to the vault share. Configure `gallery_dl_profiles` (usernames to archive) and optionally `gallery_dl_cookies_file`.
+- **`gallery_dl` (retired 2026-10-24)** — retained as reference code only.
+  `site.yml` no longer imports this role. Its enable flag and profiles were
+  removed from the local active variables and the tracked configuration example.
+  Ordinary site runs and the old tag/enable flag cannot recreate the retired LXC.
+  Existing data, backups, and the ignored cookies file were not deleted.
 - **`gatus`** — Uptime monitoring/status page. See [Monitoring](#monitoring) above for details.
 - **`diun`** — Docker image update watcher. See [Monitoring](#monitoring) above for details.
 - **`centralized_logging`** — Loki, Grafana, and Alloy. See [Centralized logging](#centralized-logging).
@@ -536,8 +540,6 @@ radarr_node: "prometheus"
 radarr_vmid: "111"
 radarr_version: "6.4.4.10685"
 
-install_gallery_dl: true
-
 install_gatus: true
 gatus_node: "atlas"
 gatus_vmid: ""  # selects the next available managed-app VMID
@@ -571,7 +573,6 @@ ansible-playbook -i inventory.yml site.yml --tags pocket_id -e 'install_pocket_i
 ansible-playbook -i inventory.yml site.yml --tags forgejo -e 'install_forgejo=true' --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --tags sonarr -e 'install_sonarr=true' --ask-vault-pass
 ansible-playbook -i inventory.yml site.yml --tags radarr -e 'install_radarr=true' --ask-vault-pass
-ansible-playbook site.yml --tags gallery_dl -e 'install_gallery_dl=true' --ask-vault-pass
 ansible-playbook site.yml --tags gatus -e 'install_gatus=true' --ask-vault-pass
 ansible-playbook site.yml --tags diun -e 'install_diun=true' --ask-vault-pass
 ansible-playbook site.yml --tags tailscale_router -e 'install_tailscale_router=true' --ask-vault-pass

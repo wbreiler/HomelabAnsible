@@ -194,12 +194,6 @@ install_radarr: false
 # radarr_hostname: "radarr-nash"
 # radarr_version: "6.3.0.10514"
 
-install_gallery_dl: false
-# gallery_dl_node: "atlas"
-# gallery_dl_profiles:
-#   - user1
-#   - user2
-
 install_gatus: false
 # gatus_node: "atlas"
 # gatus_vmid: ""  # empty selects the next available managed-app VMID
