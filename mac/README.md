@@ -12,6 +12,10 @@ Each role installs Command Line Tools and Homebrew when absent. Package lists
 are in `roles/mac_main/defaults/main.yml` and `roles/mac_dev/defaults/main.yml`.
 The existing Intel remote playbook remains separate. See [DEV-HOST.md](DEV-HOST.md).
 
+For a fresh dedicated Mini, follow [MINI-BOOTSTRAP.md](MINI-BOOTSTRAP.md).
+It covers tool installation, transfer of unpushed commits, manual sign-ins,
+and restart/cold-boot checks. Use `make run-dev` with the hosts task enabled.
+
 ## Choose a role
 
 Install Ansible on the target Mac as its normal development user. Complete
@@ -87,7 +91,8 @@ FileVault remains enabled if already configured. Apple silicon with macOS 26+
 supports SSH FileVault unlock after restart when networking is available. Test
 cold boot separately. Follow [MINI-RECOVERY.md](MINI-RECOVERY.md) before treating
 the Mac as unattended infrastructure. The role also copies that guide to
-`~/Developer/MINI-RECOVERY.md`.
+`~/Developer/MINI-RECOVERY.md`. The bootstrap guide is copied alongside it as
+`~/Developer/MINI-BOOTSTRAP.md`.
 
 The role installs the Codex CLI and the ChatGPT desktop host. A user login agent
 opens `/Applications/ChatGPT.app` after graphical login. It loads the agent

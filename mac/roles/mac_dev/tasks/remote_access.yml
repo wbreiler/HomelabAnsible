@@ -117,11 +117,12 @@
     dest: "{{ home_dir }}/Developer/mac-dev-check.sh"
     mode: "0755"
 
-- name: Install the recovery guide
+- name: Install the bootstrap and recovery guides
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/MINI-RECOVERY.md"
-    dest: "{{ home_dir }}/Developer/MINI-RECOVERY.md"
+    src: "{{ playbook_dir }}/{{ item }}"
+    dest: "{{ home_dir }}/Developer/{{ item }}"
     mode: "0644"
+  loop: [MINI-BOOTSTRAP.md, MINI-RECOVERY.md]
 
 - name: Explain macOS consent and login requirements
   ansible.builtin.debug:

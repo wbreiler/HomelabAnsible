@@ -67,8 +67,10 @@ Dev `ssh` and `remote_access` also import `roles/mac_dev/tasks/ssh.yml`.
 Both roles reuse `tasks/ssh_client.yml` for the homelab client config, socket
 directory, and six public key selectors. Only dev adds incoming authorized keys
 (default: cluster.pub), preserving existing entries. `startup` installs and
-loads the desktop login agent when a GUI session exists. See `MINI-RECOVERY.md`
-for manual account setup and separate restart/cold-boot acceptance checks.
+loads the desktop login agent when a GUI session exists. `MINI-BOOTSTRAP.md`
+covers the full fresh-install procedure, including transfer of unpushed commits.
+`MINI-RECOVERY.md` covers recovery and separate restart/cold-boot acceptance
+checks. The dev role copies both guides to `~/Developer/`.
 
 ## Managed static files
 

@@ -3,6 +3,9 @@
 The playbook prepares the Mini. Hardware recovery is **unverified** until the
 checks below pass on that Mini. Keep physical access for the first tests.
 
+For the complete fresh-install procedure, follow
+[MINI-BOOTSTRAP.md](MINI-BOOTSTRAP.md).
+
 ## Before unattended use
 
 1. Complete Setup Assistant with the normal administrator account.
@@ -64,10 +67,17 @@ The controlling Mac must have access to the cluster private key through its
 agent. Verify the host-key fingerprint on the Mini before accepting it.
 
 1. Run `ssh -o BatchMode=yes mac-mini-dev true` from the controlling Mac.
-2. Run `ssh mac-mini-dev 'command -v codex && codex login status'`.
+2. Check the remote CLI with the login-shell command below.
 3. Connect to `vnc://<reserved-mini-address>` with Screen Sharing.
 4. Run `~/Developer/mac-dev-check.sh` as the Mini's development user.
 5. Verify Remote Control from a paired device.
+
+Use an explicit login shell so the remote command loads the Homebrew PATH:
+
+```bash
+ssh mac-mini-dev \
+  '/bin/zsh -lc "command -v codex && codex login status"'
+```
 
 For SSH-based Codex projects, add the alias in **Settings > Connections** on the
 controlling desktop app. Codex starts its remote server through SSH. This path
