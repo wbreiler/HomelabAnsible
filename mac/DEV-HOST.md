@@ -25,8 +25,10 @@ They live under `~/.local/share/dev-tools`, with links under `~/.local/bin`.
 Update the version and checksum together. Python 3.13 is managed by uv.
 Ansible and ansible-lint use isolated uv tool environments. Existing system Git
 and the Command Line Tools provide the compiler. Homebrew manages tmux, jq,
-ripgrep, VS Code, and Zed. It may build Intel dependencies from source.
-Editors install into the user's Applications directory.
+ripgrep, VS Code, and Zed. It may build Intel dependencies from source. A repeat run with wxWidgets
+installed reported `changed=0`, with no failed or unreachable tasks.
+Editors install into the user's Applications directory. The remote package
+list also includes wxWidgets for native Mineways builds.
 
 `dev-host-check` creates a temporary directory, tests a local Git commit,
 executes Node and Python, and compiles C with both clang and CMake/Ninja.
@@ -60,34 +62,66 @@ Use `ssh -t atlas-dev tmux new -As dev` for a persistent terminal. Detach with
 Ctrl-B, D. The same command reconnects to that session.
 
 GitHub CLI and other account-based tools still require a separate user sign-in.
-Private keys, GitHub tokens, signing certificates, and laptop account tokens
-were not transferred. Container runtimes and full Xcode are not installed.
-Mineways currently hardcodes ARM64 flags, so its existing Mac build needs an
-architecture review before it can build on this Intel VM.
+Private SSH keys remain in the configured agent. Recreate excluded account
+credentials on the VM only when needed. Container runtimes and full Xcode
+are not installed.
+Mineways' source Makefile hardcodes ARM64 flags. The separate Intel validation
+build and its architecture overrides are documented below.
 
-## Protection and later migration
+## Protection and migration
 
 VM 108 starts with Atlas. `proxmox/macos.yml` creates new VMs with 8 vCPUs,
 32 GiB RAM, and a 512 GiB system disk. It preserves existing VM settings.
-The current backing disk is 512 GiB, but its APFS filesystem remains 128 GiB.
-The user deferred GPT repair and filesystem growth. See
-[`proxmox/docs/macos-follow-up.md`](../proxmox/docs/macos-follow-up.md) before
-resuming that work. Guest sleep and disk sleep are disabled.
+GPT repair and APFS growth completed on 2026-10-24. The APFS container now
+uses 549546057728 bytes, with about 485 GiB initially available.
+The offline repair preserved both partition entries and verified the complete
+EFI payload and APFS prefix. Guest sleep and disk sleep are disabled.
 The `macos-dev-hourly` job backs up only VM 108 to Mnemosyne at :15 each hour.
 It does not prune. The existing all-guests job also runs every six hours at
 :30 and retains 12 hourly, 14 daily, 8 weekly, 12 monthly, and 2 yearly points,
 plus its keep-last rule. Missed or failed backups can leave older recovery
-points. The first VM backup passed PBS chunk verification with zero errors.
+points. The migrated-code backup passed PBS chunk verification with zero errors.
 Its attached OpenCore and recovery images are included as disks in the backup.
-This is a snapshot backup without guest filesystem freeze. It does not prove
-a full restore or application consistency. PBS is a separate homelab machine,
-not an offsite copy.
+This is a snapshot backup without guest filesystem freeze. A full isolated
+restore of the migrated-code backup reached the macOS login screen on Atlas.
+It does not prove application consistency, recovered-file contents, or boot
+on another node. PBS is a separate homelab machine, not an offsite copy.
 
-Code migration was explicitly deferred. Keep laptop originals when copying
-later. Preserve `.git`, local branches, stashes, untracked files, and required
-ignored configuration. Exclude only verified rebuildable caches. Compare the
-copy, run actual project builds, and create a new backup before declaring the
-migration complete. Do not infer project coverage from the bootstrap smoke test.
+The user authorized migration on 2026-10-24. The laptop's `~/Developer` was
+copied to `/Users/pve/Developer` without deleting or changing laptop originals.
+The checksum comparison matched 5,351 regular files and seven symlinks, totaling
+1,129,806,933 bytes. All 14 Git repositories retained HEAD, refs, stashes, and
+working-tree changes after the documented exclusions.
+
+The copy excluded `node_modules`, `.venv`, `__pycache__`, `.cache`, `.DS_Store`,
+and the downloaded `HomelabAnsible/.ansible` collection cache. It also excluded
+`ProxmoxMCP/proxmox.json`, `HomelabAnsible/proxmox/files/gallery-dl-cookies.txt`,
+and `docker-wyze-bridge/app/.env`. The first two credential files were removed
+after the initial copy exposed the missing exclusions. Their laptop originals
+remain intact. The Wyze `.env` is tracked and therefore appears as a deletion
+in the VM working tree. Do not commit that deletion as a project change.
+
+The four archive projects passed their Node tests. BoughtThenBuried and
+KilledByAmazon built successfully. ProxmoxMCP installed its locked dependencies
+and passed five offline tests. AppleModels installed its locked dependencies,
+built successfully, and verified all model material references. Browser, VR,
+and live infrastructure behavior were not tested by these checks. The observer
+passed 31 offline tests, and `mcrcon` compiled natively for Intel.
+
+Mineways built natively with wxWidgets 3.3.4 in `~/Builds/Mineways-intel`.
+Its complete port regression test passed. `Mac/Makefile.intel` includes the
+source Makefile and substitutes `-arch x86_64` in `CXXFLAGS`, `GUI_CXXFLAGS`,
+and `LDFLAGS`. The original migrated source remains unchanged. The application
+bundle is installed at `~/Applications/Mineways.app`. GUI interaction was not
+tested. The validation copy is a snapshot of the migrated source. Refresh it
+before building later source edits. Its build command is:
+
+```bash
+make -C ~/Builds/Mineways-intel/Mac -f Makefile.intel -j8 all test app
+```
+
+See [the follow-up note](../proxmox/docs/macos-follow-up.md) for recovery results
+and remaining project compatibility work.
 
 If Atlas fails, restore the `vm/108` backup group from namespace `cluster-nash`
 on PBS datastore `mneme` through Proxmox. Do not select the older `ct/108`

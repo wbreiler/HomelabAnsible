@@ -1,6 +1,7 @@
 # Atlas development workspace
 
-This directory is on the development VM. Laptop projects have not been copied.
+This directory is on the development VM. Laptop projects were copied on
+2026-10-24. The laptop originals remain intact.
 Save future project files here so they stay on the VM when a client disconnects.
 
 Connect from a configured client with `ssh atlas-dev`.
@@ -18,9 +19,23 @@ to verify Git commits, JavaScript, Python, and C/CMake builds. Use a project
 virtual environment (`uv venv`) instead of system-wide pip installations.
 Global npm packages install under `~/.local` without sudo.
 
+The APFS filesystem now uses the 512 GiB disk. The migration preserved Git
+history, branches, stashes, and uncommitted work. Rebuildable caches and
+Finder metadata were excluded. These credential files remain on the laptop:
+
+- `ProxmoxMCP/proxmox.json`
+- `HomelabAnsible/proxmox/files/gallery-dl-cookies.txt`
+- `docker-wyze-bridge/app/.env`
+
+The Wyze file is tracked, so its absence appears as a deletion in Git status.
+Do not commit that deletion. Recreate its configuration when needed.
+
 The VM has its own local user account. GitHub CLI and other account-based
 tools still require your sign-in. The VM is Intel x86_64. ARM-only project
-dependencies and build flags need separate review.
+dependencies and build flags need separate review. Mineways has a tested Intel
+build at `~/Builds/Mineways-intel` and an application at
+`~/Applications/Mineways.app`. This build copy is separate from your source.
+Its port regression tests passed. GUI interaction remains untested.
 
 The dedicated Proxmox job backs up this VM to PBS hourly at :15.
 The existing all-guests job also runs every six hours at :30 and handles retention.

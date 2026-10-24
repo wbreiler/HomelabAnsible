@@ -167,9 +167,9 @@
         dest: "{{ dev_bin }}/dev-host-check"
         mode: '0755'
 
-    - name: Install terminal and search tools
+    - name: Install development packages
       community.general.homebrew:
-        name: [tmux, jq, ripgrep]
+        name: [tmux, jq, ripgrep, wxwidgets]
         state: present
         path: /usr/local/bin
       environment:
