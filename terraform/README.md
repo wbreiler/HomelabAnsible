@@ -1,14 +1,16 @@
 # Terraform pilot
 
 Start with Proxmox guest lifecycle management. Keep Ansible for host and guest
-software configuration. This first stage only queries node names. It declares
-no managed resources and does not transfer ownership of any existing guest.
+software configuration. The default configuration only queries node names.
+Local pilot settings enable one small, unprivileged Debian container. Existing
+production guests remain under their current management.
 
 ## Ownership
 
 | Area | Current owner | Intended owner |
 |---|---|---|
-| Guest creation, CPU, memory, disks, guest networking | Ansible or manual configuration | Terraform, one reviewed guest at a time |
+| Pilot creation, CPU, memory, disk, guest networking | Terraform | Terraform |
+| Existing guest provisioning | Ansible or manual configuration | Terraform, one reviewed guest at a time |
 | Guest packages, services, application data, updates | Ansible | Ansible |
 | PVE host configuration, cluster, storage, backups | Ansible | Ansible |
 | TrueNAS, Arista, PBS, workstations | Existing project | Existing project |
@@ -28,6 +30,7 @@ This starter was validated with Terraform 1.17.0. Run from `terraform/proxmox/`:
 terraform init -backend=false
 terraform fmt -check
 terraform validate
+terraform test
 ```
 
 These commands download the pinned provider and validate its schema without
@@ -41,7 +44,7 @@ provider upgrades deliberately.
 Complete the HCP connection in the State section before running another plan
 if `cloud.local.tf` is present.
 
-Use a dedicated read-only API identity for this stage. In the Proxmox UI, create
+Use a dedicated read-only API token for discovery. In the Proxmox UI, create
 a dedicated user and a privilege-separated API token. Assign `PVEAuditor` at
 `/`, with propagation, to both the user and token. Do not reuse an application
 token or grant write permissions for this query.
@@ -120,8 +123,9 @@ resources or state.
 
 Repeat the live plan with the Proxmox token in the local environment. Confirm
 the workspace uses Local execution before supplying that token. An apply can
-then save node outputs to HCP without changing guests. Authentication, workspace
-execution mode, initialization, and remote state writes require live checks.
+then save node outputs to HCP without changing guests in discovery-only mode.
+The discovery apply and remote state write passed. Verify a new plan after any
+resource or credential change.
 
 See [HCP CLI integration](https://developer.hashicorp.com/terraform/cli/cloud).
 
@@ -134,13 +138,96 @@ Before managing a persistent guest, verify remote state access, locking, and
 state recovery. Git is not a state backup. Do not run concurrent Terraform
 operations against local state.
 
-## Next stage
+## Disposable Debian pilot
 
-1. Verify the read-only live plan.
-2. Select a disposable guest and confirm its VMID against live and local inventory.
-3. Configure the state backend before adding a managed resource.
-4. Give Terraform sole ownership of that guest's provisioning settings.
-5. Review the plan before any apply.
+`pilot.tf` declares one container only when `pilot` is non-null. Copy
+`pilot.auto.tfvars.example` to `pilot.auto.tfvars`, or use the ignored local
+`pilot.auto.tfvars.json` prepared after live discovery. Never allocate its VMID
+from an example without checking both live guests and local Minecraft inventory.
+
+The pilot uses one CPU with a one-core quota, 512 MiB RAM, a 4 GiB root disk,
+a static address outside the DHCP pool, and an existing SSH public key.
+Nesting supports Debian 13 systemd mount namespaces while the container remains
+unprivileged. It has no NFS or host mounts, no password,
+no application software, and no HA policy. It starts at host boot. The existing
+cluster backup job includes new non-Minecraft guests automatically.
+
+`prevent_destroy` blocks Terraform deletion while the resource block remains.
+Do not remove the block or disable this guard to clean up the guest without
+explicit approval. The existing iptag service owns tags after creation, so
+Terraform ignores tag changes. Ansible application roles do not target this
+guest. The generic Ansible guest OS update job can still update its packages.
+
+The first DHCP attempt received no offers. The selected static address passed
+inventory, reservation, switch ARP, and duplicate-address checks. A control
+probe reached the gateway. No switch settings changed. Check address ownership
+again before moving or recreating this deployment.
+
+Provider 0.118.0 sends explicit false values for additional feature flags when
+setting `nesting`. Proxmox rejects those additional flags for API tokens. The
+pilot's nesting setting was bootstrapped with a narrow API request using the
+same scoped token, then the guest was rebooted. Terraform declares the final
+desired setting and verifies it on refresh. Re-creation with this provider may
+need a two-stage bootstrap: create without the `features` block, set only
+`nesting=1` through the API, restore the block, and verify a no-change plan.
+Do not grant broad host permissions to work around this payload issue.
+
+Use a separate privilege-separated `pilot` API token. Keep the discovery token
+read-only. Grant both the owning user and pilot token:
+
+| Path | Role | Purpose |
+|---|---|---|
+| `/` with propagation | `PVEAuditor` | Read cluster metadata and templates |
+| `/vms/SELECTED_ID`, without propagation | `TerraformPilotVM` | Manage only the selected guest |
+| `/storage/SELECTED_STORAGE`, without propagation | `PVEDatastoreUser` | Allocate the root disk |
+| `/sdn/zones/localnetwork/SELECTED_BRIDGE/SELECTED_VLAN`, without propagation | `PVESDNUser` | Use only the selected guest VLAN |
+
+`TerraformPilotVM` contains `VM.Allocate`, `VM.Audit`, `VM.Config.CPU`,
+`VM.Config.Memory`, `VM.Config.Disk`, `VM.Config.Network`, `VM.Config.Options`,
+and `VM.PowerMgmt`. Proxmox does not limit storage allocation by VMID or size
+through this ACL. The token can allocate storage space on the selected storage.
+Keep the token in the ignored `.env` file with mode `0600`. It contains only
+`PROXMOX_VE_ENDPOINT` and `PROXMOX_VE_API_TOKEN` shell assignments. Never print
+or commit its contents. This token has no scheduled expiration. Revoke it when
+the pilot is retired, or replace it deliberately.
+
+From `terraform/proxmox/`, use a subshell to keep credentials out of the parent
+shell environment. The Terraform executable must be on `PATH`:
+
+```sh
+(
+  set -eu
+  set -a
+  . ./.env
+  set +a
+  terraform plan -out=pilot.tfplan
+)
+```
+
+Review the plan. Apply only the saved plan that creates the expected pilot,
+with no changes to existing resources:
+
+```sh
+(
+  set -eu
+  set -a
+  . ./.env
+  set +a
+  terraform apply pilot.tfplan
+)
+```
+
+Verify the guest boots, has the selected guest-network address, and accepts the
+configured SSH key. Repeat `terraform plan -detailed-exitcode` and require
+exit code `0` before declaring convergence. Mock-provider tests verify the
+discovery-only default and the pilot's resource limits without accessing PVE.
+
+The first deployment passed direct SSH authentication, systemd boot health,
+DNS resolution, gateway reachability, and a final no-change plan. Both mock
+tests and the repository's Proxmox Ansible lint check passed. Disaster recovery
+and guest restoration remain untested.
+
+## Existing guest migration
 
 For an existing guest, import its current configuration and require a plan
 with no changes before any apply. Review disks, mount points, privilege mode,

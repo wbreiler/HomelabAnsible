@@ -17,6 +17,6 @@ provider "proxmox" {
 data "proxmox_virtual_environment_nodes" "cluster" {}
 
 output "node_names" {
-  description = "Names visible to the Proxmox API identity. No guests are managed yet."
+  description = "Names visible to the Proxmox API identity."
   value       = data.proxmox_virtual_environment_nodes.cluster.names
 }

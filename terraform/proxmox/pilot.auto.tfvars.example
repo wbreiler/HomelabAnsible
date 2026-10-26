@@ -1,0 +1,12 @@
+pilot = {
+  vm_id            = 100 # Select the next free ID after checking live and local inventories.
+  node_name        = "your-node"
+  datastore_id     = "your-guest-storage"
+  template_file_id = "local:vztmpl/your-debian-template.tar.zst"
+  bridge           = "vmbr0"
+  vlan_id          = 40
+  ipv4_address     = "192.0.2.5/24" # Select an unused address outside the DHCP pool.
+  gateway          = "192.0.2.1"
+  dns_servers      = ["192.0.2.1"]
+  ssh_public_key   = "ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY"
+}
