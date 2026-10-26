@@ -1,0 +1,184 @@
+---
+- name: Require a supported SSH guest
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == 'Debian'
+      - ansible_facts.architecture == 'x86_64'
+    fail_msg: The pinned Gatus toolchain requires a Debian-family AMD64 guest.
+
+- name: Install Gatus build prerequisites
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, tar]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Check managed Gatus version file
+  ansible.builtin.stat:
+    path: "{{ gatus_install_dir }}/.ansible-version"
+  register: gatus_ssh_version_stat
+
+- name: Read managed Gatus version
+  ansible.builtin.slurp:
+    src: "{{ gatus_install_dir }}/.ansible-version"
+  register: gatus_ssh_version_file
+  when: gatus_ssh_version_stat.stat.exists
+
+- name: Resolve managed Gatus version
+  ansible.builtin.set_fact:
+    gatus_ssh_installed_version: "{{ gatus_ssh_version_file.content | default('') | b64decode | trim }}"
+
+- name: Report required Gatus build
+  ansible.builtin.debug:
+    msg: "Gatus {{ gatus_version }} requires a checksum-verified source build."
+  when: gatus_ssh_installed_version != gatus_version
+
+- name: Configure Gatus software on the guest
+  when: not ansible_check_mode or gatus_ssh_version_stat.stat.exists
+  block:
+    - name: Create Gatus system account
+      ansible.builtin.user:
+        name: gatus
+        system: true
+        home: "{{ gatus_install_dir }}"
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create Gatus application directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: gatus
+        group: gatus
+        mode: "0750"
+      loop:
+        - "{{ gatus_install_dir }}"
+        - "{{ gatus_data_dir }}"
+
+    - name: Build pinned Gatus on the guest
+      when: not ansible_check_mode and gatus_ssh_installed_version != gatus_version
+      block:
+        - name: Create private Gatus build directory
+          ansible.builtin.tempfile:
+            state: directory
+            # Debian 13 uses RAM-backed /tmp; source builds need disk-backed scratch space.
+            path: /var/tmp
+            prefix: gatus-build-
+          register: gatus_ssh_build
+
+        - name: Build and install verified Gatus sources
+          block:
+            - name: Download pinned Gatus build artifacts
+              ansible.builtin.get_url:
+                url: "{{ item.url }}"
+                checksum: "{{ item.checksum }}"
+                dest: "{{ gatus_ssh_build.path }}/{{ item.name }}.tar.gz"
+                mode: "0600"
+              loop:
+                - name: go
+                  url: "{{ gatus_go_url }}"
+                  checksum: "{{ gatus_go_checksum }}"
+                - name: source
+                  url: "{{ gatus_source_url }}"
+                  checksum: "{{ gatus_source_checksum }}"
+
+            - name: Create Gatus source and toolchain directories
+              ansible.builtin.file:
+                path: "{{ gatus_ssh_build.path }}/{{ item }}"
+                state: directory
+                mode: "0700"
+              loop: [source, toolchain, tmp]
+
+            - name: Extract verified Go toolchain
+              ansible.builtin.unarchive:
+                src: "{{ gatus_ssh_build.path }}/go.tar.gz"
+                dest: "{{ gatus_ssh_build.path }}/toolchain"
+                remote_src: true
+
+            - name: Extract verified Gatus source
+              ansible.builtin.unarchive:
+                src: "{{ gatus_ssh_build.path }}/source.tar.gz"
+                dest: "{{ gatus_ssh_build.path }}/source"
+                remote_src: true
+                extra_opts: [--strip-components=1]
+
+            - name: Compile Gatus with bounded parallelism
+              ansible.builtin.command:
+                argv:
+                  - "{{ gatus_ssh_build.path }}/toolchain/go/bin/go"
+                  - build
+                  - -p=1
+                  - -o
+                  - "{{ gatus_ssh_build.path }}/gatus"
+                  - .
+                chdir: "{{ gatus_ssh_build.path }}/source"
+              environment:
+                GOTOOLCHAIN: local
+                GOCACHE: "{{ gatus_ssh_build.path }}/cache"
+                GOMODCACHE: "{{ gatus_ssh_build.path }}/modcache"
+                CGO_ENABLED: "0"
+                GOMAXPROCS: "2"
+                TMPDIR: "{{ gatus_ssh_build.path }}/tmp"
+              changed_when: true
+
+            - name: Install Gatus binary atomically
+              ansible.builtin.copy:
+                src: "{{ gatus_ssh_build.path }}/gatus"
+                dest: "{{ gatus_install_dir }}/gatus"
+                remote_src: true
+                owner: gatus
+                group: gatus
+                mode: "0755"
+              notify: Restart Gatus
+
+            - name: Record installed Gatus version
+              ansible.builtin.copy:
+                content: "{{ gatus_version }}\n"
+                dest: "{{ gatus_install_dir }}/.ansible-version"
+                owner: root
+                group: root
+                mode: "0644"
+          always:
+            - name: Remove private Gatus build directory
+              ansible.builtin.file:
+                path: "{{ gatus_ssh_build.path }}"
+                state: absent
+
+    - name: Install Gatus configuration
+      ansible.builtin.template:
+        src: config.yaml.j2
+        dest: "{{ gatus_install_dir }}/config.yaml"
+        owner: gatus
+        group: gatus
+        mode: "0600"
+      no_log: true
+      notify: Restart Gatus
+
+    - name: Install Gatus systemd service
+      ansible.builtin.template:
+        src: gatus.service.j2
+        dest: /etc/systemd/system/gatus.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart Gatus
+
+    - name: Enable and start Gatus service
+      ansible.builtin.systemd_service:
+        name: gatus
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Apply Gatus guest changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Gatus HTTP health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ gatus_port }}/health"
+        status_code: 200
+      register: gatus_ssh_health
+      until: gatus_ssh_health.status | default(0) == 200
+      retries: 12
+      delay: 5
+      when: not ansible_check_mode

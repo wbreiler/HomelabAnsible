@@ -17,7 +17,7 @@ alerting:
 {% endif %}
 
 endpoints:
-{% for host in groups['proxmox_cluster'] %}
+{% for host in groups['proxmox_cluster'] | default([]) %}
   - name: "{{ host }} (Proxmox node)"
     url: "tcp://{{ hostvars[host].ansible_host }}:8006"
     interval: {{ gatus_check_interval }}

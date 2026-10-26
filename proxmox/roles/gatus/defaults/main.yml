@@ -1,4 +1,6 @@
 ---
+# Direct SSH supports Terraform-created VMs and LXCs without guest lifecycle writes.
+gatus_guest_ssh: false
 gatus_node: "atlas"
 gatus_vmid: ""
 gatus_hostname: "gatus-nash"

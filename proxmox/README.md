@@ -299,6 +299,41 @@ Four opt-in roles cover complementary monitoring concerns:
 
 Together: `healthcheck_reminder` catches "is the node/guest even up" (Proxmox-native, zero footprint); `gatus` catches "is the app inside actually responding" plus gives you history and a dashboard; `diun` catches "is there a newer image available" for anything running Docker, cluster or not.
 
+### Gatus on Terraform-created guests
+
+`gatus-guests.yml` installs the existing Gatus application on Debian-family
+AMD64 LXCs or VMs over SSH. Terraform must create and start the guests first.
+Each guest needs Python 3, an authorized SSH key, and root access through SSH
+or password-free sudo. The playbook selects `gatus_guest_ssh: true` and only
+targets the `gatus_guests` inventory group. It contains no guest lifecycle or
+hardware operations.
+
+Use `gatus-guests.inventory.yml.example` as a sanitized inventory template.
+Keep real addresses, identities, and host-key files in a protected inventory
+outside Git. From `proxmox/`, review and deploy with:
+
+```sh
+ansible-playbook -i /path/to/private-inventory.yml gatus-guests.yml --check --diff
+ansible-playbook -i /path/to/private-inventory.yml gatus-guests.yml
+```
+
+The SSH path reuses the role's pinned Gatus source, checksum-verified Go
+toolchain, configuration template, systemd unit, and HTTP health check. Build
+files, module cache, and Go scratch files use a private directory in `/var/tmp`.
+Debian 13's RAM-backed `/tmp` cannot hold this source build. Compilation uses
+bounded parallelism, and the build directory is removed after success or failure.
+
+`gatus_extra_endpoints` provides explicit checks when the inventory has no
+Proxmox or PBS groups. An empty `gatus_discord_webhook_url` disables notifications.
+The existing node/pct workflow remains the default for `site.yml`; its task body
+is preserved in `roles/gatus/tasks/lxc.yml`.
+
+Live validation on 2026-10-26 deployed Gatus 5.36.0 to an unprivileged Debian
+LXC and a Debian VM with UEFI and Secure Boot. Both dashboards, HTTP health
+checks, and mutual peer checks passed. Both services started after a
+Terraform-managed restart. A repeat Ansible run reported zero changes on both
+guests, and the VM retained active Secure Boot and kernel lockdown.
+
 ### Standalone App LXCs
 
 Repository-owned roles in this section manage single-purpose LXCs; the Tailscale router is documented separately below. Each is opt-in and defaults off. All bootstrap through the shared `tasks/create_lxc.yml` and adopt existing containers by hostname. Because adopted containers can be HA-managed and move between nodes, each role resolves the node currently hosting its container at run time (`tasks/resolve_lxc_node.yml`); the configured `<role>_node` is only the fresh-install fallback. Names, VMIDs, sizes, nodes, and versions below are tracked defaults, not assertions about live state.

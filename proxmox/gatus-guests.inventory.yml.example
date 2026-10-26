@@ -1,0 +1,18 @@
+---
+all:
+  children:
+    gatus_guests:
+      vars:
+        ansible_ssh_private_key_file: ~/.ssh/lxc.pub
+        ansible_python_interpreter: /usr/bin/python3
+        gatus_discord_webhook_url: ""
+        gatus_extra_endpoints:
+          - name: Local Gatus
+            url: http://127.0.0.1:8080/health
+      hosts:
+        example_lxc:
+          ansible_host: 192.0.2.10
+          ansible_user: root
+        example_vm:
+          ansible_host: 192.0.2.11
+          ansible_user: ansible
