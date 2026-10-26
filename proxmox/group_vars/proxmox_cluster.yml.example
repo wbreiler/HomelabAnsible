@@ -292,9 +292,11 @@ pbs_restore_storage: "local-lvm"  # Default storage for restored containers
 #     force: true  # Overwrite existing
 
 # =============================================================================
-# VM Deployment Configuration
+# Legacy VM Deployment Configuration (Terraform owns provisioning)
 # =============================================================================
-deploy_vms: false  # Set to true to deploy VMs
+deploy_vms: false  # Keep false. The retired role fails when enabled.
+
+# The values below remain historical reference and do not provision guests.
 
 # Node that coordinates deployment. Defaults to "atlas" in the role.
 # vm_deploy_master_node: "atlas"

@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""Refuse all guest mutations while testing Ansible's provisioning boundary."""
+import os
+import sys
+
+args = sys.argv[1:]
+with open(os.environ["LXC_TEST_LOG"], "a", encoding="utf-8") as log:
+    log.write(" ".join(args) + "\n")
+if args == ["list"]:
+    print("VMID Status Name")
+    if os.environ["LXC_TEST_STATE"] == "stopped":
+        print("9000 stopped ownership-test")
+elif args == ["status", "9000"]:
+    print("status: stopped")
+else:
+    sys.exit("Unexpected guest mutation: " + " ".join(args))

@@ -2,6 +2,19 @@
 
 This file provides guidance to AI code assistants when working with code in this repository.
 
+## Guest provisioning ownership
+
+Terraform owns the existing guests. Do not add guest creation, startup,
+resizing, boot flags, or hardware mutation to application roles. The shared
+`tasks/create_lxc.yml` is now an existing-guest software bootstrap, despite its
+legacy filename. It fails for absent or stopped guests. `vm_deploy` and
+`macos.yml` refuse provisioning. Preserve application configuration tasks.
+
+HA policy and IP tags retain their existing controllers. Terraform ignores
+HA node/power state and service-maintained tags. Raw LXC passthrough entries
+remain preserved in PVE and protected local snapshots. The provider does not
+represent every raw LXC setting. Do not claim that import proves disaster recovery.
+
 ## Project Overview
 
 This is an Ansible automation project for deploying and managing a Proxmox VE cluster. It handles repository configuration, cluster formation, Proxmox Backup Server (PBS) storage, ISO management, LXC/VM deployment, network tuning, and system updates.
@@ -35,28 +48,28 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
   * `iptag`: Tags LXC containers with IPs in the Proxmox UI.
   * `download_templates`: Fetches latest LXC OS templates.
   * `apt_cacher_ng`: Creates and configures a repository-owned Apt-Cacher NG LXC.
-  * `prowlarr`: Creates or adopts the Prowlarr LXC with a pinned, checksum-verified release.
-  * `homebridge`: Creates or adopts the Homebridge LXC with a pinned Debian package.
-  * `spoolman`: Creates or adopts the Spoolman LXC with pinned application and uv releases.
-  * `bambuddy`: Creates or adopts the Bambuddy LXC with a pinned release.
-  * `nexdeck`: Creates or adopts the NexDeck LXC with a pinned source release.
-  * `gitea_mirror`: Creates or adopts the Gitea Mirror LXC with pinned application and Bun releases.
-  * `seerr`: Creates or adopts the Seerr LXC with pinned application and pnpm releases.
-  * `pocket_id`: Creates or adopts the Pocket ID LXC with a pinned release binary.
-  * `vaultwarden`: Creates or adopts the Vaultwarden LXC from pinned source and web-vault releases.
-  * `forgejo`: Creates or adopts the Forgejo LXC with a pinned release binary and strict upgrade guards.
-  * `sonarr`: Creates or adopts the Sonarr LXC with a pinned, checksum-verified release.
-  * `radarr`: Creates or adopts the Radarr LXC with a pinned, checksum-verified release.
-  * `gatus`: Creates or adopts the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain.
-  * `diun`: Creates or adopts the Diun image-update watcher LXC.
+  * `prowlarr`: Configures existing the Prowlarr LXC with a pinned, checksum-verified release.
+  * `homebridge`: Configures existing the Homebridge LXC with a pinned Debian package.
+  * `spoolman`: Configures existing the Spoolman LXC with pinned application and uv releases.
+  * `bambuddy`: Configures existing the Bambuddy LXC with a pinned release.
+  * `nexdeck`: Configures existing the NexDeck LXC with a pinned source release.
+  * `gitea_mirror`: Configures existing the Gitea Mirror LXC with pinned application and Bun releases.
+  * `seerr`: Configures existing the Seerr LXC with pinned application and pnpm releases.
+  * `pocket_id`: Configures existing the Pocket ID LXC with a pinned release binary.
+  * `vaultwarden`: Configures existing the Vaultwarden LXC from pinned source and web-vault releases.
+  * `forgejo`: Configures existing the Forgejo LXC with a pinned release binary and strict upgrade guards.
+  * `sonarr`: Configures existing the Sonarr LXC with a pinned, checksum-verified release.
+  * `radarr`: Configures existing the Radarr LXC with a pinned, checksum-verified release.
+  * `gatus`: Configures existing the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain.
+  * `diun`: Configures existing the Diun image-update watcher LXC.
   * `centralized_logging`: Creates Loki and Grafana and deploys Alloy.
-  * `tailscale_router`: Creates or adopts the Tailscale subnet-router LXC.
+  * `tailscale_router`: Configures existing the Tailscale subnet-router LXC.
   * `update_all`: Updates Proxmox host nodes and LXC containers.
   * `update_reminder`: Installs per-node Discord package-update reminders.
   * `healthcheck_reminder`: Installs a cluster-master-only Discord alert for down nodes/guests.
   * `cleanup_storage`: Detects and optionally destroys stale ZFS datasets.
   * `pbs_restore`: Restores LXC containers from PBS backups.
-  * `vm_deploy`: Deploys full VMs from ISOs.
+  * `vm_deploy`: Retired entry point that directs provisioning to Terraform.
   * `network_tuning`: Configures storage VLAN and 10G TCP sysctl tuning.
 * **`ansible.cfg`**: Project-specific Ansible configuration.
 
@@ -106,8 +119,8 @@ local variable files before changing behavior.
 10. **homebridge**: Manages the Homebridge LXC.
 11. **spoolman**: Manages the Spoolman LXC.
 12. **bambuddy**: Manages the Bambuddy LXC.
-13. **homelable**: Creates or adopts the topology and discovery LXC.
-14. **nexdeck**: Creates or adopts the infrastructure dashboard LXC.
+13. **homelable**: Configures existing the topology and discovery LXC.
+14. **nexdeck**: Configures existing the infrastructure dashboard LXC.
 15. **gitea_mirror**: Manages the Gitea Mirror LXC.
 16. **seerr**: Manages the Seerr LXC.
 17. **pocket_id**: Manages the Pocket ID LXC.
@@ -115,7 +128,7 @@ local variable files before changing behavior.
 19. **forgejo**: Manages the Forgejo LXC with strict upgrade guards.
 20. **sonarr**: Manages the Sonarr LXC.
 21. **radarr**: Manages the Radarr LXC.
-22. **speedtest_tracker**: Creates or adopts the Internet monitoring LXC.
+22. **speedtest_tracker**: Configures existing the Internet monitoring LXC.
 23. **gatus**: Manages the Gatus status-page LXC.
 24. **diun**: Manages the Diun image-update watcher LXC.
 25. **centralized_logging**: Creates Loki and Grafana and deploys Alloy.
@@ -126,7 +139,7 @@ local variable files before changing behavior.
 30. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
 31. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
 32. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
-33. **vm_deploy**: Deploys full VMs from ISOs.
+33. **vm_deploy**: Retired provisioning guard. Fails and directs operators to Terraform.
 
 The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
 
@@ -290,15 +303,15 @@ management, LXC installation, system updates, and PBS restores.
 ### apt_cacher_ng
 
 * Manages Apt-Cacher NG with repository-owned Ansible tasks.
-* Creates or adopts an LXC by hostname on `apt_cacher_ng_node`.
+* Configures existing an LXC by hostname on `apt_cacher_ng_node`.
 * Installs `apt-cacher-ng` and `avahi-daemon`, removes the legacy remote updater, configures HTTPS pass-through and the local APT proxy, and verifies the service.
 * Skipped by default unless `install_apt_cacher_ng: true`.
 
 ### Managed application LXCs
 
 * Repository-owned application roles use the shared `tasks/create_lxc.yml`
-  bootstrap. New containers default to unprivileged. A kernel NFS mount
-  requires privileged mode.
+  bootstrap for software only. Terraform provisions new containers. Preserve
+  existing privilege modes and raw passthrough settings during adoption.
 * Existing HA-managed containers are located at run time through
   `tasks/resolve_lxc_node.yml`. A role's `<role>_node` value is therefore the
   fresh-install fallback, not a reliable statement of its current location.
@@ -328,7 +341,7 @@ management, LXC installation, system updates, and PBS restores.
 
 ### bambuddy
 
-* Creates or adopts the hostname configured by `bambuddy_hostname`; its VMID
+* Configures existing the hostname configured by `bambuddy_hostname`; its VMID
   defaults to automatic allocation and `bambuddy_node` is only the
   fresh-install fallback.
 * Pins and checksum-verifies the Bambuddy source release, builds its Python and
@@ -443,7 +456,7 @@ management, LXC installation, system updates, and PBS restores.
 
 ### gatus
 
-* Creates or adopts `gatus-nash`. Gatus has no prebuilt binary releases, so
+* Configures existing `gatus-nash`. Gatus has no prebuilt binary releases, so
   the role builds it from a pinned, checksum-verified source tarball using a
   pinned, checksum-verified Go toolchain; Go additionally verifies every
   dependency against sum.golang.org during the build.
@@ -454,7 +467,7 @@ management, LXC installation, system updates, and PBS restores.
 
 ### diun
 
-* Creates or adopts `diun-nash` and installs a pinned, checksum-verified Diun
+* Configures existing `diun-nash` and installs a pinned, checksum-verified Diun
   release that posts image update notifications to Discord.
 * Watches the static `diun_watch_images` list through Diun's file provider; it
   does not discover containers from Docker or another host at run time.
@@ -462,7 +475,7 @@ management, LXC installation, system updates, and PBS restores.
 
 ### tailscale_router
 
-* Creates or adopts the unprivileged `tailscale-router-nash` LXC, installs a
+* Configures existing the unprivileged `tailscale-router-nash` LXC, installs a
   pinned Tailscale package from a checksum-verified-key APT repository, and
   advertises the configured LAN routes.
 * This role also reconciles `/dev/net/tun` passthrough in the Proxmox-side LXC
@@ -497,21 +510,15 @@ management, LXC installation, system updates, and PBS restores.
 
 ### vm_deploy
 
-* Deploys full VMs from ISOs by building `qm create` commands.
-* Runs on `vm_deploy_master_node` and delegates creation to target nodes.
-* Auto-assigns VMIDs from each target node's configured
-  `vmid_range_start`/`vmid_range_end`; the tracked example partitions 100-199
-  across the two nodes.
-* Idempotent by VM name.
+* Retired. The role fails explicitly and directs operators to Terraform.
+* The old VM creation task file was removed. Never reconnect provisioning here.
 
 ### macos.yml
 
-* Standalone Atlas-only Tahoe VM creation. See `docs/macos.md`.
-* Pins and checksum-verifies OSX-PROXMOX assets. Never run its host installer.
-* Refuses guest identity collisions and preserves existing VM configuration.
-* Requires TSC, uses the verified Atlas Intel CPU path, and leaves host boot,
-  KVM security parameters, APT repositories, and GPU drivers unchanged.
-* No automatic VM start. Installation and desktop behavior require console checks.
+* Retired creation entry point. It fails before any remote change.
+* Terraform owns the existing VM. Preserve OpenCore media, custom QEMU
+  arguments, SMBIOS identity, disks, and the existing backup schedule.
+* Installation notes remain in `docs/macos.md` as historical reference.
 
 ### network_tuning
 

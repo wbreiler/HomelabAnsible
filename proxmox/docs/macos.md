@@ -1,5 +1,11 @@
 # macOS Tahoe on Atlas
 
+> Provisioning changed on 2026-10-26. Terraform now owns this VM. The old
+> `macos.yml` entry point refuses changes. Commands below describe the original
+> installation and remain historical reference. Review hardware changes in
+> Terraform and preserve existing boot media and backup jobs.
+
+
 `macos.yml` creates VM 108 (`macos-tahoe`) on Atlas with 8 cores, 32 GiB RAM,
 a 512 GiB Helios disk, and the existing VLAN 40 network. Check cluster allocation
 before changing the ID. The playbook refuses an ID or name collision. It leaves

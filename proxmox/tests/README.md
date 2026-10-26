@@ -48,6 +48,13 @@ Tests the repository-owned IP-Tag configuration parser, guest-list parsing, addr
 python3 tests/test_iptag.py
 ```
 
+### Terraform Ownership Boundary
+
+`ansible-playbook -i localhost, tests/terraform-ownership.yml` runs locally with
+an executable fixture that rejects guest mutations. It verifies that missing
+and stopped containers fail before software configuration and that only
+`pct list` and `pct status` run. Expected failures are rescued by the test.
+
 ## Cleanup
 
 After running tests, clean up downloaded files:

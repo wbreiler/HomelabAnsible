@@ -34,14 +34,10 @@
         lxc_tags: screenshots
         lxc_packages: [ca-certificates, curl, docker.io, docker-compose, openssl, python3]
 
-    - name: Enable container boot and Docker
+    - name: Enable Docker inside the existing container
       ansible.builtin.shell:
         cmd: |
           set -euo pipefail
-          if ! pct config {{ lxc_resolved_vmid }} | grep -qx 'onboot: 1'; then
-            pct set {{ lxc_resolved_vmid }} --onboot 1
-            echo changed
-          fi
           pct exec {{ lxc_resolved_vmid }} -- bash -ceu '
             if ! systemctl is-enabled --quiet docker; then
               systemctl enable docker

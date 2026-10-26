@@ -6,12 +6,23 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
 **PBS Server**: mnemosyne (10.10.20.2, `pbs_nodes` inventory group)
 **Second play**: `site.yml` also applies network tuning to both proxmox_cluster and pbs_nodes groups
 
-## Live verification
+## Provisioning ownership
 
-See the [2026-10-02 repository audit](../LIVE_AUDIT.md) for verified state and
-blocked checks. Deployment examples and role defaults are not live placement.
-The cluster currently has two nodes. All 29 LXCs are on Prometheus while Atlas
-is in HA maintenance mode; guest placement must be checked again before use.
+Terraform owns all existing guest hardware and lifecycle declarations. See
+[the Terraform workflow](../terraform/README.md). Ansible configures software
+inside existing, running guests and manages the PVE/PBS hosts.
+
+The shared `tasks/create_lxc.yml` filename remains for caller compatibility,
+but it never creates or starts containers. Missing or stopped guests fail
+before application configuration. The VM deployment role and `macos.yml`
+refuse provisioning requests. TUN passthrough must already exist before the
+Tailscale application role runs.
+
+HA policy remains under its existing management. Terraform ignores node and
+power changes for HA guests. IP tagging remains with the existing service.
+
+See [the historical repository audit](../LIVE_AUDIT.md) for the earlier baseline.
+Current placement must be checked live rather than inferred from role defaults.
 
 ## Features
 
@@ -20,10 +31,10 @@ is in HA maintenance mode; guest placement must be checked again before use.
 - **PBS Storage Configuration**: Connects Proxmox nodes to your Proxmox Backup Server with shared namespace support
 - **ISO Management**: Automatically downloads ISOs from HTTP server, direct URLs, NFS, or SMB shares with real-time progress display
 - **LXC Template Downloads**: Automatically downloads latest LXC OS templates on all nodes
-- **Managed App LXCs**: Creates or adopts Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Bambuddy, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, Radarr, Gatus, Diun, and a Tailscale subnet router through repository-owned roles
+- **Managed App LXCs**: Configures existing Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Bambuddy, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, Radarr, Gatus, Diun, and a Tailscale subnet router through repository-owned roles
 - **PBS Backup Job**: Creates/reconciles a scheduled backup job on the PBS storage, opt-in and off by default
-- **VM Deployment**: Deploys full VMs from ISOs with customizable hardware (disk bus, BIOS, TPM, network model)
-- **macOS Tahoe**: Standalone [Atlas VM playbook](docs/macos.md) with pinned OpenCore media and no host boot changes
+- **VM Provisioning**: Owned by Terraform. The retired `vm_deploy` role fails explicitly.
+- **macOS Tahoe**: Terraform owns hardware. [Installation notes](docs/macos.md) remain as historical reference.
 - **Network Tuning**: Configures storage VLAN subinterface and 10G TCP sysctl tuning (BBR, large buffers)
 - **IP Tagging**: Tags LXC containers with their IP addresses in the Proxmox UI via a systemd service
 - **Storage Cleanup**: Detects and optionally cleans up stale ZFS orphaned datasets from failed HA migrations
@@ -61,7 +72,7 @@ proxmox-ansible/
 │   ├── prometheus.yml       # (gitignored)
 │   └── atlas.yml            # (gitignored)
 ├── tasks/
-│   ├── create_lxc.yml       # Shared LXC creation and bootstrap tasks
+│   ├── create_lxc.yml       # Existing LXC software bootstrap (legacy filename)
 │   └── resolve_lxc_node.yml # Resolve the current node for an existing LXC
 ├── roles/
 │   ├── configure_repos/     # Repository configuration role
@@ -92,7 +103,7 @@ proxmox-ansible/
 │   ├── healthcheck_reminder/# Cluster-wide Discord down-node/guest alerts
 │   ├── cleanup_storage/     # Stale ZFS dataset cleanup
 │   ├── pbs_restore/         # PBS backup restore role
-│   ├── vm_deploy/           # Full VM deployment from ISOs
+│   ├── vm_deploy/           # Retired VM deployment entry point
 │   └── network_tuning/      # Storage VLAN + 10G TCP tuning
 └── tests/                   # Local validation playbooks and fixtures
 ```
@@ -356,8 +367,8 @@ pvecm nodes
 Four opt-in roles cover complementary monitoring concerns:
 
 - **`healthcheck_reminder`** (`healthcheck_reminder_enabled: true`) — no new service. Installs a systemd timer on the cluster master node only (checks are cluster-wide via `pvesh get /cluster/resources`, so running it on both nodes would duplicate alerts). Every 5 minutes by default, it flags any Proxmox node that isn't `online` and any LXC/VM that isn't `running` (skip intentionally-stopped guests via `healthcheck_reminder_skip_vmids`), and sends a Discord alert. Re-notifies immediately if the set of down items changes, otherwise backs off for `healthcheck_reminder_repeat_after_minutes` (default 30) so an ongoing outage doesn't spam.
-- **`gatus`** (`install_gatus: true`) — app-level checks and a status page/history that the script above can't give you. Creates or adopts `gatus-nash`, a small LXC running [Gatus](https://github.com/TwiN/gatus). The role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain. The generated `config.yaml` probes each Proxmox node's web UI (TCP 8006), the PBS server (TCP 8007), and each enabled managed app role that defines a health URL. Add other checks through `gatus_extra_endpoints`.
-- **`diun`** (`install_diun: true`) — watches configured container images for new tags or digests and sends a Discord alert. Creates or adopts `diun-nash`, a small LXC running [Diun](https://github.com/crazy-max/diun) from a pinned, checksum-verified release binary. It uses Diun's static `file` provider and the explicit `diun_watch_images` list, so it does not need Docker/API access to a target host. Checks every 6 hours by default (`diun_schedule`). `diun_first_check_notif: true` reports an image on its first scan; set `max_tags` on `watch_repo: true` entries to bound tag-history notifications.
+- **`gatus`** (`install_gatus: true`) — app-level checks and a status page/history that the script above can't give you. Configures existing `gatus-nash`, a small LXC running [Gatus](https://github.com/TwiN/gatus). The role builds it from a pinned, checksum-verified source tarball using a pinned, checksum-verified Go toolchain. The generated `config.yaml` probes each Proxmox node's web UI (TCP 8006), the PBS server (TCP 8007), and each enabled managed app role that defines a health URL. Add other checks through `gatus_extra_endpoints`.
+- **`diun`** (`install_diun: true`) — watches configured container images for new tags or digests and sends a Discord alert. Configures existing `diun-nash`, a small LXC running [Diun](https://github.com/crazy-max/diun) from a pinned, checksum-verified release binary. It uses Diun's static `file` provider and the explicit `diun_watch_images` list, so it does not need Docker/API access to a target host. Checks every 6 hours by default (`diun_schedule`). `diun_first_check_notif: true` reports an image on its first scan; set `max_tags` on `watch_repo: true` entries to bound tag-history notifications.
   The dedicated LXC disables IPv6 by default (`diun_disable_ipv6: true`)
   because VLAN 40 provides IPv4 internet access but no routed IPv6; this keeps
   registry lookups from selecting unreachable AAAA records.
@@ -376,7 +387,7 @@ Repository-owned roles in this section manage single-purpose LXCs; the Tailscale
 - **`prowlarr`** — Prowlarr indexer manager. Its defaults identify `prowlarr-nash`, VMID 104, and `atlas` as the fresh-install fallback. It pins version 2.6.5.5623 and its release checksum, removes the remote update hook, and verifies the web interface.
 - **`homebridge`** — HomeKit bridge. Its defaults identify `homebridge-nash`, VMID 105, and `prometheus` as the fresh-install fallback. It pins package version 2.0.20, checksum-verifies the Homebridge repository key, removes the remote update hook, and verifies Homebridge and Avahi.
 - **`spoolman`** — 3D-printer spool inventory. Its defaults identify `spoolman-nash`, VMID 102, and `atlas` as the fresh-install fallback. It pins and verifies Spoolman 0.27.0 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
-- **`bambuddy`** — Bambu Lab printer management. It creates or adopts an unprivileged Debian LXC, installs a pinned and checksum-verified Bambuddy release using the sizing recommended by the Community Scripts installer, preserves local environment and data files, and verifies the web interface on port 8000. The pinned `nils_ost.bambuddy` collection is also installed for future API-driven printer and settings management; its Docker installer is not used.
+- **`bambuddy`** — Bambu Lab printer management. It configures an existing unprivileged Debian LXC, installs a pinned and checksum-verified Bambuddy release using the sizing recommended by the Community Scripts installer, preserves local environment and data files, and verifies the web interface on port 8000. The pinned `nils_ost.bambuddy` collection is also installed for future API-driven printer and settings management; its Docker installer is not used.
 - **`nexdeck`** — Infrastructure dashboard. The tracked release is 0.41.4; the
   role resolves existing placement and serves port 8000.
 - **`homelable`** — Topology UI and discovery. See [Homelable](#homelable).
@@ -582,7 +593,7 @@ After deployment, point APT clients at `http://<container-ip>:3142`. The report 
 
 ### Tailscale Subnet Router
 
-`tailscale_router` (`install_tailscale_router: true`) gives every device on your tailnet access to the whole homelab LAN without per-device WireGuard configs. It creates or adopts an unprivileged LXC (`tailscale-router-nash`), passes through `/dev/net/tun` and enables IPv4/IPv6 forwarding, installs a pinned, checksum-verified-key `tailscale` package, and runs `tailscale up --advertise-routes=...` using a reusable auth key from the Tailscale admin console (`tailscale_router_auth_key`, vault-encrypted).
+`tailscale_router` (`install_tailscale_router: true`) gives every device on your tailnet access to the whole homelab LAN without per-device WireGuard configs. It configures the existing unprivileged LXC (`tailscale-router-nash`), requires existing `/dev/net/tun` passthrough, enables IPv4/IPv6 forwarding, installs a pinned, checksum-verified-key `tailscale` package, and runs `tailscale up --advertise-routes=...` using a reusable auth key from the Tailscale admin console (`tailscale_router_auth_key`, vault-encrypted).
 
 Set `tailscale_router_advertise_routes` to your LAN CIDR(s) (e.g. `["10.10.0.0/16"]`) — the role refuses to run without at least one. **New or changed routes still need one-time approval** in the Tailscale admin console (Machines → this device → Edit route settings), unless `autoApprovers` is configured in your tailnet ACL. Once approved, any device on the tailnet can reach the homelab subnet directly — no client-side routes or WireGuard peers to manage.
 
@@ -801,29 +812,10 @@ ansible-playbook site.yml --tags cleanup \
 
 ### VM Deployment
 
-The `vm_deploy` role deploys full VMs from ISOs. Runs on a master node and delegates `qm create` to target nodes (randomly or by name). Supports configurable hardware per VM: disk bus (virtio/scsi/ide), BIOS (seabios/ovmf), TPM 2.0, network model, and machine type (q35/pc).
-
-Uses the Proxmox API to exclude occupied VMIDs from the per-node ranges in
-`inventory.yml`, and skips VMs that already exist by name. The tracked example
-partitions VMIDs 100-199 across the two nodes.
-
-**Enable in `group_vars/proxmox_cluster.yml`:**
-
-```yaml
-deploy_vms: true
-vm_deploy_node: "random" # or a specific node name
-vm_deploy_storage: "helios"
-
-vm_deploy_vms:
-  - name: debian-12
-    iso: debian-12.14.0-amd64-netinst.iso
-    ostype: l26
-    cores: 2
-    memory: 2048
-    disk_size: 20
-```
-
-See `group_vars/proxmox_cluster.yml.example` for the full set of VM definitions and per-VM override options (node, storage, bridge, TPM, etc.).
+Use [Terraform](../terraform/README.md) for new VMs and hardware changes. The
+legacy `deploy_vms` flag now selects an explicit failure instead of guest
+creation. Existing VM definitions and defaults remain historical input only.
+`macos.yml` also refuses provisioning. Existing media and backups are preserved.
 
 ### Network Tuning
 

@@ -46,18 +46,6 @@
         lxc_nfs_export: ""
         lxc_nfs_mountpoint: ""
 
-    - name: Enable container startup at node boot
-      ansible.builtin.shell:
-        cmd: |
-          set -euo pipefail
-          if ! pct config {{ lxc_resolved_vmid }} | grep -qx 'onboot: 1'; then
-            pct set {{ lxc_resolved_vmid }} --onboot 1
-            echo changed
-          fi
-        executable: /bin/bash
-      register: homelable_onboot
-      changed_when: "'changed' in homelable_onboot.stdout"
-
     - name: Read installed Homelable version
       ansible.builtin.command:
         argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, cat, /opt/homelable/.ansible-version]

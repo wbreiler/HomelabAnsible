@@ -1,0 +1,23 @@
+---
+- name: Verify Ansible refuses to create or start Terraform guests
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Create isolated test directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: terraform-ownership-
+      register: ownership_test_directory
+
+    - name: Exercise missing and stopped guests with a mutation-rejecting fixture
+      ansible.builtin.include_tasks: terraform-ownership-case.yml
+      loop: [missing, stopped]
+      loop_control:
+        loop_var: ownership_case
+
+    - name: Remove local test artifacts
+      ansible.builtin.file:
+        path: "{{ ownership_test_directory.path }}"
+        state: absent

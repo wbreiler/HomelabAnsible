@@ -1,0 +1,41 @@
+---
+- name: Clear test command log
+  ansible.builtin.copy:
+    dest: "{{ ownership_test_directory.path }}/commands.log"
+    content: ""
+    mode: '0600'
+
+- name: Reject an absent or stopped guest before application configuration
+  environment:
+    PATH: "{{ playbook_dir }}/fixtures/terraform-ownership:{{ lookup('env', 'PATH') }}"
+    LXC_TEST_LOG: "{{ ownership_test_directory.path }}/commands.log"
+    LXC_TEST_STATE: "{{ ownership_case }}"
+  block:
+    - name: Exercise the shared LXC configuration entry point
+      ansible.builtin.include_tasks: ../tasks/create_lxc.yml
+      vars:
+        lxc_hostname: ownership-test
+
+    - name: Fail if guest configuration was allowed
+      ansible.builtin.fail:
+        msg: The ownership guard did not reject the test guest.
+  rescue:
+    - name: Require the intended safety guard to fail
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            ('Require an existing Terraform-provisioned container' if ownership_case == 'missing'
+            else 'Require the existing container to be running')
+
+- name: Read fixture command log
+  ansible.builtin.slurp:
+    src: "{{ ownership_test_directory.path }}/commands.log"
+  register: ownership_commands
+
+- name: Verify only guest discovery and status checks ran
+  ansible.builtin.assert:
+    that:
+      - >-
+        ownership_commands.content | b64decode ==
+        ('list\n' if ownership_case == 'missing' else 'list\nstatus 9000\n')

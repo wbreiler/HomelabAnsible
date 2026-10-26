@@ -43,39 +43,20 @@
         lxc_nfs_export: ""
         lxc_nfs_mountpoint: ""
 
-    - name: Start Tailscale router automatically with its host
-      ansible.builtin.lineinfile:
-        path: "/etc/pve/lxc/{{ lxc_resolved_vmid }}.conf"
-        regexp: '^onboot:'
-        line: 'onboot: 1'
-
-    - name: Allow the TUN device in the container's cgroup
-      ansible.builtin.lineinfile:
-        path: "/etc/pve/lxc/{{ lxc_resolved_vmid }}.conf"
-        line: "lxc.cgroup2.devices.allow: c 10:200 rwm"
-      register: tailscale_router_cgroup_conf
-
-    - name: Bind-mount /dev/net/tun into the container
-      ansible.builtin.lineinfile:
-        path: "/etc/pve/lxc/{{ lxc_resolved_vmid }}.conf"
-        line: "lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file"
-      register: tailscale_router_tun_conf
-
-    - name: Restart container to apply TUN device passthrough
+    - name: Read existing TUN passthrough configuration
       ansible.builtin.command:
-        cmd: pct reboot {{ lxc_resolved_vmid }}
-      when: tailscale_router_cgroup_conf.changed or tailscale_router_tun_conf.changed
-      changed_when: true
-
-    - name: Wait for container to be ready after restart
-      ansible.builtin.command:
-        cmd: pct exec {{ lxc_resolved_vmid }} -- echo ok
-      register: tailscale_router_ready
-      until: tailscale_router_ready.rc == 0
-      retries: 12
-      delay: 5
+        cmd: pct config {{ lxc_resolved_vmid }}
+      register: tailscale_router_lxc_config
       changed_when: false
-      when: tailscale_router_cgroup_conf.changed or tailscale_router_tun_conf.changed
+
+    - name: Require TUN passthrough before configuring Tailscale
+      ansible.builtin.assert:
+        that:
+          - "'lxc.cgroup2.devices.allow: c 10:200 rwm' in tailscale_router_lxc_config.stdout"
+          - "'lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file' in tailscale_router_lxc_config.stdout"
+        fail_msg: >-
+          Provision the TUN device before configuring Tailscale. Ansible does
+          not modify LXC hardware or restart the container.
 
     - name: Read current IPv4/IPv6 forwarding config
       ansible.builtin.command:
