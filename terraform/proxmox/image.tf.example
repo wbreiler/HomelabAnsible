@@ -1,0 +1,17 @@
+# Copy to a new local deployment file and replace the source, hash, and node.
+# Add a new versioned resource instead of overwriting media used by a guest.
+resource "proxmox_virtual_environment_file" "versioned_template" {
+  content_type = "vztmpl"
+  datastore_id = "local"
+  node_name    = "your-node"
+  overwrite    = false
+
+  source_file {
+    path     = "https://your-verified-mirror.example/versioned-template.tar.zst"
+    checksum = "REPLACE_WITH_VERIFIED_SHA256"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}

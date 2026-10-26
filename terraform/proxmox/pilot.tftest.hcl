@@ -4,7 +4,8 @@ run "discovery_only" {
   command = plan
 
   variables {
-    pilot = null
+    pilot                = null
+    pbs_storage_password = "mock-pbs-password"
   }
 
   assert {
@@ -17,6 +18,7 @@ run "isolated_pilot" {
   command = plan
 
   variables {
+    pbs_storage_password = "mock-pbs-password"
     pilot = {
       vm_id            = 100
       node_name        = "test-node"
