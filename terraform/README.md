@@ -20,7 +20,7 @@ Ansible provisioning path stops managing the same settings.
 
 ## First local check
 
-Install Terraform 1.6 or later, below 2.0, using the
+Install Terraform 1.17.0 using the
 [official installation instructions](https://developer.hashicorp.com/terraform/install).
 This starter was validated with Terraform 1.17.0. Run from `terraform/proxmox/`:
 
@@ -31,10 +31,15 @@ terraform validate
 ```
 
 These commands download the pinned provider and validate its schema without
-accessing Proxmox. Commit `.terraform.lock.hcl`, including its verified provider
-checksums. Review provider upgrades deliberately.
+accessing Proxmox. With the cloud configuration present, initialization can
+require HCP authentication even with `-backend=false`. Commit
+`.terraform.lock.hcl`, including its verified provider checksums. Review
+provider upgrades deliberately.
 
 ## First live plan
+
+Complete the HCP connection in the State section before running another plan
+if `cloud.local.tf` is present.
 
 Use a dedicated read-only API identity for this stage. In the Proxmox UI, create
 a dedicated user and a privilege-separated API token. Assign `PVEAuditor` at
@@ -80,24 +85,54 @@ exit
 ```
 
 The plan should query node names and propose no resource changes. Partial node
-visibility can indicate insufficient permissions. Authentication, certificate
-trust, API connectivity, and live output must still be verified on this cluster.
-No live plan or API identity creation is part of the initial repository change.
+visibility can indicate insufficient permissions. The first local plan passed
+and returned both cluster nodes. Verify a new plan after connecting HCP.
 
 ## State
 
-This pilot uses Terraform's default local backend. A plan without `-out` does
-not save a plan file. An apply can save node data in local state, even though
-this configuration has no managed resources.
+Use HCP Terraform for state storage and set the workspace execution mode to
+**Local** under workspace Settings > General. Terraform must run on the
+controller to reach the private Proxmox API. HCP stores the state and provides
+locking and state history. Do not put the Proxmox API token into HCP for this
+local workflow.
+
+Copy `proxmox/cloud.tf.example` to `proxmox/cloud.local.tf` and enter the HCP
+organization and workspace names. The local file is ignored because it holds
+deployment-specific configuration. The existing local deployment file already
+contains the selected organization and workspace.
+
+From `terraform/proxmox/`, authenticate and initialize:
+
+```sh
+terraform login
+terraform init
+```
+
+`terraform login` opens the browser and prompts for an HCP user API token.
+This is a different token from the Proxmox discovery token. Paste it only into
+the terminal prompt. Terraform stores HCP credentials outside this repository
+in the user's CLI credentials file.
+
+If Terraform detects existing local state, review the destination before
+accepting its migration prompt. The initial discovery plan did not create a
+local state file. Do not apply if the workspace already contains unexpected
+resources or state.
+
+Repeat the live plan with the Proxmox token in the local environment. Confirm
+the workspace uses Local execution before supplying that token. An apply can
+then save node outputs to HCP without changing guests. Authentication, workspace
+execution mode, initialization, and remote state writes require live checks.
+
+See [HCP CLI integration](https://developer.hashicorp.com/terraform/cli/cloud).
 
 State, variable files, provider caches, and `*.tfplan` files are ignored. State
 and saved plans can contain secrets. Never commit them or publish plan output.
 Use the `.tfplan` extension for saved plans. Do not enable Terraform debug logs
 with real credentials unless you can protect and remove the resulting logs.
 
-Before managing a persistent guest, select a protected remote backend with
-locking, encryption, access controls, and recoverable versions. Git is not a
-state backup. Do not run concurrent Terraform operations against local state.
+Before managing a persistent guest, verify remote state access, locking, and
+state recovery. Git is not a state backup. Do not run concurrent Terraform
+operations against local state.
 
 ## Next stage
 
