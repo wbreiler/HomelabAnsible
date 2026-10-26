@@ -1,13 +1,13 @@
 # Minecraft server automation
 
-This project provisions unprivileged Minecraft LXCs on Proxmox and reconciles
-already-running servers. It supports Modrinth, CurseForge, and manually supplied
+This project configures existing Minecraft servers. Terraform provisions their
+unprivileged Proxmox LXCs. It supports Modrinth, CurseForge, and manually supplied
 official server packs.
 
 ## Layout
 
-- `ansible/provision.yml` creates and starts LXCs, reconciles HA placement,
-  configures new guests, and merges their VMIDs into the cluster backup job.
+- `ansible/provision.yml` is a compatibility alias for `site.yml`. It configures
+  existing guests and never creates, starts, or resizes them.
 - `ansible/site.yml` configures existing guests from their `ansible_host` values;
   it does not create, move, resize, start, or stop LXCs or alter backup jobs.
 - `ansible/ha.yml` reconciles only PVE 9 HA resources and node-affinity rules.
@@ -38,8 +38,8 @@ CurseForge key literally because its `$2a$10$` prefix is shell-sensitive.
 
 The controller needs Ansible, the Python requirements, the collection in
 `requirements.yml`, and SSH access appropriate to the selected entry point.
-Provisioning expects the configured Debian 13 template/storage to be available
-to Proxmox; the playbook ensures the named template exists on target nodes.
+Provision the guest and its SSH key through Terraform first. Ansible no longer
+downloads templates or changes guest hardware and cluster backup jobs.
 
 ## Retired deployment: Cobbleverse
 
@@ -60,7 +60,7 @@ example. Important fields include:
 | Field | Purpose |
 | --- | --- |
 | `hostname`, `ansible_host`, `vmid`, `node` | Guest identity, existing address, and Proxmox placement |
-| `cores`, `memory`, `disk` | LXC resources used during provisioning |
+| `cores`, `memory`, `disk` | Historical sizing reference. Terraform owns hardware |
 | `pack_source` | `modrinth`, `curseforge`, or `manual` |
 | `modpack_slug`, `curseforge_project_id` | Upstream pack identity |
 | `mc_version`, `loader`, `loader_version` | Minecraft and loader selection |
@@ -86,7 +86,7 @@ ansible-playbook site.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub -e serve
 `site.yml` validates that selected addresses are unique VLAN 40 addresses and
 configures guests serially. Check mode is a dry run, not runtime verification.
 
-## Provision LXCs
+## Configure Terraform-provisioned LXCs
 
 ```bash
 cd minecraft/ansible
@@ -105,16 +105,13 @@ forwarding from the controller through the source host to the destination.
 The Ansible configuration requests `ForwardAgent=yes`; ordinary direct SSH
 does not. Verify the forwarded agent can authenticate the second hop before
 migration. A working direct guest connection does not prove that path.
-Provisioning
-creates/starts guests, discovers their DHCP addresses, waits for SSH, configures
-them, and then updates the backup job whose comment is exactly
-`Minecraft Server Backups`. A new job is hourly, snapshot mode, zstd-compressed,
-and uses `proxmox_backup_storage`; an existing job keeps its storage, schedule,
-mode, compression, comment, and enabled state while receiving the new VMIDs.
+`provision.yml` now imports `site.yml`. It uses the configured `ansible_host`
+and does not discover DHCP addresses, modify HA policy, or merge backup VMIDs.
+Run `ha.yml` separately for approved HA policy changes. Preserve the existing
+Minecraft backup job. Adding a new guest to its protected VMID list requires
+an explicit backup configuration change.
 
-Do not use `provision.yml --tags timezone` as a guest-only shortcut: tasks tagged
-`always` still perform Proxmox/API discovery and guest inventory construction.
-Use `site.yml --tags timezone` for an existing server.
+Use `site.yml --tags timezone` for guest-only timezone configuration.
 
 ## HA placement
 

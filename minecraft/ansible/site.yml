@@ -101,6 +101,7 @@
         xms: "{{ item.xms }}"
         server_properties: "{{ item.server_properties | default({}) }}"
         ops: "{{ item.ops | default([]) }}"
+        migrate_from: "{{ item.migrate_from | default(omit) }}"
       loop: "{{ minecraft_target_servers }}"
       loop_control:
         label: "{{ item.hostname }} ({{ item.ansible_host }})"

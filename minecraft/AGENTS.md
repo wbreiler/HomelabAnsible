@@ -4,10 +4,10 @@ Universal guidance for agents working in the `minecraft/` project.
 
 ## What this repo does
 
-Automates Minecraft server provisioning and modpack updates for a Proxmox cluster (`cluster-nash`, nodes: Prometheus and Atlas). Two components:
+Automates existing Minecraft server configuration and modpack updates for a Proxmox cluster (`cluster-nash`, nodes: Prometheus and Atlas). Two components:
 
 1. **`update-script/`** — Modpack update script deployed to each Minecraft server LXC
-2. **`ansible/`** — Playbooks that manage HA placement, create LXCs via the Proxmox API, then SSH in to configure them
+2. **`ansible/`** — Configures existing guests over SSH and manages HA policy separately. Terraform owns LXC provisioning.
 
 The Ansible role deploys and invokes `update-script/update-modpack.sh`; the
 controller-side `apply-manual-pack.sh` is run separately for manually managed
@@ -22,7 +22,7 @@ packs. Keep their shared paths and configuration contract aligned.
 
 ## Key constraints
 
-- **Minecraft server LXCs are unprivileged** with `nesting=1` (set by playbook automatically).
+- **Minecraft server LXCs are unprivileged** with `nesting=1` (declared in Terraform).
 - **Allocate VMIDs sequentially.** Check both live cluster state and the ignored
   `servers.yml`, then use the next unused sequential ID. Do not reserve or skip
   IDs without a current, documented conflict.
@@ -61,7 +61,12 @@ to the destination. Ansible requests `ForwardAgent=yes`, unlike direct SSH
 defaults. Verify forwarded-agent authentication through the source before
 migration. Direct guest authentication alone does not validate the second hop.
 
-**Two-play architecture**: Play 1 runs on `localhost` against the Proxmox API to create LXCs and waits for SSH. Play 2 runs on the `newly_provisioned` dynamic group (populated by `add_host`) to apply the `minecraft_server` role. Re-running is idempotent.
+**Provisioning ownership**: Terraform creates guests and owns hardware and
+boot settings. `provision.yml` is a compatibility import of `site.yml`, which
+configures existing addresses from ignored `servers.yml`. It never creates,
+starts, resizes, or moves guests and never edits backup jobs. Use `ha.yml`
+separately for approved HA policy changes. Never restore API guest creation to
+these application playbooks.
 
 **Existing-server entrypoint**: `site.yml` builds an in-memory inventory from
 the `ansible_host` values in ignored `servers.yml`, then applies the role with
@@ -81,7 +86,7 @@ manually returns it to its preferred node.
 files are gitignored so node addresses, storage names, VMIDs, operators, and
 migration paths remain local.
 
-**Adding a server**: Edit the ignored `servers.yml`. For CurseForge packs add `pack_source: curseforge` and `curseforge_project_id: "NNNNNN"`. The numeric project ID is in the URL on curseforge.com.
+**Adding a server**: Provision and review the guest in Terraform first. Then edit the ignored `servers.yml`. For CurseForge packs add `pack_source: curseforge` and `curseforge_project_id: "NNNNNN"`. The numeric project ID is in the URL on curseforge.com.
 
 **`pack_source: manual` — recommended fallback for broken auto-fetched packs**: Some CurseForge/Modrinth-side reconstructions of a modpack (via `update-modpack.sh`'s API-driven fetch) can differ subtly from the pack's official server-pack download — e.g. mismatched mod jar builds — in ways that cause runtime bugs the auto-fetch path can't detect (a client "Connection Lost" `ResourceLocationException` on `bettermc-nash`/`bettermc2-nash` traced back to exactly this: the auto-fetched mod set corrupted a large network sync packet; rebuilding from the official ServerPackCreator/CurseForge server-pack zip fixed it immediately). When a pack is misbehaving and the cause isn't an obvious single-mod config issue, prefer recreating from the official server pack over continuing to debug the auto-fetched version:
 
@@ -123,7 +128,10 @@ the other resources and supplies the rule digest to prevent concurrent writes.
 
 **CurseForge provisioning** in the role delegates to `update-modpack.sh --no-wait` rather than reimplementing the API logic. The script and its config are deployed in step 5 (before the download steps) for this reason.
 
-**Backup job**: At the end of Play 1, the playbook creates or updates a Proxmox cluster backup job (comment: `Minecraft Server Backups`, schedule: `0 * * * *`, mode: snapshot, compress: zstd). If the job already exists it merges the provisioned VMIDs into the existing VMID list and preserves that job's storage and schedule. A newly created job uses `proxmox_backup_storage` from `group_vars/all.yml`. The job is identified by its comment string, so don't rename it in the Proxmox UI.
+**Backup job**: Existing Minecraft backup settings remain untouched. Ansible
+`site.yml` and the `provision.yml` alias never merge new VMIDs into backup jobs.
+Before deploying a new server, explicitly arrange backup coverage. Do not
+rename or recreate the existing `Minecraft Server Backups` job during adoption.
 
 ## External connectivity (`*.mc.wbreiler.com`)
 

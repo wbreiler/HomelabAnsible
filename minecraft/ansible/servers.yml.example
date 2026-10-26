@@ -1,5 +1,7 @@
 ---
 # Copy to servers.yml and define the Minecraft LXCs for your environment.
+# Terraform provisions the guests. Resource sizes here are historical reference.
+# Both site.yml and provision.yml configure existing guests only.
 
 servers:
   - hostname: example-minecraft
