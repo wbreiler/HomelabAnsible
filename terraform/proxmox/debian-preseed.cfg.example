@@ -1,0 +1,42 @@
+# Render into a protected local file and transfer through the private VM console.
+d-i debian-installer/locale string en_US.UTF-8
+d-i keyboard-configuration/xkb-keymap select us
+d-i netcfg/choose_interface select auto
+d-i netcfg/disable_autoconfig boolean true
+d-i netcfg/get_ipaddress string @ADDRESS@
+d-i netcfg/get_netmask string 255.255.255.0
+d-i netcfg/get_gateway string @GATEWAY@
+d-i netcfg/get_nameservers string @DNS@
+d-i netcfg/confirm_static boolean true
+d-i netcfg/get_hostname string terraform-debian-test
+d-i netcfg/get_domain string local
+d-i mirror/country string manual
+d-i mirror/http/hostname string deb.debian.org
+d-i mirror/http/directory string /debian
+d-i mirror/http/proxy string
+d-i passwd/root-login boolean false
+d-i passwd/user-fullname string Terraform ISO Test
+d-i passwd/username string ansible
+d-i passwd/user-password-crypted password !
+d-i clock-setup/utc boolean true
+d-i time/zone string America/Chicago
+d-i clock-setup/ntp boolean true
+# Refuse unattended partitioning on any machine except this disposable UUID.
+d-i partman/early_command string test "$(tr A-Z a-z < /sys/class/dmi/id/product_uuid)" = "@VM_UUID@" || exit 1
+d-i partman-auto/disk string /dev/sda
+d-i partman-auto/method string regular
+d-i partman-auto/choose_recipe select atomic
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+d-i apt-setup/cdrom/set-first boolean false
+d-i apt-setup/disable-cdrom-entries boolean true
+tasksel tasksel/first multiselect standard, ssh-server
+d-i pkgsel/include string openssh-server qemu-guest-agent sudo
+d-i pkgsel/upgrade select none
+popularity-contest popularity-contest/participate boolean false
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/bootdev string /dev/sda
+d-i preseed/late_command string set -e; in-target install -d -m 0700 -o ansible -g ansible /home/ansible/.ssh; printf '%s' '@PUBLIC_KEY_BASE64@' | base64 -d > /target/home/ansible/.ssh/authorized_keys; in-target chown ansible:ansible /home/ansible/.ssh/authorized_keys; in-target chmod 0600 /home/ansible/.ssh/authorized_keys; printf 'PasswordAuthentication no\nPermitRootLogin no\n' > /target/etc/ssh/sshd_config.d/99-terraform-test.conf; printf 'ansible ALL=(ALL) NOPASSWD: ALL\n' > /target/etc/sudoers.d/terraform-test; chmod 0440 /target/etc/sudoers.d/terraform-test; in-target visudo -cf /etc/sudoers.d/terraform-test; in-target systemctl enable qemu-guest-agent
+d-i finish-install/reboot_in_progress note

@@ -1,8 +1,9 @@
 # Proxmox guest lifecycle
 
 Terraform owns guest provisioning and hardware. Ansible owns host configuration
-and guest software. The local deployment now tracks all 32 existing guests:
-30 LXCs and two VMs, including the Debian pilot. Adoption imported 31 existing
+and guest software. The local deployment now tracks 33 guests:
+30 LXCs and three VMs, including the Debian pilot and a disposable ISO test.
+Adoption imported 31 existing
 guests with zero creates, updates, or destroys. A post-import plan had no changes.
 
 Actual guest definitions live in ignored `guests.local.tf` and `vms.local.tf`.
@@ -17,7 +18,8 @@ the existing PBS storage connection, and 35 cached media files. These 69 objects
 were imported without creating, changing, deleting, or downloading anything.
 Their definitions live in ignored `platform.local.tf` and `pbs.local.tf`.
 The separate ISO library now adds ten installers on each node, for 20 new
-cached files and 121 managed resources in total. All destination SHA256 hashes
+cached files. There are 122 managed resources including the disposable VM.
+All destination SHA256 hashes
 matched the trusted NAS files, and the final Terraform plan had no changes.
 
 ## Ownership
@@ -349,7 +351,70 @@ Six mock-provider tests, Terraform validation/formatting, and Proxmox Ansible
 lint/syntax checks passed. One completed upload was adopted without replacing
 its bytes when transfers switched to direct node downloads. Completed import
 blocks and protected before/after state snapshots remain in ignored `artifacts/`.
-Installer boot tests and operating-system installation remain untested.
+Debian installation is covered by the disposable test below. Other installer
+boot tests remain untested.
+
+### Disposable Debian installation
+
+`proxmox/debian-install.tf` optionally creates one VM from an existing installer
+ISO. Copy `debian-install.auto.tfvars.example` to an ignored local variable
+file. Select the next unused VMID after checking the cluster and Minecraft
+inventory. Grant the existing infrastructure identity its existing guest role
+only on that new VMID. Do not widen existing guest or node grants.
+
+The VM has two CPU cores with a two-core limit, 2 GiB memory, one 12 GiB disk,
+no host autostart, no HA resource, and no disk backup/replication. Its deletion
+guard remains enabled. The existing IP-tag service may add tags. Actual node,
+VMID, ISO ID, UUID, and network configuration stay in ignored deployment files.
+
+Render `debian-preseed.cfg.example` into a protected local file with a checked
+address, gateway, DNS server, fresh VM UUID, and base64-encoded SSH public key.
+Its partition command refuses a different machine UUID. It installs Debian
+to the new VM's sole disk, locks passwords, disables root SSH login, installs
+the guest agent, and gives the test account key-based SSH/sudo access.
+This account policy is intended for a disposable test, not a production baseline.
+
+Deliver the rendered file through the private VM console rather than publishing
+it on a web server. Debian's installer supports local `file:///` preseed URLs.
+Use the installer shell to write `/tmp/terraform-iso-test/preseed.cfg`, compare
+its hash with the protected controller copy, then load it through the running
+installer's native preseed step. Independent shell debconf clients can leave
+the active frontend's cached answers unchanged. Keep the handoff inside the
+installer's native frontend. See [Debian's preseed guide](https://www.debian.org/releases/trixie/amd64/apbs02.en.html).
+
+The tested BIOS ISO enables a speech-install timeout after 30 seconds. Select
+its `boot:` prompt and enter the complete command before that timeout. Direct
+QMP keyboard events avoid delays from timed individual monitor keystrokes.
+Boot with `auto`, the checked static network settings, a local preseed URL, and
+`console=ttyS0,115200n8`. The serial installer uses screen: Ctrl+A, 1 selects
+the installer, Ctrl+A, 2 its shell, and Ctrl+A, 4 its logs. Validate the VM name
+before any QMP control operation and direct every operation to the new VM only.
+
+After installation, set `installed = true`, shut down only the test VM, and
+review a plan that updates only that VM. Apply to detach the ISO and restrict
+boot order to `scsi0`. Verify a fresh boot, SSH key authentication, password
+locks, guest-agent health, installer logs, and a no-change Terraform plan.
+Compare existing guests with their protected baseline, allowing only existing
+services' runtime tags, HA placement, and transient backup metadata. Remove
+temporary delivery services/files after verification. Keep the VM for inspection
+until its deletion is explicitly requested.
+
+The 2026-10-26 test installed Debian 13.6 from the verified ISO cache onto the
+empty test disk. Answers were transferred privately, checksum-verified, and
+loaded through the installer's native local-file step. A one-line change to
+the installer's RAM-only preseed entry point selected that local file after
+the initial HTTP delivery attempt failed. The ISO itself was unchanged.
+This run required console control and does not prove unattended boot automation.
+
+After Terraform detached the ISO, the VM passed a fresh disk-only boot with
+an ext4 root on `/dev/sda1`, SSH key authentication, locked root/user passwords,
+disabled password/root SSH login, working sudo and guest agent, and zero failed
+systemd units. All nine Terraform tests passed, the final plan had no changes,
+and all 32 earlier guests retained their hardware, placement, and power states.
+Only scheduled-backup locks/digests differed during comparison. Temporary host
+delivery files and the service were removed/stopped. Protected state, local
+configuration, and verification evidence remain in ignored `artifacts/`.
+The test VM remains running for inspection. HA and backup/restore were not tested.
 
 ### Imported platform resources
 

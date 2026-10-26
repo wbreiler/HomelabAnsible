@@ -1,0 +1,12 @@
+# Check live cluster IDs and Minecraft inventory before selecting the next VMID.
+# Use the same freshly generated UUID in the rendered private preseed file.
+debian_install_test = {
+  vm_id             = 999
+  node_name         = "your-node"
+  datastore_id      = "your-vm-storage"
+  installer_file_id = "local:iso/debian-version-amd64-netinst.iso"
+  bridge            = "vmbr0"
+  vlan_id           = 40
+  uuid              = "REPLACE_WITH_A_FRESH_UUID"
+  installed         = false
+}
