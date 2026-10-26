@@ -45,6 +45,24 @@ Use an HTTPS endpoint whose certificate your controller trusts. For the PVE
 cluster CA, verify its identity through your existing trusted access before
 trusting it locally. TLS verification remains enabled.
 
+On macOS, the provider uses Keychain trust. `SSL_CERT_FILE` does not establish
+that trust. Retrieve the public cluster CA through an existing trusted SSH
+connection and verify its SHA-256 fingerprint. Then add it to the user
+Keychain, restricted to SSL for the endpoint address:
+
+```sh
+# Replace NODE_ADDRESS with the same hostname or IP used in the API endpoint.
+ssh root@NODE_ADDRESS 'cat /etc/pve/pve-root-ca.pem' > /private/tmp/proxmox-ca.pem
+openssl x509 -in /private/tmp/proxmox-ca.pem -noout -fingerprint -sha256
+security add-trusted-cert -r trustRoot -p ssl -s NODE_ADDRESS \
+  -k "$HOME/Library/Keychains/login.keychain-db" /private/tmp/proxmox-ca.pem
+```
+
+macOS can request confirmation. This changes certificate trust for the current
+user. To remove that trust later, use
+`security remove-trusted-cert /private/tmp/proxmox-ca.pem`. See
+[Go certificate verification](https://pkg.go.dev/crypto/x509).
+
 Run this in Bash. Enter the full token as `user@realm!token-id=token-secret` at
 the hidden prompt. The token does not appear in shell history or process arguments.
 
