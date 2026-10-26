@@ -1,8 +1,9 @@
 # Proxmox guest lifecycle
 
 Terraform owns guest provisioning and hardware. Ansible owns host configuration
-and guest software. The local deployment now tracks 33 guests:
-30 LXCs and three VMs, including the Debian pilot and a disposable ISO test.
+and guest software. The local deployment now tracks 32 guests:
+30 LXCs and two VMs, including the Debian pilot. The disposable ISO test passed
+and its VM was subsequently removed through Terraform.
 Adoption imported 31 existing
 guests with zero creates, updates, or destroys. A post-import plan had no changes.
 
@@ -18,7 +19,7 @@ the existing PBS storage connection, and 35 cached media files. These 69 objects
 were imported without creating, changing, deleting, or downloading anything.
 Their definitions live in ignored `platform.local.tf` and `pbs.local.tf`.
 The separate ISO library now adds ten installers on each node, for 20 new
-cached files. There are 122 managed resources including the disposable VM.
+cached files. There are 121 managed resources after disposable VM cleanup.
 All destination SHA256 hashes
 matched the trusted NAS files, and the final Terraform plan had no changes.
 
@@ -414,7 +415,22 @@ and all 32 earlier guests retained their hardware, placement, and power states.
 Only scheduled-backup locks/digests differed during comparison. Temporary host
 delivery files and the service were removed/stopped. Protected state, local
 configuration, and verification evidence remain in ignored `artifacts/`.
-The test VM remains running for inspection. HA and backup/restore were not tested.
+The user subsequently requested cleanup on 2026-10-26. A reviewed saved plan
+destroyed only the test VM and its 12 GiB disk. The reusable definition,
+preseed example, tests, existing guests, and cached media were preserved.
+The local test variable is now null, and its deletion guard remains enabled.
+HA and backup/restore were not tested.
+
+For another explicitly approved cleanup, first preserve state and verify the
+test VM's ID, UUID, and disk identity. Set `debian_install_test = null` in the
+ignored local variables. Use a temporary ignored `*_override.tf` to disable
+`prevent_destroy` only on `proxmox_virtual_environment_vm.debian_install_test`.
+Require a saved plan with exactly that VM deletion and no other resource
+changes. Apply that saved plan, then archive the override outside the active
+module immediately. Require a final no-change plan with the reusable guard
+restored. Verify the VM and its disk are absent and compare remaining guests
+and cached media with the protected baseline. Do not use workspace-wide
+`terraform destroy` for this cleanup.
 
 ### Imported platform resources
 
