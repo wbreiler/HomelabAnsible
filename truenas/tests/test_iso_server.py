@@ -29,6 +29,9 @@ class IsoServerTests(unittest.TestCase):
         self.assertEqual(mount["source"], self.settings["iso_server_root"])
         self.assertTrue(mount["read_only"])
         self.assertFalse(mount["bind"]["create_host_path"])
+        config = self.compose["configs"]["nginx-config"]
+        self.assertIn("file", config)
+        self.assertNotIn("content", config)
 
     def test_dedicated_address_never_publishes_host_ports(self):
         app = self.compose["services"]["iso-server"]

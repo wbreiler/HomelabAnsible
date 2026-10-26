@@ -19,6 +19,7 @@
           - iso_server_address is match('^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
           - iso_server_parent | length > 0
           - iso_server_root is match('^/mnt/[^/]+/.+')
+          - iso_server_config_dir is match('^/mnt/[^/]+/appdata/iso-server$')
           - iso_server_subnet | length > 0
           - iso_server_gateway | length > 0
 
@@ -31,7 +32,20 @@
       ansible.builtin.assert:
         that:
           - iso_server_directory.stat.isdir | default(false)
-        fail_msg: Supply an existing ISO directory. This playbook does not create datasets or directories.
+        fail_msg: Supply an existing ISO directory. This playbook does not create ISO storage.
+
+    - name: Create only the application configuration directory
+      ansible.builtin.file:
+        path: "{{ iso_server_config_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Install the read-only nginx configuration
+      ansible.builtin.copy:
+        src: "{{ playbook_dir | dirname }}/files/iso-server/nginx.conf"
+        dest: "{{ iso_server_config_dir }}/nginx.conf"
+        mode: '0444'
+      notify: Redeploy the ISO application for nginx configuration changes
 
     - name: Read current ISO application configuration
       ansible.builtin.raw: >-
@@ -51,3 +65,8 @@
           state: RUNNING
           custom_compose_config: >-
             {{ lookup('template', '../files/iso-server/docker-compose.yml.j2') | from_yaml }}
+
+  handlers:
+    - name: Redeploy the ISO application for nginx configuration changes
+      ansible.builtin.raw: midclt call -j app.redeploy iso-server
+      changed_when: true

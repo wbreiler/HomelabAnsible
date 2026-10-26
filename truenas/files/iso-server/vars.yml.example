@@ -5,3 +5,4 @@ iso_server_parent: your-existing-storage-interface
 iso_server_subnet: 192.0.2.0/24
 iso_server_gateway: 192.0.2.1
 iso_server_root: /mnt/your-pool/isos
+iso_server_config_dir: /mnt/your-pool/appdata/iso-server

@@ -1,8 +1,9 @@
 # ISO web server
 
-Prepared as a TrueNAS custom app. It is not deployed yet. The local deployment
-file selects a dedicated macvlan address on Erebus's existing storage interface.
-The app serves an existing ISO directory read-only through nginx on port 80.
+Deployed as a TrueNAS custom app after explicit approval on 2026-10-26. The local
+deployment file selects a dedicated macvlan address on Erebus's existing storage
+interface. The app serves an existing ISO directory read-only through nginx on
+port 80. Host addresses, routes, and all ten existing ISO files were unchanged.
 
 ## Configuration
 
@@ -11,6 +12,11 @@ subnet, gateway, existing parent interface, and existing ISO directory.
 The app does not create datasets, source directories, or host port mappings.
 It uses an immutable nginx image digest, an unprivileged user, a read-only
 container filesystem, and a single-address Docker allocation pool.
+
+A dedicated appdata directory contains `nginx.conf`, mounted read-only into
+the service. This Compose runtime rejects inline configs for a read-only
+service, so the playbook installs a file-backed config. Config changes notify
+a targeted TrueNAS redeploy of this app only.
 
 The proposed address passed repository inventory and live ARP checks. These
 checks cannot establish that an offline device has no claim to the address.
@@ -57,11 +63,19 @@ matches or explicitly new image versions. Preserve existing cached guest media
 and deletion guards. Do not change a Terraform source in a way that replaces
 active boot files.
 
-The staged app passed two local storage/network boundary tests, Erebus's Docker
-Compose parser, Ansible lint, syntax validation, and a read-only Ansible preview.
-The preview reported that the app would be created and skipped every mutation.
-Runtime nginx startup, HTTP service, range downloads, restart persistence, and
-the final no-change application run remain untested until deployment approval.
+The deployed app passed:
+
+- Two local storage/network boundary tests and Ansible lint/syntax validation.
+- Directory listing from the Mac and byte-range HTTP 206 requests from both PVE nodes.
+- A complete 791,674,880-byte ISO download streamed from Prometheus, with SHA256
+  matching the trusted NAS source.
+- A targeted app redeploy followed by successful HTTP service.
+- A repeat application playbook with `changed=0` and no failures.
+
+Docker inspection confirmed the non-root user, dropped capabilities, read-only
+container filesystem, read-only ISO mount, dedicated address, and restart policy.
+A protected dated TrueNAS configuration backup exists under ignored `artifacts/`.
+The full NAS reboot path and reconstruction of missing ISO files remain untested.
 
 Run `tests/test_iso_server.py` with the same Python environment as Ansible so
 its existing Jinja2 and YAML dependencies are available.
