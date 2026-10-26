@@ -1,75 +1,35 @@
-# Test Playbooks
+# Local tests
 
-This directory contains local tests that do not connect to Proxmox nodes. The ISO test does make an external HTTPS download; the PBS and IP-Tag tests are self-contained.
+These tests do not connect to Proxmox or download images. Run from `proxmox/`.
 
-## Available Tests
+## Guest ownership guards
 
-### ISO Management Tests
-
-#### `isos-small.yml`
-Tests the `manage_isos` role with an Alpine Linux ISO (about 200 MB). Its checksum is intentionally omitted, so this validates the download path rather than artifact integrity.
-
-```bash
-ansible-playbook tests/isos-small.yml
+```sh
+ansible-playbook -i localhost, tests/terraform-ownership.yml
 ```
 
-**What it tests:**
-- ISO directory creation
-- ISO download from URL
-- File verification
+A mutation-rejecting `pct` fixture verifies that absent and stopped guests fail
+before software configuration. Only guest discovery/status commands may run.
+Expected failures are rescued by the test. Temporary logs are removed.
 
-**Output location:** `/tmp/test-isos/`
+## Platform ownership guards
 
-### PBS Backup Job Tests
-
-#### `pbs-backup-job.yml`
-
-Tests backup-job reconciliation locally with a fake `pvesh` command.
-
-```bash
-ansible-playbook tests/pbs-backup-job.yml
+```sh
+ansible-playbook -i localhost, tests/terraform-platform-ownership.yml
 ```
 
-**What it tests:**
+Verifies that `pbs_storage`, `pbs_backup_job`, `manage_isos`, and
+`download_templates` refuse execution and direct users to Terraform. The old
+`pbs-backup-job.yml` and `isos-small.yml` names remain compatibility aliases
+for this guard test. They no longer reconcile jobs or download test images.
 
-- Schedule, mode, compression, and VMID updates
-- Restricted-to-all and all-to-restricted guest transitions
-- No update for an already converged job
+## Runtime unit tests
 
-The fixture and command log are written under `/tmp/pbs-backup-job-test/`.
-
-### IP-Tag Runtime Tests
-
-#### `test_iptag.py`
-
-Tests the repository-owned IP-Tag configuration parser, guest-list parsing, address extraction, filtering, and tag formatting.
-
-```bash
+```sh
 python3 tests/test_iptag.py
+python3 tests/test_zipline_client.py
 ```
 
-### Terraform Ownership Boundary
-
-`ansible-playbook -i localhost, tests/terraform-ownership.yml` runs locally with
-an executable fixture that rejects guest mutations. It verifies that missing
-and stopped containers fail before software configuration and that only
-`pct list` and `pct status` run. Expected failures are rescued by the test.
-
-## Cleanup
-
-After running tests, clean up downloaded files:
-
-```bash
-rm -rf /tmp/test-isos
-rm -rf /tmp/pbs-backup-job-test
-```
-
-## Adding New Tests
-
-When adding new test playbooks:
-
-1. Use descriptive names (e.g., `role-name.yml`)
-2. Use `localhost` as the target host
-3. Set `become: false` to avoid sudo requirements
-4. Use `/tmp/` for any test file outputs
-5. Document the test in this README
+These cover IP-tag parsing/filtering and the local upload client respectively.
+Terraform mock tests and live adoption checks are documented in
+[`terraform/README.md`](../../terraform/README.md).

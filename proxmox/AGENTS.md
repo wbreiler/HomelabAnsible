@@ -10,8 +10,11 @@ resizing, boot flags, or hardware mutation to application roles. The shared
 legacy filename. It fails for absent or stopped guests. `vm_deploy` and
 `macos.yml` refuse provisioning. Preserve application configuration tasks.
 
-HA policy and IP tags retain their existing controllers. Terraform ignores
-HA node/power state and service-maintained tags. Raw LXC passthrough entries
+Terraform also owns backup jobs, HA resources/rules, the PBS storage connection,
+and cached images/templates. Never reconnect pbs_storage, pbs_backup_job,
+manage_isos, or download_templates to site.yml. Their direct role entry points
+fail deliberately. HA runtime placement/power and IP tags retain their existing
+services. Terraform ignores runtime HA node/power state and service-maintained tags. Raw LXC passthrough entries
 remain preserved in PVE and protected local snapshots. The provider does not
 represent every raw LXC setting. Do not claim that import proves disaster recovery.
 
@@ -103,51 +106,18 @@ defaults may still contain non-secret environment-specific defaults such as
 service health-check addresses, so review tracked defaults as well as the
 local variable files before changing behavior.
 
-### Role Execution Order
+### Role execution and infrastructure ownership
 
-`site.yml` has two plays. The first runs on `proxmox_cluster` and executes roles sequentially. `configure_repos` is an unconditional pre-task role; the roles below use explicit boolean gates. Most are opt-in, while `pbs_storage`, `iptag`, and `download_templates` default to enabled.
+`site.yml` configures host repositories, optional cluster bootstrap, guest
+software, updates, reminders, logging, and explicit recovery/cleanup work.
+`iptag` remains enabled by default. Guest application roles remain opt-in.
+Its second play applies network tuning to PVE and PBS hosts.
 
-1. **configure_repos**: Disables enterprise repos, enables no-subscription repo, and configures the APT proxy.
-2. **cluster_setup**: Creates the cluster on the master node and joins the others.
-3. **pbs_storage**: Configures PBS backup storage with a shared namespace.
-4. **pbs_backup_job**: Reconciles the scheduled PBS backup job.
-5. **manage_isos**: Downloads or copies ISOs to nodes.
-6. **iptag**: Tags LXC containers with their IPs in the Proxmox UI.
-7. **download_templates**: Fetches the latest LXC OS templates.
-8. **apt_cacher_ng**: Manages the Apt-Cacher NG LXC.
-9. **prowlarr**: Manages the Prowlarr LXC.
-10. **homebridge**: Manages the Homebridge LXC.
-11. **spoolman**: Manages the Spoolman LXC.
-12. **bambuddy**: Manages the Bambuddy LXC.
-13. **homelable**: Configures existing the topology and discovery LXC.
-14. **nexdeck**: Configures existing the infrastructure dashboard LXC.
-15. **gitea_mirror**: Manages the Gitea Mirror LXC.
-16. **seerr**: Manages the Seerr LXC.
-17. **pocket_id**: Manages the Pocket ID LXC.
-18. **vaultwarden**: Manages the Vaultwarden LXC.
-19. **forgejo**: Manages the Forgejo LXC with strict upgrade guards.
-20. **sonarr**: Manages the Sonarr LXC.
-21. **radarr**: Manages the Radarr LXC.
-22. **speedtest_tracker**: Configures existing the Internet monitoring LXC.
-23. **gatus**: Manages the Gatus status-page LXC.
-24. **diun**: Manages the Diun image-update watcher LXC.
-25. **centralized_logging**: Creates Loki and Grafana and deploys Alloy.
-26. **tailscale_router**: Manages the Tailscale subnet-router LXC.
-27. **update_apps**: Installs the wrapper for eligible unmanaged application updates.
-28. **update_all**: Updates Proxmox nodes and LXC operating systems.
-29. **update_reminder**: Installs per-node Discord update reminders.
-30. **healthcheck_reminder**: Installs the cluster-wide Discord health alert.
-31. **cleanup_storage**: Detects and optionally destroys stale ZFS datasets.
-32. **pbs_restore**: Restores LXC containers or VMs from PBS backups.
-33. **vm_deploy**: Retired provisioning guard. Fails and directs operators to Terraform.
-
-The second play runs on both `proxmox_cluster` and `pbs_nodes` groups:
-
-34. **network_tuning**: Configures storage VLAN and 10G TCP sysctl tuning (tagged `network`).
-
-### PBS Storage Pattern
-
-**Important**: The `pbs_storage` role uses a remove-then-add pattern to ensure clean reconfiguration. Proxmox storage configuration is cluster-wide, so the role runs only on `cluster_master_node`, using that host's PBS credentials and namespace.
+Terraform owns guest creation/hardware, backup jobs, HA policy, PBS storage
+connection metadata, and image/template files. The four former Ansible roles
+are removed from the active playbook. No Ansible site run may recreate those
+owners or remove/re-add the PBS connection. Actual PBS host configuration,
+users, datastores, and offsite backup scripts remain with their owning projects.
 
 ### Host Variables (per-node config)
 
@@ -279,15 +249,11 @@ management, LXC installation, system updates, and PBS restores.
 
 ### pbs_storage
 
-* **Critical**: Always removes existing PBS storage before re-adding to ensure a clean state.
-* Uses `no_log: true` for security when handling passwords.
+* Retired. Terraform owns the PVE-to-PBS storage connection. Never remove and re-add it through Ansible.
 
 ### pbs_backup_job
 
-* Creates or reconciles a cluster-wide scheduled backup job targeting
-  `pbs_storage_id` and runs once on `cluster_master_node`.
-* Compares schedule, mode, compression, and VMID selection before calling
-  `pvesh set`; skipped by default unless `configure_pbs_backup_job: true`.
+* Retired. Terraform owns backup jobs, schedules, selection, and retention. Preserve existing jobs during adoption.
 
 ### cluster_setup
 
@@ -296,9 +262,7 @@ management, LXC installation, system updates, and PBS restores.
 
 ### manage_isos
 
-* Supports HTTP, direct URL, NFS, and SMB/CIFS methods.
-* HTTP/URL downloads use `wget` with `.part` staging for atomic writes and progress display.
-* Cancelling in-progress downloads (`manage_isos_cancel_in_progress`) and pruning unmanaged ISOs (`manage_isos_prune_unmanaged`) are separate, default-`false` controls.
+* Retired. Terraform owns media. Preserve existing files and require a reviewed versioned source/checksum for new images.
 
 ### apt_cacher_ng
 
@@ -500,8 +464,7 @@ management, LXC installation, system updates, and PBS restores.
 
 ### download_templates
 
-* Fetches latest LXC OS templates via `pveam` on all nodes using parallel async downloads.
-* Enabled by default (`download_lxc_templates: true`).
+* Retired. Terraform owns pinned template sources. Do not restore automatic latest-template selection here.
 
 ### cleanup_storage
 

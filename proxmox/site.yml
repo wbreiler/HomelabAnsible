@@ -24,25 +24,9 @@
       when: setup_cluster | default(false) | bool
       tags: ['cluster', 'setup']
 
-    - role: pbs_storage
-      when: configure_pbs | default(true) | bool
-      tags: ['pbs', 'storage']
-
-    - role: pbs_backup_job
-      when: configure_pbs_backup_job | default(false) | bool
-      tags: ['pbs', 'backup']
-
-    - role: manage_isos
-      when: manage_isos | default(false) | bool
-      tags: ['isos', 'storage']
-
     - role: iptag
       when: install_iptag | default(true) | bool
       tags: ['iptag', 'setup']
-
-    - role: download_templates
-      when: download_lxc_templates | default(true) | bool
-      tags: ['templates', 'setup']
 
     - role: apt_cacher_ng
       when: install_apt_cacher_ng | default(false) | bool

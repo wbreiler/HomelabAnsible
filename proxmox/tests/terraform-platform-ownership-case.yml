@@ -1,0 +1,15 @@
+---
+- name: Refuse an Ansible infrastructure owner
+  block:
+    - name: Exercise the retired role entry point
+      ansible.builtin.include_tasks: "../roles/{{ retired_role }}/tasks/main.yml"
+
+    - name: Fail if a retired role completed
+      ansible.builtin.fail:
+        msg: The retired role did not reject execution.
+  rescue:
+    - name: Verify the intended Terraform ownership guard
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Require Terraform for infrastructure policy'
+          - "'Terraform owns' in ansible_failed_result.msg"

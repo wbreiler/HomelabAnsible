@@ -18,8 +18,10 @@ before application configuration. The VM deployment role and `macos.yml`
 refuse provisioning requests. TUN passthrough must already exist before the
 Tailscale application role runs.
 
-HA policy remains under its existing management. Terraform ignores node and
-power changes for HA guests. IP tagging remains with the existing service.
+Terraform also owns backup jobs, HA resources/rules, the PBS storage connection,
+and cached images/templates. The old Ansible owners are removed from site.yml
+and refuse direct execution. The HA service still controls runtime placement
+and power. IP tagging remains with its existing service.
 
 See [the historical repository audit](../LIVE_AUDIT.md) for the earlier baseline.
 Current placement must be checked live rather than inferred from role defaults.
@@ -28,11 +30,11 @@ Current placement must be checked live rather than inferred from role defaults.
 
 - **Repository Configuration**: Disables enterprise repositories (`.sources` format for PVE 9+) and configures the APT caching proxy
 - **Cluster Setup**: Automatically creates a Proxmox cluster and joins all nodes
-- **PBS Storage Configuration**: Connects Proxmox nodes to your Proxmox Backup Server with shared namespace support
-- **ISO Management**: Automatically downloads ISOs from HTTP server, direct URLs, NFS, or SMB shares with real-time progress display
-- **LXC Template Downloads**: Automatically downloads latest LXC OS templates on all nodes
+- **PBS Storage Connection**: Owned by Terraform, including its existing namespace. Ansible never removes and re-adds it.
+- **ISO Management**: Owned by Terraform. Existing ISO and custom boot files are preserved.
+- **LXC Templates**: Owned by Terraform with versioned sources and checksum pins.
 - **Managed App LXCs**: Configures existing Apt-Cacher NG, Prowlarr, Homebridge, Spoolman, Bambuddy, Gitea Mirror, Seerr, Pocket ID, Forgejo, Sonarr, Radarr, Gatus, Diun, and a Tailscale subnet router through repository-owned roles
-- **PBS Backup Job**: Creates/reconciles a scheduled backup job on the PBS storage, opt-in and off by default
+- **Backup Jobs**: Owned by Terraform. Existing schedules, selection, and retention remain unchanged.
 - **VM Provisioning**: Owned by Terraform. The retired `vm_deploy` role fails explicitly.
 - **macOS Tahoe**: Terraform owns hardware. [Installation notes](docs/macos.md) remain as historical reference.
 - **Network Tuning**: Configures storage VLAN subinterface and 10G TCP sysctl tuning (BBR, large buffers)
@@ -235,102 +237,20 @@ ansible-playbook site.yml --limit "atlas,prometheus"
 
 ## Configuration Details
 
-### PBS Namespaces
+### PBS connection, backup jobs, and images
 
-Proxmox storage configuration is cluster-wide. The role configures the shared PBS storage entry only on `cluster_master_node`, using that host's username and namespace. Each node can still define its own corosync ring1 address and storage pool settings. See `host_vars/node.yml.example` for the full structure.
+These definitions now live in [Terraform](../terraform/README.md). Import
+existing settings before any change. The PBS connection's current namespace,
+certificate fingerprint, credentials, and retention defaults are preserved.
+The four legacy roles (`pbs_storage`, `pbs_backup_job`, `manage_isos`, and
+`download_templates`) are not invoked by `site.yml`. Direct invocation fails.
+Their old enable flags and configuration examples are historical reference.
 
-```yaml
----
-pbs_username: "pbs-nash@pbs"
-pbs_namespace: "pve-nash"
-corosync_ring1_addr: "10.10.50.X" # node's IP on the dedicated cluster sync network
-```
-
-Copy `host_vars/node.yml.example` for each node. Set `pbs_username` and `pbs_namespace` on the cluster master; the PBS server, datastore, and password are configured in `group_vars/proxmox_cluster.yml`.
-
-### PBS Backup Job
-
-The `pbs_backup_job` role creates or reconciles a scheduled backup job (`/cluster/backup`) targeting `pbs_storage_id`. It runs once, on `cluster_master_node`, since backup jobs are cluster-wide config. Opt-in and off by default — set up the job by hand in the Proxmox UI, or enable this role to manage it declaratively.
-
-**Enable in `group_vars/proxmox_cluster.yml`:**
-
-```yaml
-configure_pbs_backup_job: true
-pbs_backup_job_schedule: "0/6:30"  # 00:30, 06:30, 12:30, and 18:30 daily
-pbs_backup_job_mode: "snapshot"
-pbs_backup_job_compress: "zstd"
-pbs_backup_job_vmids: ""  # empty = all guests
-```
-
-```bash
-ansible-playbook site.yml --tags pbs -e 'configure_pbs_backup_job=true' --ask-vault-pass
-```
-
-### ISO Management
-
-The `manage_isos` role supports four methods for getting ISOs onto your Proxmox nodes.
-
-**Destructive behavior is opt-in.** By default the role only downloads/mounts; it never cancels in-progress downloads or deletes existing ISOs. Two controls, both default `false`:
-
-- `manage_isos_cancel_in_progress: true` — kill in-progress `wget` downloads matching the storage path and remove their `.part` files.
-- `manage_isos_prune_unmanaged: true` — delete any `*.iso` in `manage_isos_storage_path` not present in the configured lists (`manage_isos_http_files`, `manage_isos_downloads`, `manage_isos_files_to_copy`). Leaving this `false` protects manually uploaded ISOs from an empty or incomplete list.
-
-#### Option 1: Download from Local HTTP Server
-
-Configure a list of ISO filenames to fetch from an internal HTTP server:
-
-```yaml
-manage_isos: true
-manage_isos_http_base_url: "http://10.10.20.3:8888" # internal ISO server
-manage_isos_http_files:
-  - debian-12.14.0-amd64-netinst.iso
-  - ubuntu-24.04.4-amd64-live-server.iso
-```
-
-Downloads use `wget` with `.part` staging for atomic writes and real-time progress.
-
-#### Option 2: Direct Download from URLs
-
-```yaml
-manage_isos: true
-manage_isos_downloads:
-  - url: "https://releases.ubuntu.com/22.04/ubuntu-22.04.3-live-server-amd64.iso"
-    filename: "ubuntu-22.04.iso"
-    checksum: "sha256:xxxxx" # Optional but recommended
-```
-
-**Download Progress**: The role displays real-time download progress for each ISO:
-
-```console
-TASK [manage_isos : Download ISOs from URLs with progress] ********************
-changed: [atlas] => (item=ubuntu-22.04.iso)
-ubuntu-22.04.iso      100%[===================>]   1.4G  15.2MB/s    in 95s
-```
-
-#### Option 3: Copy from NFS Share
-
-```yaml
-manage_isos: true
-manage_isos_use_nfs: true
-manage_isos_nfs_server: "192.168.1.100"
-manage_isos_nfs_export: "/export/isos"
-manage_isos_files_to_copy:
-  - ubuntu-22.04.iso
-  - debian-12.iso
-```
-
-#### Option 4: Copy from SMB/CIFS Share
-
-```yaml
-manage_isos: true
-manage_isos_use_smb: true
-manage_isos_smb_server: "192.168.1.100"
-manage_isos_smb_share: "isos"
-manage_isos_smb_mount_opts: "ro,username=user,password=pass"
-manage_isos_files_to_copy:
-  - ubuntu-22.04.iso
-  - debian-12.iso
-```
+Terraform tracks existing ISO/boot files without replacing them. Cached LXC
+source URLs and hashes are pinned. There is no automatic latest-template
+selection, bulk pruning, network-share mount, or download cancellation job.
+New images require a reviewed source and checksum. Unknown ISO sources and
+custom boot media require an operator-supplied recovery source or backup.
 
 ### Cluster Setup
 
@@ -784,18 +704,8 @@ Run `iptag-run` on a Proxmox node for an immediate one-shot reconciliation. Conf
 
 ### LXC Template Downloads
 
-The `download_templates` role fetches the latest available LXC OS templates on all nodes using `pveam`. Downloads are parallelized with async polling.
-
-Configure which templates to download in `group_vars/proxmox_cluster.yml`:
-
-```yaml
-download_lxc_templates: true # enabled by default
-lxc_templates:
-  - debian-12-standard
-  - debian-13-standard
-  - ubuntu-24.04-standard
-  - alpine-3.23-default
-```
+Terraform owns versioned template files. The Ansible download role is retired.
+Use the pinned source/checksum workflow in [Terraform](../terraform/README.md).
 
 ### Storage Cleanup
 

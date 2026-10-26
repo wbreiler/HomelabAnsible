@@ -1,0 +1,12 @@
+---
+- name: Verify retired infrastructure roles refuse execution
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Exercise each retired role
+      ansible.builtin.include_tasks: terraform-platform-ownership-case.yml
+      loop: [pbs_storage, pbs_backup_job, manage_isos, download_templates]
+      loop_control:
+        loop_var: retired_role

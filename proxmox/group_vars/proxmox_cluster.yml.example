@@ -12,7 +12,7 @@ set_expected_votes: false  # Set to true to configure expected votes
 # PBS (Proxmox Backup Server) Configuration
 # The cluster master host's pbs_username and pbs_namespace are used for the
 # shared cluster storage entry; see host_vars/node.yml.example.
-configure_pbs: true
+configure_pbs: false  # Retired Ansible flag. Terraform owns this resource.
 pbs_storage_id: "backup-nash"
 pbs_server: "10.10.20.2"  # Replace with your PBS server IP/hostname
 pbs_datastore: "backups"     # Replace with your PBS datastore name
@@ -22,14 +22,14 @@ pbs_fingerprint: ""  # Optional: PBS server fingerprint for verification
 # PBS Backup Job — creates/reconciles a scheduled backup job on the cluster
 # master targeting pbs_storage_id above. Set to true to manage it here instead
 # of by hand in the Proxmox UI.
-configure_pbs_backup_job: false
+configure_pbs_backup_job: false  # Retired Ansible flag. Terraform owns this resource.
 # pbs_backup_job_schedule: "0/6:30"  # Proxmox CalendarEvent, e.g. every 6h30m
 # pbs_backup_job_mode: "snapshot"
 # pbs_backup_job_compress: "zstd"
 # pbs_backup_job_vmids: ""  # Empty = all guests; or "100,101,102" for specific VMIDs
 
 # ISO Management Configuration
-manage_isos: true  # Set to true to enable automated ISO management
+manage_isos: false  # Retired Ansible flag. Terraform owns this resource.
 
 # Both destructive controls default to false; set explicitly to opt in.
 # manage_isos_cancel_in_progress: true  # Kill in-progress wget downloads and remove .part files
@@ -89,7 +89,7 @@ install_iptag: true
 # iptag_command_timeout: 8
 
 # LXC template downloads — fetches latest version of each template on all nodes
-download_lxc_templates: true
+download_lxc_templates: false  # Retired Ansible flag. Terraform owns this resource.
 # lxc_templates:           # override in group_vars to customise the list
 #   - debian-12-standard
 #   - debian-13-standard
