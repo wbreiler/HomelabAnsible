@@ -1,0 +1,67 @@
+services:
+  iso-server:
+    image: nginx:stable-alpine@sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951
+    user: "101:101"
+    entrypoint: [nginx]
+    command: [-c, /etc/nginx/iso-server.conf, -g, "daemon off;"]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+    mem_limit: 128m
+    pids_limit: 64
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+      - /var/cache/nginx:rw,noexec,nosuid,size=16m,mode=1777
+    configs:
+      - source: nginx-config
+        target: /etc/nginx/iso-server.conf
+        mode: "0444"
+    volumes:
+      - type: bind
+        source: {{ iso_server_root | to_json }}
+        target: /media
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      iso-storage:
+        ipv4_address: {{ iso_server_address | to_json }}
+
+configs:
+  nginx-config:
+    content: |
+      worker_processes 1;
+      pid /tmp/nginx.pid;
+      error_log /dev/stderr warn;
+      events { worker_connections 1024; }
+      http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        access_log /dev/stdout;
+        server_tokens off;
+        sendfile on;
+        tcp_nopush on;
+        server {
+          listen 80;
+          root /media;
+          disable_symlinks on;
+          location / { autoindex on; }
+          location ~ (^|/)\. { deny all; }
+        }
+      }
+
+networks:
+  iso-storage:
+    name: iso-server-storage
+    driver: macvlan
+    driver_opts:
+      parent: {{ iso_server_parent | to_json }}
+      macvlan_mode: bridge
+    ipam:
+      config:
+        - subnet: {{ iso_server_subnet | to_json }}
+          gateway: {{ iso_server_gateway | to_json }}
+          ip_range: {{ (iso_server_address ~ '/32') | to_json }}

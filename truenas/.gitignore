@@ -16,6 +16,7 @@ inventory/host_vars/**/vault.yml
 
 # Local Ansible configuration — copy from the tracked examples
 group_vars/truenas.yml
+files/iso-server/vars.yml
 inventory/hosts.yml
 inventory/host_vars/**/desired_state.yml
 

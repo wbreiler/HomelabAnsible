@@ -1,0 +1,53 @@
+---
+- name: Manage the isolated ISO web server
+  hosts: truenas
+  gather_facts: false
+  vars_files:
+    - ../files/iso-server/vars.yml
+  tasks:
+    - name: Require explicit application and network approval
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_check_mode or
+            (truenas_allow_changes | bool and truenas_allow_management_access_changes | bool)
+        fail_msg: Approve the exact macvlan network before enabling live changes.
+
+    - name: Require deployment settings
+      ansible.builtin.assert:
+        that:
+          - iso_server_address is match('^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+          - iso_server_parent | length > 0
+          - iso_server_root is match('^/mnt/[^/]+/.+')
+          - iso_server_subnet | length > 0
+          - iso_server_gateway | length > 0
+
+    - name: Inspect the existing ISO directory
+      ansible.builtin.stat:
+        path: "{{ iso_server_root }}"
+      register: iso_server_directory
+
+    - name: Require an existing directory without creating storage
+      ansible.builtin.assert:
+        that:
+          - iso_server_directory.stat.isdir | default(false)
+        fail_msg: Supply an existing ISO directory. This playbook does not create datasets or directories.
+
+    - name: Read current ISO application configuration
+      ansible.builtin.raw: >-
+        midclt call app.query '[["name","=","iso-server"]]'
+        '{"extra":{"retrieve_config":true}}'
+      check_mode: false
+      register: iso_server_query
+      changed_when: false
+
+    - name: Reconcile only the ISO web application
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
+      vars:
+        truenas_entities_apps: "{{ iso_server_query.stdout | from_json }}"
+        desired_app:
+          name: iso-server
+          custom_app: true
+          state: RUNNING
+          custom_compose_config: >-
+            {{ lookup('template', '../files/iso-server/docker-compose.yml.j2') | from_yaml }}

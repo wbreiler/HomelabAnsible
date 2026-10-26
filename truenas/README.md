@@ -4,6 +4,10 @@
 
 Ansible-managed desired state for the TrueNAS host `erebus`.
 
+[ISO web server proposal](files/iso-server/SETUP.md): a read-only custom app
+with a dedicated macvlan address. The configuration is prepared and validated,
+but live network/application creation still requires approval.
+
 ## Target
 
 | Setting | Value |
