@@ -6,6 +6,7 @@ iso_installations = {
     datastore_id        = "your-vm-storage"
     os                  = "debian" # debian, ubuntu, or fedora
     firmware            = "uefi"   # bios (default) or uefi; select before creation
+    secure_boot         = true     # requires uefi; defaults to false
     iso_filename        = "your-pinned-server-installer.iso"
     bridge              = "vmbr0"
     vlan_id             = 40

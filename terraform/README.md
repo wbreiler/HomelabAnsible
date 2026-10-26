@@ -393,10 +393,13 @@ No HA or replication policy is added automatically.
 
 Set `firmware = "uefi"` before creation to use OVMF, a q35 machine, and a
 private persistent 4m EFI variables disk on the selected VM datastore. BIOS
-remains the default and has no EFI disk. Firmware changes require replacement,
-which the deletion guard blocks. Create a new VM entry for a different mode.
-UEFI uses no pre-enrolled keys and leaves Secure Boot disabled. Secure Boot
-and TPM provisioning are outside this workflow.
+remains the default and has no EFI disk. Set `secure_boot = true` together
+with UEFI to populate the EFI disk with Proxmox's standard enrolled keys and
+enable Secure Boot. The default remains `false` for existing configurations.
+Firmware or Secure Boot policy changes require replacement, which the deletion
+guard blocks. Create a new VM entry for a different policy. No custom signing
+keys, MOK enrollment, or TPM provisioning are needed for these signed distro
+bootloaders and kernels. TPM and custom module signing remain outside this workflow.
 
 Debian receives a root-only preseed inside its initramfs. Ubuntu receives
 `autoinstall.yaml` on the derived media. Fedora receives Kickstart on that
@@ -421,7 +424,10 @@ host keys. It then pins the installed key in a UUID-specific file and records
 a protected `verified.json`. Later checks retain that pin. Verification times
 out after 30 minutes instead of accepting an incomplete installation.
 For UEFI, it also requires 64-bit EFI firmware, a mounted FAT EFI partition,
-EFI bootloader files, persistent boot entries, and disabled Secure Boot.
+EFI bootloader files, persistent boot entries, and the declared Secure Boot
+state. Enabled Secure Boot additionally requires enrolled PK, KEK, and db
+variables, disabled Setup Mode, active shim validation, and kernel lockdown
+in integrity or confidentiality mode. A firmware flag alone cannot pass.
 
 Keep controller `artifacts/iso-install/` protected. It contains source caches,
 per-VM images, manifests, known-host keys, and verification evidence. Derived
@@ -447,11 +453,11 @@ remain outside cleanup.
 
 All three profiles passed live automatic installation on 2026-10-26:
 
-| Profile | Installer version | BIOS installation | UEFI installation and cold boot |
-|---|---|---|---|
-| Debian netinst | 13.6 | Passed | Passed |
-| Ubuntu live-server | 26.04 | Passed | Passed |
-| Fedora Server DVD | 44 | Passed | Passed |
+| Profile | Installer version | BIOS installation | UEFI installation and cold boot | Secure Boot validation |
+|---|---|---|---|---|
+| Debian netinst | 13.6 | Passed | Passed | Passed |
+| Ubuntu live-server | 26.04 | Passed | Passed | Passed |
+| Fedora Server DVD | 44 | Passed | Passed | Passed |
 
 Each test verified disk boot, SSH identity, locked accounts, disabled password
 and root SSH login, an active guest agent, and zero failed systemd units.
@@ -468,8 +474,29 @@ including its EFI disk, system disk, derived Proxmox ISO, and temporary ACLs.
 Protected BIOS evidence remains under `artifacts/automatic-*-verified-2026-10-26.json`.
 UEFI evidence is under `artifacts/uefi-*-coldboot-verified-2026-10-26.json`.
 Existing guest hardware, placement, power state, and original media remained
-unchanged. Desktop/live-workstation editions remain unverified. Secure Boot
-and TPM provisioning remain outside the tested workflow.
+unchanged. Desktop/live-workstation editions and TPM provisioning remain unverified.
+
+Secure Boot validation includes a successful signed installation and a cold
+boot with an empty CD drive. The rejection test then clears only the PE
+certificate directories from GRUB copies on that disposable VM's EFI partition.
+It retains the executable sections and preserves backups inside the test VM.
+An explicit signature/security error and an unreachable installed OS are
+required before cleanup. Original ISOs and existing guests stay outside this test.
+
+All three passed Secure Boot installation and disk-only cold boots on 2026-10-26.
+Each reported active Secure Boot, disabled Setup Mode, enrolled PK/KEK/db keys,
+active shim validation, kernel integrity lockdown, and zero failed systemd units.
+Each then rejected its unsigned GRUB copies with
+`Verification failed: (0x1A) Security Violation`. Read-only screenshots confirmed
+the rejection. No console answers, MOK enrollment, or validation bypass were used.
+The test guests and all their disks, derived Proxmox ISOs, and temporary ACLs
+were removed afterward. A plan-only test confirmed that the VM deletion guard
+blocks an in-place Secure Boot policy change before apply.
+
+Protected evidence is under `artifacts/secureboot-*-coldboot-verified-2026-10-26.json`
+and `artifacts/secureboot-*-negative-enforcement.json`, with rejection screenshots
+beside them. The final comparison preserved all 32 original guests and 55
+cached media files, with 121 managed resources and a no-change Terraform plan.
 
 Run the builder and readiness regression tests from `terraform/proxmox/`:
 
@@ -485,6 +512,11 @@ References: [Debian preseed](https://www.debian.org/releases/trixie/amd64/apbs04
 [Ubuntu autoinstall](https://canonical-subiquity.readthedocs-hosted.com/en/latest/tutorial/providing-autoinstall.html),
 [Fedora Kickstart](https://pykickstart.readthedocs.io/en/latest/kickstart-docs.html),
 [xorriso boot-image replay](https://wiki.debian.org/RepackBootableISO).
+
+Secure Boot references: [Debian](https://wiki.debian.org/SecureBoot),
+[Ubuntu](https://documentation.ubuntu.com/security/security-features/platform-protections/secure-boot/),
+[Fedora](https://fedoraproject.org/wiki/Secureboot),
+[PE certificate table](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-attribute-certificate-table-image-only).
 
 ### Imported platform resources
 

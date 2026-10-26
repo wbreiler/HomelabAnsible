@@ -33,7 +33,7 @@ class InstallerTests(unittest.TestCase):
     def test_input_boundaries(self):
         source = example()
         for key, value in [("name", "bad;command"), ("username", "root"), ("iso_filename", "../test.iso"),
-                           ("uuid", "../outside"), ("firmware", "legacy"), ("ipv4_address", "192.0.2.1/25"),
+                           ("uuid", "../outside"), ("firmware", "legacy"), ("secure_boot", True), ("secure_boot", "true"), ("ipv4_address", "192.0.2.1/25"),
                            ("gateway", "198.51.100.1"), ("source_sha256", ""),
                            ("public_key", "PRIVATE KEY\nsecret"), ("source_url", "http://user:password@iso.example/test.iso")]:
             with self.subTest(key=key), self.assertRaises(ValueError):
@@ -186,6 +186,34 @@ class InstallerTests(unittest.TestCase):
         with patch.object(install.subprocess, "run", side_effect=ssh):
             install.wait(spec, timeout=1)
         self.assertEqual(json.loads(Path(spec["output_iso"]).with_name("verified.json").read_text())["firmware"], "uefi")
+
+    def test_secure_boot_requires_enrollment_lockdown_and_shim_validation(self):
+        spec = dict(self.wait_spec(), firmware="uefi", secure_boot=True)
+        data = {"uuid": spec["uuid"], "marker": spec["uuid"], "os": "debian", "version": "13",
+                "root": "/dev/sda2", "agent": "active", "failed_units": "", "firmware": "uefi",
+                "efi_platform_bits": "64", "esp": {"source": "/dev/sda1", "fstype": "vfat", "target": "/boot/efi"},
+                "efi_loaders": ["EFI/debian/grubx64.efi"], "efi_boot_entries": 2, "secure_boot": True,
+                "setup_mode": False, "enrolled_keys": {"PK": True, "KEK": True, "db": True},
+                "kernel_lockdown": "none [integrity] confidentiality", "shim_validation_disabled": False,
+                "password_auth_disabled": True, "root_ssh_disabled": True, "user_locked": True, "root_locked": True}
+        invalid = [{"secure_boot": False}, {"setup_mode": True}, {"setup_mode": None},
+                   {"kernel_lockdown": "[none] integrity confidentiality"}, {"kernel_lockdown": None},
+                   {"shim_validation_disabled": True}]
+        invalid += [{"enrolled_keys": data["enrolled_keys"] | {key: False}} for key in ["PK", "KEK", "db"]]
+        for changes in invalid:
+            with self.subTest(changes=changes):
+                response = subprocess.CompletedProcess([], 0, json.dumps(data | changes), "")
+                with patch.object(install.subprocess, "run", return_value=response), patch.object(install.time, "sleep"), patch.object(install.time, "monotonic", side_effect=[0, 0, 2]):
+                    with self.assertRaises(TimeoutError):
+                        install.wait(spec, timeout=1)
+                self.assertFalse(Path(spec["output_iso"]).with_name("verified.json").exists())
+        def ssh(args, **kwargs):
+            p = next(a.split("=", 1)[1] for a in args if a.startswith("UserKnownHostsFile="))
+            Path(p).write_text("verified-secure-boot-host-key\n")
+            return subprocess.CompletedProcess([], 0, json.dumps(data), "")
+        with patch.object(install.subprocess, "run", side_effect=ssh):
+            install.wait(spec, timeout=1)
+        self.assertTrue(json.loads(Path(spec["output_iso"]).with_name("verified.json").read_text())["secure_boot"])
 
     @unittest.skipUnless(shutil.which("xorriso"), "xorriso is required for boot-image tests")
     def test_derived_boot_media_preserves_source_and_rejects_overwrite(self):

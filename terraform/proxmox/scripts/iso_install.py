@@ -25,6 +25,8 @@ import uuid
 def validate(spec):
     if spec.get("firmware", "bios") not in {"bios", "uefi"}:
         raise ValueError("Firmware must be bios or uefi")
+    if type(spec.get("secure_boot", False)) is not bool or (spec.get("secure_boot", False) and spec.get("firmware", "bios") != "uefi"):
+        raise ValueError("Secure Boot must be a boolean and requires UEFI")
     if spec["os"] not in {"debian", "ubuntu", "fedora"}:
         raise ValueError("Supported profiles: Debian netinst, Ubuntu live-server, Fedora Server DVD")
     for key, pattern in [("name", r"[a-z][a-z0-9-]{0,61}[a-z0-9]"),
@@ -314,6 +316,8 @@ def run(args):
     return subprocess.check_output(args, text=True).strip()
 policy = run(['sshd', '-T'])
 efi = pathlib.Path('/sys/firmware/efi')
+def efi_flag(name):
+    return next((bool(p.read_bytes()[4]) for p in (efi / 'efivars').glob(name + '-*')), None) if efi.is_dir() else None
 esp = json.loads(run(['findmnt', '-J', '-o', 'SOURCE,FSTYPE,TARGET', '/boot/efi']))['filesystems'][0] if efi.is_dir() else None
 result = {
     'uuid': pathlib.Path('/sys/class/dmi/id/product_uuid').read_text().strip().lower(),
@@ -325,7 +329,11 @@ result = {
     'esp': esp,
     'efi_loaders': sorted(str(p.relative_to('/boot/efi')) for p in pathlib.Path('/boot/efi/EFI').rglob('*') if p.is_file() and p.suffix.lower() == '.efi') if efi.is_dir() else [],
     'efi_boot_entries': len(list((efi / 'efivars').glob('Boot[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]-*'))) if efi.is_dir() else 0,
-    'secure_boot': next((bool(p.read_bytes()[4]) for p in (efi / 'efivars').glob('SecureBoot-*')), None) if efi.is_dir() else None,
+    'secure_boot': efi_flag('SecureBoot'),
+    'setup_mode': efi_flag('SetupMode'),
+    'enrolled_keys': {name: any(len(p.read_bytes()) > 4 for p in (efi / 'efivars').glob(name + '-*')) for name in ['PK', 'KEK', 'db']} if efi.is_dir() else {},
+    'shim_validation_disabled': efi_flag('MokSBStateRT') is True,
+    'kernel_lockdown': pathlib.Path('/sys/kernel/security/lockdown').read_text().strip() if pathlib.Path('/sys/kernel/security/lockdown').exists() else None,
     'marker': pathlib.Path('/var/lib/terraform-iso-install/complete').read_text().strip(),
     'root': run(['findmnt', '-n', '-o', 'SOURCE', '/']),
     'agent': run(['systemctl', 'is-active', 'qemu-guest-agent']),
@@ -376,7 +384,12 @@ def wait(spec, timeout=1800):
                         and esp.get("target") == "/boot/efi" and esp.get("fstype") == "vfat"
                         and esp.get("source", "").startswith("/dev/")
                         and bool(evidence.get("efi_loaders")) and evidence.get("efi_boot_entries", 0) > 0
-                        and evidence.get("secure_boot") is False)
+                        and evidence.get("secure_boot") is spec.get("secure_boot", False))
+                    if spec.get("secure_boot", False):
+                        firmware_ready = (firmware_ready and evidence.get("setup_mode") is False
+                            and all(evidence.get("enrolled_keys", {}).get(k) is True for k in ["PK", "KEK", "db"])
+                            and evidence.get("shim_validation_disabled") is False
+                            and any(mode in (evidence.get("kernel_lockdown") or "") for mode in ["[integrity]", "[confidentiality]"]))
                 if (evidence["marker"] == spec["uuid"] and evidence["os"] == spec["os"] and evidence["root"].startswith("/dev/")
                     and firmware_ready
                     and not evidence["root"].startswith("/dev/loop") and evidence["agent"] == "active" and not evidence["failed_units"]
