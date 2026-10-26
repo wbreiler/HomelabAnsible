@@ -1,0 +1,7 @@
+iso_library = {
+  base_url = "http://your-iso-server.example"
+  nodes    = ["your-node"]
+  files = {
+    "versioned-installer.iso" = "REPLACE_WITH_TRUSTED_LOWERCASE_SHA256"
+  }
+}

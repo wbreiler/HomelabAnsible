@@ -16,6 +16,9 @@ Terraform also owns three backup jobs, 27 HA resources, three affinity rules,
 the existing PBS storage connection, and 35 cached media files. These 69 objects
 were imported without creating, changing, deleting, or downloading anything.
 Their definitions live in ignored `platform.local.tf` and `pbs.local.tf`.
+The separate ISO library now adds ten installers on each node, for 20 new
+cached files and 121 managed resources in total. All destination SHA256 hashes
+matched the trusted NAS files, and the final Terraform plan had no changes.
 
 ## Ownership
 
@@ -271,6 +274,9 @@ Several import corrections were necessary with provider 0.118.0:
 - Preserve explicit disk controller settings. The macOS VM's controller is
   implicit, so its `scsi_hardware` remains ignored rather than applying the
   provider's different default.
+- Leave the VM's top-level `mac_addresses` reporting field unset. Preserve
+  configured MAC addresses inside `network_device` instead, so runtime reporting
+  cannot propose a hardware update for a stopped guest.
 - Ignore tags maintained by iptag. For HA guests, also ignore node and started
   state so Terraform does not fight HA placement or power decisions.
 
@@ -299,6 +305,53 @@ untested. Read the generated definitions and the provider-specific limitations
 before authorizing a production hardware change.
 
 ## Platform policy and media
+
+### ISO library
+
+`proxmox/iso.tf` caches a checksum-pinned ISO library on each selected node.
+Copy `iso.auto.tfvars.example` to ignored `iso.auto.tfvars` and supply the
+server URL, nodes, and filename-to-SHA256 map. Obtain hashes through trusted
+access to the source files. A hash pins those bytes but does not establish
+the publisher's identity. Use a new filename for each new image version.
+
+The deployment uses the dedicated Erebus ISO server. Its actual address,
+node selection, and observed source hashes remain in ignored local variables.
+Existing adopted media keeps its original Terraform addresses and filenames.
+Even similar names or equal sizes do not establish identical content.
+
+Each new ISO has `overwrite = false`, `overwrite_unmanaged = false`, and
+`prevent_destroy = true`. Source URLs and checksums are creation metadata,
+ignored after creation or adoption. This permits adoption without replacing
+cached bytes when the API does not return their original source metadata.
+A new source or checksum must use a new filename and resource key. A filename
+replacement is rejected by the deletion guard.
+Do not remove guards or existing resource blocks to update installation media.
+These resources prepare installers. They do not attach media, change boot
+order, boot an installer, or install an operating system inside a VM.
+
+The nodes download directly from the ISO server using `proxmox_download_file`.
+The existing token already has the required storage permission and root-scope
+`Sys.Audit`/`Sys.Modify` privileges used by platform policy. No additional grants
+are needed. Use `terraform apply -parallelism=2 reviewed.tfplan` to limit
+simultaneous transfers. See the pinned provider's
+[download resource documentation](https://github.com/bpg/terraform-provider-proxmox/blob/v0.118.0/docs/resources/download_file.md).
+
+Before applying, require a saved plan that only adds expected ISO resources.
+Check node storage capacity and preserve a protected state snapshot. Afterward,
+compare destination SHA256 hashes with the trusted source pins, require a
+no-change plan, and verify existing guest configurations and media metadata.
+
+The initial live deployment passed all 20 destination checksum comparisons,
+preserved existing media sizes/timestamps, and completed with a no-change plan.
+Active guest configuration matched the protected adoption snapshot, excluding
+API digests and temporary lock/snapshot-parent metadata from scheduled backups.
+Six mock-provider tests, Terraform validation/formatting, and Proxmox Ansible
+lint/syntax checks passed. One completed upload was adopted without replacing
+its bytes when transfers switched to direct node downloads. Completed import
+blocks and protected before/after state snapshots remain in ignored `artifacts/`.
+Installer boot tests and operating-system installation remain untested.
+
+### Imported platform resources
 
 The imported backup jobs preserve schedules, selected/excluded VMIDs, enabled
 state, retention, and notifications. HA definitions preserve desired state,
