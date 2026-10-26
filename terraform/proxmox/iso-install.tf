@@ -5,6 +5,7 @@ variable "iso_installations" {
     node_name           = string
     datastore_id        = string
     os                  = string
+    firmware            = optional(string, "bios")
     iso_filename        = string
     bridge              = string
     vlan_id             = number
@@ -25,6 +26,7 @@ variable "iso_installations" {
     condition = alltrue([for name, vm in var.iso_installations :
       can(regex("^[a-z][a-z0-9-]{0,61}[a-z0-9]$", name)) &&
       contains(["debian", "ubuntu", "fedora"], vm.os) &&
+      contains(["bios", "uefi"], vm.firmware) &&
       can(cidrnetmask(vm.ipv4_address)) &&
       can(regex("^[a-z_][a-z0-9_-]{0,31}$", vm.username)) && vm.username != "root" &&
       can(regex("^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/]+=*( [^\\r\\n]*)?$", trimspace(file(pathexpand(vm.ssh_public_key_file))))) &&
@@ -32,7 +34,7 @@ variable "iso_installations" {
       try(contains(var.iso_library.nodes, vm.node_name), false) &&
       can(var.iso_library.files[vm.iso_filename])
     ])
-    error_message = "Use valid hostnames, a non-root user, a public SSH key file, IPv4 CIDRs, supported OS families, bounded server resources, and a node/image in the pinned ISO library."
+    error_message = "Use valid hostnames, a non-root user, a public SSH key file, IPv4 CIDRs, supported OS families, bios/uefi firmware, bounded server resources, and a node/image in the pinned ISO library."
   }
 
   validation {
@@ -46,8 +48,8 @@ variable "iso_installations" {
 
 resource "terraform_data" "install_identity" {
   for_each         = var.iso_installations
-  input            = { vm_id = each.value.vm_id, node_name = each.value.node_name }
-  triggers_replace = [each.value.vm_id, each.value.node_name]
+  input            = { vm_id = each.value.vm_id, node_name = each.value.node_name, firmware = each.value.firmware }
+  triggers_replace = [each.value.vm_id, each.value.node_name, each.value.firmware]
 }
 
 locals {
@@ -108,6 +110,8 @@ resource "proxmox_virtual_environment_vm" "iso_installation" {
   name                = each.key
   node_name           = each.value.node_name
   vm_id               = each.value.vm_id
+  bios                = each.value.firmware == "uefi" ? "ovmf" : "seabios"
+  machine             = each.value.firmware == "uefi" ? "q35" : "pc"
   description         = "Automatic ${each.value.os} ISO installation. Provisioning owned by Terraform."
   started             = true
   on_boot             = each.value.on_boot
@@ -125,6 +129,15 @@ resource "proxmox_virtual_environment_vm" "iso_installation" {
   memory {
     dedicated = each.value.memory_mb
     floating  = each.value.memory_mb
+  }
+  dynamic "efi_disk" {
+    for_each = each.value.firmware == "uefi" ? [true] : []
+    content {
+      datastore_id      = each.value.datastore_id
+      file_format       = "raw"
+      type              = "4m"
+      pre_enrolled_keys = false
+    }
   }
   disk {
     datastore_id = each.value.datastore_id
@@ -157,8 +170,9 @@ resource "proxmox_virtual_environment_vm" "iso_installation" {
     }
   }
   lifecycle {
-    prevent_destroy = true
-    ignore_changes  = [tags]
+    prevent_destroy      = true
+    ignore_changes       = [tags]
+    replace_triggered_by = [terraform_data.install_identity[each.key]]
   }
 }
 
@@ -184,6 +198,7 @@ output "installed_vms" {
       node_name    = vm.node_name
       ipv4_address = vm.ipv4_address
       os           = vm.os
+      firmware     = vm.firmware
     }
   }
   depends_on = [terraform_data.installation_ready]

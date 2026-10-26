@@ -33,7 +33,7 @@ class InstallerTests(unittest.TestCase):
     def test_input_boundaries(self):
         source = example()
         for key, value in [("name", "bad;command"), ("username", "root"), ("iso_filename", "../test.iso"),
-                           ("uuid", "../outside"), ("ipv4_address", "192.0.2.1/25"),
+                           ("uuid", "../outside"), ("firmware", "legacy"), ("ipv4_address", "192.0.2.1/25"),
                            ("gateway", "198.51.100.1"), ("source_sha256", ""),
                            ("public_key", "PRIVATE KEY\nsecret"), ("source_url", "http://user:password@iso.example/test.iso")]:
             with self.subTest(key=key), self.assertRaises(ValueError):
@@ -50,6 +50,17 @@ class InstallerTests(unittest.TestCase):
         start = (110 + fields[11] + 3) & ~3
         self.assertEqual(archive[start:start + fields[6]], content)
         self.assertIn(b"TRAILER!!!\0", archive)
+
+    def test_fedora_efi_patch_preserves_sizes_and_rejects_unknown_layouts(self):
+        original = b"manual boot menu\n"
+        image = b"FAT metadata\0" + original + b"\0another cluster\0" + original
+        result = install.patch_fedora_efi(image, original, b"automatic\n")
+        self.assertEqual(len(image), len(result))
+        self.assertNotIn(original, result)
+        self.assertEqual(result.count(b"automatic\n"), 2)
+        for data, replacement in [(b"unknown layout", b"automatic"), (image, original * 2)]:
+            with self.assertRaisesRegex(ValueError, "Unsupported Fedora EFI"):
+                install.patch_fedora_efi(data, original, replacement)
 
     def test_profiles_have_uuid_disk_and_account_guards(self):
         for family in ["debian", "ubuntu", "fedora"]:
@@ -97,7 +108,7 @@ class InstallerTests(unittest.TestCase):
     def test_failed_health_checks_never_report_ready(self):
         spec = self.wait_spec()
         data = {"uuid": spec["uuid"], "marker": spec["uuid"], "os": "debian", "root": "/dev/sda1",
-                "agent": "active", "failed_units": "bad.service failed", "password_auth_disabled": True,
+                "agent": "active", "firmware": "bios", "failed_units": "bad.service failed", "password_auth_disabled": True,
                 "root_ssh_disabled": True, "user_locked": True, "root_locked": True}
         response = subprocess.CompletedProcess([], 0, json.dumps(data), "")
         with patch.object(install.subprocess, "run", return_value=response), patch.object(install.time, "sleep"), patch.object(install.time, "monotonic", side_effect=[0, 0, 2]):
@@ -108,7 +119,7 @@ class InstallerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             spec = example(); spec["output_iso"] = str(Path(directory) / "autoinstall.iso")
             data = {"uuid": spec["uuid"], "marker": spec["uuid"], "os": "debian", "version": "13",
-                    "root": "/dev/sda1", "agent": "active", "failed_units": "", "password_auth_disabled": True,
+                    "root": "/dev/sda1", "agent": "active", "firmware": "bios", "failed_units": "", "password_auth_disabled": True,
                     "root_ssh_disabled": True, "user_locked": True, "root_locked": True}
             response = subprocess.CompletedProcess([], 0, json.dumps(data), "")
             calls = []
@@ -128,7 +139,7 @@ class InstallerTests(unittest.TestCase):
     def test_live_installer_key_is_not_pinned(self):
         spec = self.wait_spec(); directory = Path(spec["output_iso"]).parent
         data = {"uuid": spec["uuid"], "marker": spec["uuid"], "os": "debian", "version": "13",
-                "root": "/dev/sda1", "agent": "active", "failed_units": "", "password_auth_disabled": True,
+                "root": "/dev/sda1", "agent": "active", "firmware": "bios", "failed_units": "", "password_auth_disabled": True,
                 "root_ssh_disabled": True, "user_locked": True, "root_locked": True}
         calls = []
         def ssh(args, **kwargs):
@@ -152,6 +163,30 @@ class InstallerTests(unittest.TestCase):
                 install.wait(spec, timeout=1)
         self.assertEqual((directory / "known_hosts").read_text(), "pinned-key\n")
 
+    def test_uefi_requires_esp_loader_and_boot_entries(self):
+        spec = dict(self.wait_spec(), firmware="uefi")
+        data = {"uuid": spec["uuid"], "marker": spec["uuid"], "os": "debian", "version": "13",
+                "root": "/dev/sda2", "agent": "active", "failed_units": "", "firmware": "uefi",
+                "efi_platform_bits": "64", "esp": {"source": "/dev/sda1", "fstype": "vfat", "target": "/boot/efi"},
+                "efi_loaders": ["EFI/debian/grubx64.efi"], "efi_boot_entries": 2, "secure_boot": False,
+                "password_auth_disabled": True, "root_ssh_disabled": True, "user_locked": True, "root_locked": True}
+        for changes in [{"firmware": "bios"}, {"efi_platform_bits": "32"}, {"esp": None},
+                        {"esp": {"source": "/dev/sda1", "fstype": "ext4", "target": "/boot/efi"}},
+                        {"efi_loaders": []}, {"efi_boot_entries": 0}, {"secure_boot": True}]:
+            with self.subTest(changes=changes):
+                response = subprocess.CompletedProcess([], 0, json.dumps(data | changes), "")
+                with patch.object(install.subprocess, "run", return_value=response), patch.object(install.time, "sleep"), patch.object(install.time, "monotonic", side_effect=[0, 0, 2]):
+                    with self.assertRaises(TimeoutError):
+                        install.wait(spec, timeout=1)
+                self.assertFalse(Path(spec["output_iso"]).with_name("verified.json").exists())
+        def ssh(args, **kwargs):
+            p = next(a.split("=", 1)[1] for a in args if a.startswith("UserKnownHostsFile="))
+            Path(p).write_text("verified-uefi-host-key\n")
+            return subprocess.CompletedProcess([], 0, json.dumps(data), "")
+        with patch.object(install.subprocess, "run", side_effect=ssh):
+            install.wait(spec, timeout=1)
+        self.assertEqual(json.loads(Path(spec["output_iso"]).with_name("verified.json").read_text())["firmware"], "uefi")
+
     @unittest.skipUnless(shutil.which("xorriso"), "xorriso is required for boot-image tests")
     def test_derived_boot_media_preserves_source_and_rejects_overwrite(self):
         for family in ["debian", "ubuntu", "fedora"]:
@@ -161,6 +196,8 @@ class InstallerTests(unittest.TestCase):
                 contents = {"isolinux/isolinux.bin": b"\0" * 2048,
                             "isolinux/isolinux.cfg": b"default manual\ntimeout 300\n",
                             "boot/grub/grub.cfg": b"set timeout=300\n",
+                            "EFI/BOOT/grub.cfg": b"set timeout=300\n",
+                            "boot/efi.img": b"\0" * 1048576,
                             "md5sum.txt": b"0" * 32 + b"  ./isolinux/isolinux.cfg\n"}
                 paths = {"debian": ("install.amd/vmlinuz", "install.amd/initrd.gz"),
                          "ubuntu": ("casper/vmlinuz", "casper/initrd"),
@@ -169,11 +206,18 @@ class InstallerTests(unittest.TestCase):
                 contents[paths[1]] = gzip.compress(b"initramfs fixture", mtime=0)
                 if family == "fedora":
                     contents[".treeinfo"] = b"[general]\nfamily=Fedora\n"
+                    old = b"set default=1\n#" + b"manual config padding " * 80 + b"\n"
+                    contents["EFI/BOOT/grub.cfg"] = old
+                    contents["images/efiboot.img"] = (b"\0" * 512 + old + b"\0" * 512 + old).ljust(1048576, b"\0")
                 for name, content in contents.items():
                     p = tree / name; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(content)
                 source = root / "source.iso"
+                efi_args = ["-eltorito-alt-boot", "-e", "boot/efi.img", "-no-emul-boot"]
+                if family == "fedora":
+                    efi_args = ["-append_partition", "2", "0xef", str(tree / "images/efiboot.img"), "-appended_part_as_gpt",
+                                "-eltorito-alt-boot", "-e", "--interval:appended_partition_2:all::", "-no-emul-boot"]
                 install.run(["xorriso", "-as", "mkisofs", "-r", "-V", "INSTALL_TEST", "-b", "isolinux/isolinux.bin", "-c", "isolinux/boot.cat",
-                             "-no-emul-boot", "-boot-load-size", "4", "-boot-info-table", "-o", str(source), str(tree)])
+                             "-no-emul-boot", "-boot-load-size", "4", "-boot-info-table"] + efi_args + ["-o", str(source), str(tree)])
                 spec = example(family); spec["source_sha256"] = install.digest(source)
                 original = source.read_bytes()
                 out = root / "cache" / spec["uuid"] / "autoinstall.iso"
@@ -188,6 +232,20 @@ class InstallerTests(unittest.TestCase):
                 boot = extracted.read_text()
                 self.assertIn("default automatic", boot)
                 self.assertIn({"debian": "auto=true", "ubuntu": "autoinstall", "fedora": "inst.ks=cdrom:/ks.cfg"}[family], boot)
+                for path in ["/boot/grub/grub.cfg", "/EFI/BOOT/grub.cfg"]:
+                    install.run(["xorriso", "-osirrox", "on", "-indev", str(out), "-extract", path, str(extracted)])
+                    self.assertIn("set default=0", extracted.read_text())
+                    self.assertIn("set timeout=1", extracted.read_text())
+                    self.assertIn("Automatic " + family + " installation", extracted.read_text())
+                catalog = install.run(["xorriso", "-indev", str(out), "-report_el_torito", "plain"])
+                self.assertIn("UEFI", catalog)
+                if family == "fedora":
+                    boot_images = root / "boot-images"
+                    install.run(["xorriso", "-indev", str(out), "-osirrox", "on", "-extract_boot_images", str(boot_images)])
+                    actual = (boot_images / "eltorito_img2_uefi.img").read_bytes()
+                    self.assertEqual(actual, (boot_images / "gpt_part2_efi.img").read_bytes())
+                    self.assertNotIn(old, actual)
+                    self.assertEqual(actual.count(b"inst.ks=cdrom:/ks.cfg"), 2)
                 self.assertEqual(source.read_bytes(), original)
                 if family == "debian":
                     initrd = root / "initrd.gz"

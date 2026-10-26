@@ -23,6 +23,8 @@ import uuid
 
 
 def validate(spec):
+    if spec.get("firmware", "bios") not in {"bios", "uefi"}:
+        raise ValueError("Firmware must be bios or uefi")
     if spec["os"] not in {"debian", "ubuntu", "fedora"}:
         raise ValueError("Supported profiles: Debian netinst, Ubuntu live-server, Fedora Server DVD")
     for key, pattern in [("name", r"[a-z][a-z0-9-]{0,61}[a-z0-9]"),
@@ -203,6 +205,14 @@ def source_iso(spec, root):
     return path
 
 
+def patch_fedora_efi(image, original, automatic):
+    # shortcut: pinned Fedora media has two contiguous GRUB files; reject other layouts until a FAT editor is needed.
+    if not original or image.count(original) != 2 or len(automatic) > len(original):
+        raise ValueError("Unsupported Fedora EFI config layout or size; refusing to build manual boot media")
+    # Padding preserves FAT file sizes and allocation without changing filesystem metadata.
+    return image.replace(original, automatic.ljust(len(original), b" "))
+
+
 def build(spec):
     validate(spec)
     if not shutil.which("xorriso"):
@@ -248,6 +258,16 @@ def build(spec):
         if not {kernel, initrd} <= paths or (spec["os"] == "fedora" and "/.treeinfo" not in paths):
             raise ValueError("Source does not match the selected server installer profile")
         grub = f"set default=0\nset timeout=1\nmenuentry 'Automatic {spec['os']} installation' {{\n linux {kernel} {args}\n initrd {initrd}\n}}\n".encode()
+        efi_image = None
+        if spec["os"] == "fedora":
+            grub = f"search --no-floppy --set=root -l {label}\n".encode() + grub
+            efi_image = work / "efiboot.img"
+            original_config = work / "efi-grub.cfg"
+            run(["xorriso", "-osirrox", "on", "-indev", str(source), "-extract", "/images/efiboot.img", str(efi_image)])
+            run(["xorriso", "-osirrox", "on", "-indev", str(source), "-extract", "/EFI/BOOT/grub.cfg", str(original_config)])
+            mapped["/images/efiboot.img"] = patch_fedora_efi(efi_image.read_bytes(), original_config.read_bytes(), grub)
+            efi_image.chmod(0o600)
+            efi_image.write_bytes(mapped["/images/efiboot.img"])
         syslinux = f"default automatic\nprompt 0\ntimeout 10\nlabel automatic\n kernel {kernel}\n append initrd={initrd} {args}\n".encode()
         boot_paths = {"/boot/grub/grub.cfg", "/boot/grub/loopback.cfg", "/EFI/BOOT/grub.cfg", "/boot/grub2/grub.cfg"} & paths
         for path in boot_paths:
@@ -270,7 +290,16 @@ def build(spec):
             p.chmod(0o600)
             args += ["-map", str(p), destination]
         # Replay after mapping so hybrid BIOS/UEFI boot records retain the source layout.
-        run(args + ["-boot_image", "any", "replay", "-commit", "-end"])
+        boot_args = ["-boot_image", "any", "replay"]
+        if efi_image:
+            # Fedora boots the appended EFI partition, separately from the visible ISO file.
+            boot_args += ["-append_partition", "2", "0xef", str(efi_image)]
+        run(args + boot_args + ["-commit", "-end"])
+        if efi_image:
+            extracted = work / "boot-images"
+            run(["xorriso", "-indev", str(temporary), "-osirrox", "on", "-extract_boot_images", str(extracted)])
+            if any(digest(extracted / name) != digest(efi_image) for name in ["eltorito_img2_uefi.img", "gpt_part2_efi.img"]):
+                raise ValueError("Fedora EFI boot records do not reference the automatic image")
         temporary.chmod(0o600)
         result = {"spec_sha256": fingerprint, "source_sha256": spec["source_sha256"], "image_sha256": digest(temporary)}
         temporary.rename(output)
@@ -284,10 +313,19 @@ import json, pathlib, platform, subprocess, sys
 def run(args):
     return subprocess.check_output(args, text=True).strip()
 policy = run(['sshd', '-T'])
+efi = pathlib.Path('/sys/firmware/efi')
+esp = json.loads(run(['findmnt', '-J', '-o', 'SOURCE,FSTYPE,TARGET', '/boot/efi']))['filesystems'][0] if efi.is_dir() else None
 result = {
     'uuid': pathlib.Path('/sys/class/dmi/id/product_uuid').read_text().strip().lower(),
+    'boot_id': pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
     'os': platform.freedesktop_os_release()['ID'],
     'version': platform.freedesktop_os_release()['VERSION_ID'],
+    'firmware': 'uefi' if efi.is_dir() else 'bios',
+    'efi_platform_bits': (efi / 'fw_platform_size').read_text().strip() if efi.is_dir() else None,
+    'esp': esp,
+    'efi_loaders': sorted(str(p.relative_to('/boot/efi')) for p in pathlib.Path('/boot/efi/EFI').rglob('*') if p.is_file() and p.suffix.lower() == '.efi') if efi.is_dir() else [],
+    'efi_boot_entries': len(list((efi / 'efivars').glob('Boot[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]-*'))) if efi.is_dir() else 0,
+    'secure_boot': next((bool(p.read_bytes()[4]) for p in (efi / 'efivars').glob('SecureBoot-*')), None) if efi.is_dir() else None,
     'marker': pathlib.Path('/var/lib/terraform-iso-install/complete').read_text().strip(),
     'root': run(['findmnt', '-n', '-o', 'SOURCE', '/']),
     'agent': run(['systemctl', 'is-active', 'qemu-guest-agent']),
@@ -331,7 +369,16 @@ def wait(spec, timeout=1800):
                 evidence = json.loads(result.stdout)
                 if evidence["uuid"] != spec["uuid"]:
                     raise RuntimeError("SSH reached another machine; refusing to accept this installation")
+                firmware_ready = evidence.get("firmware") == spec.get("firmware", "bios")
+                if spec.get("firmware", "bios") == "uefi":
+                    esp = evidence.get("esp") or {}
+                    firmware_ready = (firmware_ready and evidence.get("efi_platform_bits") == "64"
+                        and esp.get("target") == "/boot/efi" and esp.get("fstype") == "vfat"
+                        and esp.get("source", "").startswith("/dev/")
+                        and bool(evidence.get("efi_loaders")) and evidence.get("efi_boot_entries", 0) > 0
+                        and evidence.get("secure_boot") is False)
                 if (evidence["marker"] == spec["uuid"] and evidence["os"] == spec["os"] and evidence["root"].startswith("/dev/")
+                    and firmware_ready
                     and not evidence["root"].startswith("/dev/loop") and evidence["agent"] == "active" and not evidence["failed_units"]
                     and all(evidence[k] for k in ["password_auth_disabled", "root_ssh_disabled", "user_locked", "root_locked"])):
                     if probe:
@@ -341,7 +388,7 @@ def wait(spec, timeout=1800):
                     verified.write_text(json.dumps(evidence, indent=2) + "\n"); verified.chmod(0o600)
                     print(f"Verified automatic {spec['os']} {evidence['version']} installation for {spec['name']}", flush=True)
                     return
-                last = "Installed OS has not passed all health/account checks"
+                last = "Installed OS has not passed all firmware, health, and account checks"
             else:
                 last = "SSH or installation completion marker not ready"
         finally:

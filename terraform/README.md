@@ -387,17 +387,30 @@ The HCP workspace must retain Local execution mode.
 
 Terraform generates and retains the machine UUID automatically. Default bounds
 are two CPU cores with a matching limit, 2 GiB memory, and one 24 GiB SCSI disk.
-Normal VMs enable host boot and disk backup. Validation VMs explicitly disable
-both. The existing cluster backup policy determines actual backup coverage.
+Normal VMs enable host boot and backup of the system disk. Validation VMs
+explicitly disable both. The existing cluster backup policy determines coverage.
 No HA or replication policy is added automatically.
+
+Set `firmware = "uefi"` before creation to use OVMF, a q35 machine, and a
+private persistent 4m EFI variables disk on the selected VM datastore. BIOS
+remains the default and has no EFI disk. Firmware changes require replacement,
+which the deletion guard blocks. Create a new VM entry for a different mode.
+UEFI uses no pre-enrolled keys and leaves Secure Boot disabled. Secure Boot
+and TPM provisioning are outside this workflow.
 
 Debian receives a root-only preseed inside its initramfs. Ubuntu receives
 `autoinstall.yaml` on the derived media. Fedora receives Kickstart on that
 media. Each installer verifies its own machine UUID before partitioning and
 selects only `/dev/sda`. The boot menus default immediately to installation.
-The original hybrid boot records are preserved by xorriso. Installed machines
+Xorriso retains the hybrid BIOS/UEFI boot layout. Installed machines
 boot their disk first, so leaving their read-only installation media attached
 does not restart the installer. No post-install flag or console work is needed.
+
+Fedora's DVD also stores GRUB menus inside its hidden EFI image. The builder
+updates both mirrored menus in that private copy, retaining FAT file sizes and
+allocation. It replaces the appended EFI partition and verifies both EFI boot
+records against the updated image. Unknown layouts or oversized menus fail
+before upload. The pinned source image remains unchanged.
 
 The bootstrap account has key-only SSH and password-free sudo. Root and user
 passwords stay locked. Private keys and real passwords never enter an ISO or
@@ -407,6 +420,8 @@ check. This permits Ubuntu's live installer and installed OS to have different
 host keys. It then pins the installed key in a UUID-specific file and records
 a protected `verified.json`. Later checks retain that pin. Verification times
 out after 30 minutes instead of accepting an incomplete installation.
+For UEFI, it also requires 64-bit EFI firmware, a mounted FAT EFI partition,
+EFI bootloader files, persistent boot entries, and disabled Secure Boot.
 
 Keep controller `artifacts/iso-install/` protected. It contains source caches,
 per-VM images, manifests, known-host keys, and verification evidence. Derived
@@ -432,19 +447,29 @@ remain outside cleanup.
 
 All three profiles passed live automatic installation on 2026-10-26:
 
-| Profile | Verified installed version | Console answers |
-|---|---|---|
-| Debian netinst | 13.6 | None |
-| Ubuntu live-server | 26.04 | None |
-| Fedora Server DVD | 44 | None |
+| Profile | Installer version | BIOS installation | UEFI installation and cold boot |
+|---|---|---|---|
+| Debian netinst | 13.6 | Passed | Passed |
+| Ubuntu live-server | 26.04 | Passed | Passed |
+| Fedora Server DVD | 44 | Passed | Passed |
 
 Each test verified disk boot, SSH identity, locked accounts, disabled password
 and root SSH login, an active guest agent, and zero failed systemd units.
-Ubuntu also completed its installer security updates. Each disposable VM reused
-the next free VMID and was removed afterward. Protected local evidence remains
-under `artifacts/automatic-*-verified-2026-10-26.json`. Existing guest hardware,
-placement, power state, and original media remained unchanged. BIOS installation
-is the tested path. UEFI and desktop/live-workstation editions remain unverified.
+Every installation completed without console answers. Ubuntu also completed
+its installer security updates. Each UEFI test emptied the CD drive and used
+Terraform to stop and start the VM with only its system disk in the boot order.
+All three passed verification again with a new kernel boot ID, the same machine
+UUID, unchanged EFI variables disk, mounted FAT EFI partition, and EFI loaders.
+A plan-only conversion test independently confirmed that the VM deletion guard
+blocks firmware changes before apply.
+
+Each disposable VM reused the next free VMID and was removed afterward,
+including its EFI disk, system disk, derived Proxmox ISO, and temporary ACLs.
+Protected BIOS evidence remains under `artifacts/automatic-*-verified-2026-10-26.json`.
+UEFI evidence is under `artifacts/uefi-*-coldboot-verified-2026-10-26.json`.
+Existing guest hardware, placement, power state, and original media remained
+unchanged. Desktop/live-workstation editions remain unverified. Secure Boot
+and TPM provisioning remain outside the tested workflow.
 
 Run the builder and readiness regression tests from `terraform/proxmox/`:
 
