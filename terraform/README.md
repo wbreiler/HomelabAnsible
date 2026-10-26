@@ -1,24 +1,33 @@
-# Terraform pilot
+# Proxmox guest lifecycle
 
-Start with Proxmox guest lifecycle management. Keep Ansible for host and guest
-software configuration. The default configuration only queries node names.
-Local pilot settings enable one small, unprivileged Debian container. Existing
-production guests remain under their current management.
+Terraform owns guest provisioning and hardware. Ansible owns host configuration
+and guest software. The local deployment now tracks all 32 existing guests:
+30 LXCs and two VMs, including the Debian pilot. Adoption imported 31 existing
+guests with zero creates, updates, or destroys. A post-import plan had no changes.
+
+Actual guest definitions live in ignored `guests.local.tf` and `vms.local.tf`.
+They preserve live disks, network settings, privilege modes, feature flags,
+QEMU arguments, and guest identities. Sanitized import examples remain tracked.
+The local state and raw configuration snapshots are protected in `artifacts/`.
+Deployment files and artifacts contain private infrastructure information and
+must not be committed. Keep protected backups of these local files.
 
 ## Ownership
 
 | Area | Current owner | Intended owner |
 |---|---|---|
 | Pilot creation, CPU, memory, disk, guest networking | Terraform | Terraform |
-| Existing guest provisioning | Ansible or manual configuration | Terraform, one reviewed guest at a time |
+| Existing guest provisioning and hardware | Terraform | Terraform |
 | Guest packages, services, application data, updates | Ansible | Ansible |
 | PVE host configuration, cluster, storage, backups | Ansible | Ansible |
 | TrueNAS, Arista, PBS, workstations | Existing project | Existing project |
 
-`proxmox/tasks/create_lxc.yml` mixes guest creation with guest configuration.
-`proxmox/roles/vm_deploy/` also creates guests. Minecraft has a separate
-provisioning workflow. Do not give Terraform ownership of a guest until its
-Ansible provisioning path stops managing the same settings.
+The legacy filename `proxmox/tasks/create_lxc.yml` now configures existing
+software only. It refuses absent or stopped guests. The `vm_deploy` role and
+`proxmox/macos.yml` fail instead of creating VMs. Minecraft's `provision.yml`
+imports its existing-server `site.yml`. Boot flag and TUN configuration writes
+were removed from application roles. Ansible still configures in-guest NFS
+mounts and software, and its standalone HA workflow remains available.
 
 ## First local check
 
@@ -227,16 +236,58 @@ DNS resolution, gateway reachability, and a final no-change plan. Both mock
 tests and the repository's Proxmox Ansible lint check passed. Disaster recovery
 and guest restoration remain untested.
 
-## Existing guest migration
+## Existing guest adoption
 
-For an existing guest, import its current configuration and require a plan
-with no changes before any apply. Review disks, mount points, privilege mode,
-HA migration behavior, and fields that require replacement. Add
-`prevent_destroy` to the guest resource, but do not treat it as a backup or as
-protection after removing the resource block.
+`artifacts/imports-2026-10-26.local.tf` records the completed imports, original
+node/IDs, and stable Terraform addresses. Completed blocks are archived outside
+the active module so mock-provider tests do not attempt imports. The pilot keeps
+its original address. Each imported guest has `prevent_destroy = true`. Removing the entire
+resource block removes that guard, so never use file deletion as cleanup.
 
-Keep the first guest unprivileged, without NFS mounts or production data.
-Do not begin with existing databases, media services, or Minecraft worlds.
+The infrastructure token currently retains its original `pilot` name. It uses
+the `TerraformGuest` role only on the adopted guest IDs and `PVEDatastoreUser`
+on their storage pools. The discovery token remains read-only. `TerraformGuest`
+contains the pilot VM permissions plus `VM.Config.HWType`, `VM.Config.CDROM`,
+and `VM.Config.Cloudinit`. The network permission remains scoped to the guest
+VLAN. Creating a guest with a new ID requires an ACL grant for that ID first.
+
+Several import corrections were necessary with provider 0.118.0:
+
+- Unset CPU units imported as zero, which the provider rejects in configuration.
+  Leave those optional/computed units unset instead of changing CPU scheduling.
+- LXC imports contain a zero start timeout. Ignore that provider-local timeout
+  metadata to avoid an otherwise unnecessary update during adoption.
+- macOS presents ISO boot files as disks. Leave invalid imported `iso` format
+  and zero-size fields unset so computed state preserves the actual media.
+- Preserve explicit disk controller settings. The macOS VM's controller is
+  implicit, so its `scsi_hardware` remains ignored rather than applying the
+  provider's different default.
+- Ignore tags maintained by iptag. For HA guests, also ignore node and started
+  state so Terraform does not fight HA placement or power decisions.
+
+Raw `lxc.*` entries, including existing bind mounts and TUN passthrough, remain
+in Proxmox and the protected raw snapshots. The provider does not represent
+every such entry. Import does not convert these entries into Terraform-managed
+attributes, and it does not recreate application data. Existing images,
+templates, boot media, backups, and hardware-specific setup remain prerequisites
+for recovery. Preserve privilege modes on the existing NFS guests.
+
+For another adoption, start with `imports.local.tf.example`. Generate a fresh
+local definition file, add deletion guards, and inspect the saved plan JSON.
+Require every imported resource's action to be `no-op` before applying the
+import plan. A plan that imports and also updates a guest is not acceptable.
+Back up state first, then require a no-change plan and compare live guest
+configuration, placement, and power state against the pre-import snapshot.
+
+For a new guest, define a resource with a reviewed OS image or template, public
+SSH key, privilege mode, storage, address, and backup coverage. The example
+imports describe adoption, not a blank-system restore procedure.
+
+Ansible ownership tests reject absent and stopped guests before software work.
+No application playbooks were applied to production during this migration.
+Disaster recovery, guest restoration, and resizing production guests remain
+untested. Read the generated definitions and the provider-specific limitations
+before authorizing a production hardware change.
 
 Provider reference: [bpg/proxmox documentation](https://bpg.sh/docs/),
 [node data source](https://bpg.sh/docs/data-sources/virtual_environment_nodes/).

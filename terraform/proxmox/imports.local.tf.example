@@ -1,0 +1,12 @@
+# Select live IDs and current nodes. Never duplicate an address already in state.
+# Generate full local definitions with:
+# terraform plan -generate-config-out=guests.local.tf -out=adoption.tfplan
+import {
+  to = proxmox_virtual_environment_container.guest_100
+  id = "your-node/100"
+}
+
+import {
+  to = proxmox_virtual_environment_vm.guest_101
+  id = "your-node/101"
+}

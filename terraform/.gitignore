@@ -10,6 +10,8 @@
 **/.env.*
 !**/.env.example
 **/*.local.tf
+**/*.local.tf.json
+**/artifacts/
 **/*_override.tf
 **/override.tf
 **/*_override.tf.json
