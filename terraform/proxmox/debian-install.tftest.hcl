@@ -1,5 +1,9 @@
 mock_provider "proxmox" {}
 
+variables {
+  iso_installations = {}
+}
+
 run "test_disabled" {
   command = plan
   variables {

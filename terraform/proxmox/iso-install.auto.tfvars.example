@@ -1,0 +1,16 @@
+# Check live VMIDs, address ownership, and ACLs before enabling a new VM.
+iso_installations = {
+  example-debian = {
+    vm_id               = 999
+    node_name           = "your-node"
+    datastore_id        = "your-vm-storage"
+    os                  = "debian" # debian, ubuntu, or fedora
+    iso_filename        = "your-pinned-server-installer.iso"
+    bridge              = "vmbr0"
+    vlan_id             = 40
+    ipv4_address        = "192.0.2.4/24"
+    gateway             = "192.0.2.1"
+    dns_servers         = ["192.0.2.1"]
+    ssh_public_key_file = "~/.ssh/lxc.pub"
+  }
+}

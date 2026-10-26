@@ -1,5 +1,9 @@
 mock_provider "proxmox" {}
 
+variables {
+  iso_installations = {}
+}
+
 run "no_media_by_default" {
   command = plan
 

@@ -352,85 +352,114 @@ Six mock-provider tests, Terraform validation/formatting, and Proxmox Ansible
 lint/syntax checks passed. One completed upload was adopted without replacing
 its bytes when transfers switched to direct node downloads. Completed import
 blocks and protected before/after state snapshots remain in ignored `artifacts/`.
-Debian installation is covered by the disposable test below. Other installer
-boot tests remain untested.
+Automatic installation validation is covered below.
 
-### Disposable Debian installation
+### Automatic Debian, Ubuntu, and Fedora installation
 
-`proxmox/debian-install.tf` optionally creates one VM from an existing installer
-ISO. Copy `debian-install.auto.tfvars.example` to an ignored local variable
-file. Select the next unused VMID after checking the cluster and Minecraft
-inventory. Grant the existing infrastructure identity its existing guest role
-only on that new VMID. Do not widen existing guest or node grants.
+`proxmox/iso-install.tf` provisions fresh AMD64 server VMs in one Terraform
+apply. It builds a separate private ISO, creates the VM, and waits until SSH
+confirms the installed OS, generated machine UUID, completion marker, disk
+root, locked accounts, disabled password/root SSH login, guest-agent health,
+and zero failed systemd units. It never types installer answers into a console.
 
-The VM has two CPU cores with a two-core limit, 2 GiB memory, one 12 GiB disk,
-no host autostart, no HA resource, and no disk backup/replication. Its deletion
-guard remains enabled. The existing IP-tag service may add tags. Actual node,
-VMID, ISO ID, UUID, and network configuration stay in ignored deployment files.
+Supported source profiles are Debian netinst, Ubuntu live-server, and Fedora
+Server DVD. Select a filename already present in the checksum-pinned
+`iso_library`. The source is cached and SHA256-verified on the controller.
+Original NAS and Proxmox ISOs are never edited or replaced.
 
-Render `debian-preseed.cfg.example` into a protected local file with a checked
-address, gateway, DNS server, fresh VM UUID, and base64-encoded SSH public key.
-Its partition command refuses a different machine UUID. It installs Debian
-to the new VM's sole disk, locks passwords, disables root SSH login, installs
-the guest agent, and gives the test account key-based SSH/sudo access.
-This account policy is intended for a disposable test, not a production baseline.
+The controller needs Python 3.11+, xorriso, and an unlocked SSH agent containing
+the private counterpart of the selected public key. On this Mac, xorriso
+1.5.8.pl02 was installed with Homebrew. No build tools were installed on PVE.
+The HCP workspace must retain Local execution mode.
 
-Deliver the rendered file through the private VM console rather than publishing
-it on a web server. Debian's installer supports local `file:///` preseed URLs.
-Use the installer shell to write `/tmp/terraform-iso-test/preseed.cfg`, compare
-its hash with the protected controller copy, then load it through the running
-installer's native preseed step. Independent shell debconf clients can leave
-the active frontend's cached answers unchanged. Keep the handoff inside the
-installer's native frontend. See [Debian's preseed guide](https://www.debian.org/releases/trixie/amd64/apbs02.en.html).
+1. Copy `iso-install.auto.tfvars.example` to ignored `iso-install.auto.tfvars`.
+2. Select an unused sequential VMID, checked address, source ISO, node, and VM storage.
+3. Grant the existing Terraform identity its existing guest role only on the new VMID.
+4. Review and apply a saved plan containing only the requested new resources:
 
-The tested BIOS ISO enables a speech-install timeout after 30 seconds. Select
-its `boot:` prompt and enter the complete command before that timeout. Direct
-QMP keyboard events avoid delays from timed individual monitor keystrokes.
-Boot with `auto`, the checked static network settings, a local preseed URL, and
-`console=ttyS0,115200n8`. The serial installer uses screen: Ctrl+A, 1 selects
-the installer, Ctrl+A, 2 its shell, and Ctrl+A, 4 its logs. Validate the VM name
-before any QMP control operation and direct every operation to the new VM only.
+   ```sh
+   terraform plan -out=install.tfplan
+   terraform apply -parallelism=2 install.tfplan
+   terraform output installed_vms
+   ```
 
-After installation, set `installed = true`, shut down only the test VM, and
-review a plan that updates only that VM. Apply to detach the ISO and restrict
-boot order to `scsi0`. Verify a fresh boot, SSH key authentication, password
-locks, guest-agent health, installer logs, and a no-change Terraform plan.
-Compare existing guests with their protected baseline, allowing only existing
-services' runtime tags, HA placement, and transient backup metadata. Remove
-temporary delivery services/files after verification. Keep the VM for inspection
-until its deletion is explicitly requested.
+5. Connect to the declared address with the selected SSH key.
 
-The 2026-10-26 test installed Debian 13.6 from the verified ISO cache onto the
-empty test disk. Answers were transferred privately, checksum-verified, and
-loaded through the installer's native local-file step. A one-line change to
-the installer's RAM-only preseed entry point selected that local file after
-the initial HTTP delivery attempt failed. The ISO itself was unchanged.
-This run required console control and does not prove unattended boot automation.
+Terraform generates and retains the machine UUID automatically. Default bounds
+are two CPU cores with a matching limit, 2 GiB memory, and one 24 GiB SCSI disk.
+Normal VMs enable host boot and disk backup. Validation VMs explicitly disable
+both. The existing cluster backup policy determines actual backup coverage.
+No HA or replication policy is added automatically.
 
-After Terraform detached the ISO, the VM passed a fresh disk-only boot with
-an ext4 root on `/dev/sda1`, SSH key authentication, locked root/user passwords,
-disabled password/root SSH login, working sudo and guest agent, and zero failed
-systemd units. All nine Terraform tests passed, the final plan had no changes,
-and all 32 earlier guests retained their hardware, placement, and power states.
-Only scheduled-backup locks/digests differed during comparison. Temporary host
-delivery files and the service were removed/stopped. Protected state, local
-configuration, and verification evidence remain in ignored `artifacts/`.
-The user subsequently requested cleanup on 2026-10-26. A reviewed saved plan
-destroyed only the test VM and its 12 GiB disk. The reusable definition,
-preseed example, tests, existing guests, and cached media were preserved.
-The local test variable is now null, and its deletion guard remains enabled.
-HA and backup/restore were not tested.
+Debian receives a root-only preseed inside its initramfs. Ubuntu receives
+`autoinstall.yaml` on the derived media. Fedora receives Kickstart on that
+media. Each installer verifies its own machine UUID before partitioning and
+selects only `/dev/sda`. The boot menus default immediately to installation.
+The original hybrid boot records are preserved by xorriso. Installed machines
+boot their disk first, so leaving their read-only installation media attached
+does not restart the installer. No post-install flag or console work is needed.
 
-For another explicitly approved cleanup, first preserve state and verify the
-test VM's ID, UUID, and disk identity. Set `debian_install_test = null` in the
-ignored local variables. Use a temporary ignored `*_override.tf` to disable
-`prevent_destroy` only on `proxmox_virtual_environment_vm.debian_install_test`.
-Require a saved plan with exactly that VM deletion and no other resource
-changes. Apply that saved plan, then archive the override outside the active
-module immediately. Require a final no-change plan with the reusable guard
-restored. Verify the VM and its disk are absent and compare remaining guests
-and cached media with the protected baseline. Do not use workspace-wide
-`terraform destroy` for this cleanup.
+The bootstrap account has key-only SSH and password-free sudo. Root and user
+passwords stay locked. Private keys and real passwords never enter an ISO or
+Terraform input. A public-key format check rejects private-key files before
+apply. The readiness check probes SSH until the installed OS passes every
+check. This permits Ubuntu's live installer and installed OS to have different
+host keys. It then pins the installed key in a UUID-specific file and records
+a protected `verified.json`. Later checks retain that pin. Verification times
+out after 30 minutes instead of accepting an incomplete installation.
+
+Keep controller `artifacts/iso-install/` protected. It contains source caches,
+per-VM images, manifests, known-host keys, and verification evidence. Derived
+media includes network settings and account policy even though it contains no
+password or private key. Never publish these images or answer files through
+the ISO web server. Allow source-cache space, one full image per VM, build
+workspace, and twice each concurrent image size for the provider's upload.
+`-parallelism=2` limits simultaneous builds/uploads and installations.
+
+Installation inputs are creation-only: use a new entry for another machine.
+Existing images are immutable and checksum-checked before reuse. Builder
+updates affect newly declared VMs. Post-install software and account changes
+belong in Ansible. The original manual `debian-install.tf` test and its examples
+remain available as historical test fixtures, disabled locally.
+
+Deletion guards protect the new VMs and derived media. After explicit cleanup
+authorization, require a saved plan that affects only the intended test
+resources. The scoped upload token lacks PVE's storage-wide `Datastore.Allocate`
+right required to delete ISO files. An administrator must remove only the
+unreferenced, checksum-matched derived image after its VM is gone, then refresh
+Terraform. Restore temporary guard overrides afterward. Original media must
+remain outside cleanup.
+
+All three profiles passed live automatic installation on 2026-10-26:
+
+| Profile | Verified installed version | Console answers |
+|---|---|---|
+| Debian netinst | 13.6 | None |
+| Ubuntu live-server | 26.04 | None |
+| Fedora Server DVD | 44 | None |
+
+Each test verified disk boot, SSH identity, locked accounts, disabled password
+and root SSH login, an active guest agent, and zero failed systemd units.
+Ubuntu also completed its installer security updates. Each disposable VM reused
+the next free VMID and was removed afterward. Protected local evidence remains
+under `artifacts/automatic-*-verified-2026-10-26.json`. Existing guest hardware,
+placement, power state, and original media remained unchanged. BIOS installation
+is the tested path. UEFI and desktop/live-workstation editions remain unverified.
+
+Run the builder and readiness regression tests from `terraform/proxmox/`:
+
+```sh
+python3 -m unittest discover -s tests -p 'test_iso_install.py' -v
+terraform test
+```
+
+The Python tests use xorriso and small generated ISO fixtures. They do not
+download installers or connect to guests. Terraform tests use a mock provider.
+
+References: [Debian preseed](https://www.debian.org/releases/trixie/amd64/apbs04.en.html),
+[Ubuntu autoinstall](https://canonical-subiquity.readthedocs-hosted.com/en/latest/tutorial/providing-autoinstall.html),
+[Fedora Kickstart](https://pykickstart.readthedocs.io/en/latest/kickstart-docs.html),
+[xorriso boot-image replay](https://wiki.debian.org/RepackBootableISO).
 
 ### Imported platform resources
 
