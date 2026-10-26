@@ -9,7 +9,8 @@ servers:
     ansible_host: 192.0.2.31
     vmid: 124
     node: node1
-    # Optional Proxmox HA placement. The first node has the highest priority;
+    # Historical HA reference only. Edit active HA policy in Terraform.
+    # The first node has the highest priority;
     # equal lower priorities allow either fallback node. auto_rebalance=false
     # prevents load-balancing migrations while the preferred node is healthy.
     ha_enabled: true

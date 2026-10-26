@@ -1,5 +1,5 @@
 ---
 # Compatibility entry point: Terraform provisions guests. Ansible configures
-# existing servers. HA policy remains in ha.yml.
+# existing servers. Terraform also owns HA policy.
 - name: Configure existing Terraform-provisioned Minecraft servers
   ansible.builtin.import_playbook: site.yml

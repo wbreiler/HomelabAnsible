@@ -10,7 +10,7 @@ official server packs.
   existing guests and never creates, starts, or resizes them.
 - `ansible/site.yml` configures existing guests from their `ansible_host` values;
   it does not create, move, resize, start, or stop LXCs or alter backup jobs.
-- `ansible/ha.yml` reconciles only PVE 9 HA resources and node-affinity rules.
+- `ansible/ha.yml` is retired and refuses execution. Terraform owns HA policy.
 - `update-script/update-modpack.sh` is deployed to automatically managed guests.
 - `update-script/apply-manual-pack.sh` deploys official server-pack ZIP or
   Modrinth `.mrpack` files from the controller.
@@ -107,25 +107,19 @@ does not. Verify the forwarded agent can authenticate the second hop before
 migration. A working direct guest connection does not prove that path.
 `provision.yml` now imports `site.yml`. It uses the configured `ansible_host`
 and does not discover DHCP addresses, modify HA policy, or merge backup VMIDs.
-Run `ha.yml` separately for approved HA policy changes. Preserve the existing
+Review HA policy and backup selection in Terraform. Preserve the existing
 Minecraft backup job. Adding a new guest to its protected VMID list requires
-an explicit backup configuration change.
+an explicit Terraform backup configuration change.
 
 Use `site.yml --tags timezone` for guest-only timezone configuration.
 
 ## HA placement
 
-```bash
-cd minecraft/ansible
-ansible-playbook ha.yml --ask-vault-pass -e server_filter=atm10-nash
-```
-
-Set `ha_enabled: true`, list preferred/fallback nodes in `ha_nodes`, and use
-`ha_strict: true` to forbid unlisted nodes. `ha_auto_rebalance: false` blocks
-routine balancing moves, while `ha_failback: false` leaves a failed-over guest
-in place. A PVE 9 resource can belong to only one node-affinity rule. For an
-intentional split from a shared rule, set `ha_detach_from_rule`; the playbook
-preserves other members and uses the API digest guard.
+Terraform owns the imported HA resources and affinity rules. `ha.yml` now fails
+before any API call. The old HA fields in `servers.yml` are historical reference,
+not active desired state. Existing node priorities, strictness, failback, and
+rebalancing settings remain unchanged. Review policy changes in
+[Terraform](../terraform/README.md). The PVE HA service retains runtime control.
 
 ## Pack management
 

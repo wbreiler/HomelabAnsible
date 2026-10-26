@@ -7,7 +7,7 @@ Universal guidance for agents working in the `minecraft/` project.
 Automates existing Minecraft server configuration and modpack updates for a Proxmox cluster (`cluster-nash`, nodes: Prometheus and Atlas). Two components:
 
 1. **`update-script/`** — Modpack update script deployed to each Minecraft server LXC
-2. **`ansible/`** — Configures existing guests over SSH and manages HA policy separately. Terraform owns LXC provisioning.
+2. **`ansible/`** — Configures existing guests over SSH only. Terraform owns LXC provisioning and HA policy.
 
 The Ansible role deploys and invokes `update-script/update-modpack.sh`; the
 controller-side `apply-manual-pack.sh` is run separately for manually managed
@@ -64,8 +64,8 @@ migration. Direct guest authentication alone does not validate the second hop.
 **Provisioning ownership**: Terraform creates guests and owns hardware and
 boot settings. `provision.yml` is a compatibility import of `site.yml`, which
 configures existing addresses from ignored `servers.yml`. It never creates,
-starts, resizes, or moves guests and never edits backup jobs. Use `ha.yml`
-separately for approved HA policy changes. Never restore API guest creation to
+starts, resizes, or moves guests and never edits backup jobs. The old `ha.yml` entry point also refuses execution. Review HA policy in
+Terraform. Never restore API guest creation to
 these application playbooks.
 
 **Existing-server entrypoint**: `site.yml` builds an in-memory inventory from
@@ -73,11 +73,10 @@ the `ansible_host` values in ignored `servers.yml`, then applies the role with
 `serial: 1`. It never creates, moves, resizes, starts, or stops LXCs through
 Proxmox and does not modify cluster backup jobs.
 
-**HA-only entrypoint**: `ha.yml` reconciles PVE 9 HA resources and node-affinity
-rules from each server's optional `ha_*` values. It does not provision or
-configure guests. `ha_auto_rebalance: false` blocks routine balancing moves;
-`ha_failback: false` leaves a failed-over server in place until an operator
-manually returns it to its preferred node.
+**HA ownership**: Terraform now owns HA resources and node-affinity rules.
+`ha.yml` fails before API calls. Its old reconciliation task file was removed.
+Preserve current priorities, strictness, failback, and auto-rebalance settings
+in Terraform. Ansible HA fields remain historical reference only.
 
 **Vault setup**: `cp vault.yml.example vault.yml`, fill in values, `ansible-vault encrypt vault.yml`. The file `vault.yml` is gitignored.
 
@@ -113,12 +112,9 @@ triggers a reinstall even when the pack version itself is unchanged. This does
 not apply to `pack_source: manual`, because that source disables
 `update-modpack.sh`; include any extra mods in the manually deployed pack.
 
-**HA placement**: Set `ha_enabled: true`, list preferred and fallback nodes in
-`ha_nodes` with priorities, and keep `ha_strict: true` to prevent placement on
-unlisted nodes. PVE 9 permits each HA resource in only one node-affinity rule;
-the playbook refuses to overwrite a conflicting rule. For an intentional split
-from an existing shared rule, set `ha_detach_from_rule`; the playbook preserves
-the other resources and supplies the rule digest to prevent concurrent writes.
+**HA placement**: Edit the imported Terraform resource and rule definitions.
+Require a reviewed plan. Do not use `ha.yml` or restore Ansible API mutations.
+The PVE HA service still owns runtime placement and guest power decisions.
 
 **server.properties overrides**: Add a `server_properties:` block to any server entry. Keys use underscores (`spawn_protection`, `allow_flight`, `online_mode`, etc.) — the template converts them to hyphenated Minecraft format. Omitted keys use vanilla defaults. Re-running the playbook rewrites the file.
 
@@ -130,7 +126,7 @@ the other resources and supplies the rule digest to prevent concurrent writes.
 
 **Backup job**: Existing Minecraft backup settings remain untouched. Ansible
 `site.yml` and the `provision.yml` alias never merge new VMIDs into backup jobs.
-Before deploying a new server, explicitly arrange backup coverage. Do not
+Before deploying a new server, arrange backup coverage in Terraform. Do not
 rename or recreate the existing `Minecraft Server Backups` job during adoption.
 
 ## External connectivity (`*.mc.wbreiler.com`)
