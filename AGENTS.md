@@ -7,6 +7,8 @@ inside its own directory.
 ## Layout
 
 - `terraform/` — Proxmox guest provisioning and hardware with HCP state.
+  It also owns backup jobs, HA resources/rules, the PBS storage connection,
+  and ISO/template media. Do not restore these owners in Ansible.
   Real guest definitions and credentials remain ignored local deployment files.
   Ansible configures existing guest software. Never restore guest creation,
   startup, resizing, or boot-setting writes to application playbooks.

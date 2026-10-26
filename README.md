@@ -14,10 +14,10 @@ remain historical records. Role defaults and examples are not live inventory.
 
 | Directory | What it manages | Docs |
 |---|---|---|
-| [`terraform/`](terraform/) | Proxmox guest provisioning and hardware: HCP state, 30 adopted LXCs, and two VMs | [README](terraform/README.md) |
-| [`proxmox/`](proxmox/) | Proxmox VE cluster: repos, cluster setup, PBS storage/backup jobs, ISO/template management, guest software, updates, restores, and network tuning | [README](proxmox/README.md) |
+| [`terraform/`](terraform/) | Proxmox guests, backup jobs, HA policy, PBS storage connection, and media/templates with HCP state | [README](terraform/README.md) |
+| [`proxmox/`](proxmox/) | Proxmox host repositories, cluster bootstrap, guest software, updates, restores, monitoring, and network tuning | [README](proxmox/README.md) |
 | [`pbs/`](pbs/) | Existing Proxmox Backup Server: repository cleanup, local ZFS datastore, users, pull-style sync jobs, and Tailscale | [README](pbs/README.md) |
-| [`minecraft/`](minecraft/) | Existing Minecraft guest configuration, separate HA policy, and modpack updates. Terraform provisions the LXCs | [README](minecraft/README.md) |
+| [`minecraft/`](minecraft/) | Existing Minecraft guest configuration and modpack updates. Terraform owns the LXCs and HA policy | [README](minecraft/README.md) |
 | [`truenas/`](truenas/) | TrueNAS host `erebus`: full desired-state config (users, datasets, shares, services, apps) via middleware APIs, with read-only discovery and audit playbooks | [README](truenas/README.md) |
 | [`arista/`](arista/) | Core switch (Arista DCS-7050SX-64): incremental, explicitly scoped desired-state management | [README](arista/README.md) |
 | [`kuma/`](kuma/) | Retired deployment; retained reference automation for Uptime Kuma: Docker deployment, Tailscale, optional API reconciliation/quorum relay, and apt auto-update | [README](kuma/README.md) |
