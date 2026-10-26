@@ -14,7 +14,7 @@ remain historical records. Role defaults and examples are not live inventory.
 
 | Directory | What it manages | Docs |
 |---|---|---|
-| [`terraform/`](terraform/) | Proxmox Terraform pilot: read-only node discovery before guest lifecycle migration | [README](terraform/README.md) |
+| [`terraform/`](terraform/) | Proxmox Terraform pilot: HCP state, node discovery, and an opt-in Debian test container | [README](terraform/README.md) |
 | [`proxmox/`](proxmox/) | Proxmox VE cluster: repos, cluster setup, PBS storage/backup jobs, ISO/template management, application LXCs, VM deploys, updates, restores, and network tuning | [README](proxmox/README.md) |
 | [`pbs/`](pbs/) | Existing Proxmox Backup Server: repository cleanup, local ZFS datastore, users, pull-style sync jobs, and Tailscale | [README](pbs/README.md) |
 | [`minecraft/`](minecraft/) | Minecraft server LXC provisioning via the Proxmox API + nightly Modrinth/CurseForge modpack update script | [README](minecraft/README.md) |
