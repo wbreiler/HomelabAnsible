@@ -1,0 +1,17 @@
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+**/*.tfvars.json
+**/*.tfplan
+**/crash.log
+**/crash.*.log
+**/.env
+**/.env.*
+!**/.env.example
+**/*.local.tf
+**/*_override.tf
+**/override.tf
+**/*_override.tf.json
+**/override.tf.json
+# Commit .terraform.lock.hcl. Never save plans under arbitrary filenames here.
