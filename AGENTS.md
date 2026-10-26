@@ -6,9 +6,13 @@ inside its own directory.
 
 ## Layout
 
+- `terraform/` — Proxmox guest provisioning and hardware with HCP state.
+  Real guest definitions and credentials remain ignored local deployment files.
+  Ansible configures existing guest software. Never restore guest creation,
+  startup, resizing, or boot-setting writes to application playbooks.
 - `proxmox/` — Proxmox VE cluster automation. Deep agent docs: `proxmox/AGENTS.md`.
 - `pbs/` — Proxmox Backup Server setup (`pbs/README.md`).
-- `minecraft/` — Minecraft LXC provisioning + modpack update script. Agent docs:
+- `minecraft/` — Existing Minecraft guest configuration + modpack update script. Agent docs:
   `minecraft/AGENTS.md`. If a modpack misbehaves in a way that isn't an
   obvious single-mod config bug (e.g. a client crash tied to a corrupted
   network sync packet), prefer recreating the server from the modpack's
