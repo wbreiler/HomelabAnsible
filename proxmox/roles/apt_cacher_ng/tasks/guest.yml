@@ -1,0 +1,63 @@
+---
+- name: Require a Debian-family SSH guest
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == 'Debian'
+    fail_msg: Apt-Cacher NG guest configuration requires a Debian-family guest.
+
+- name: Install Apt-Cacher NG from signed OS repositories
+  ansible.builtin.apt:
+    name: apt-cacher-ng
+    state: present
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Remove the legacy remote updater
+  ansible.builtin.file:
+    path: /usr/bin/update
+    state: absent
+
+- name: Configure Apt-Cacher NG settings
+  ansible.builtin.lineinfile:
+    path: /etc/apt-cacher-ng/acng.conf
+    regexp: "^[#\\s]*{{ item.key }}:"
+    line: "{{ item.key }}: {{ item.value }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - key: Port
+      value: "{{ apt_cacher_ng_port }}"
+    - key: PassThroughPattern
+      value: "{{ apt_cacher_ng_pass_through_pattern }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Restart Apt-Cacher NG
+
+- name: Configure the guest to use its own Apt-Cacher NG cache
+  ansible.builtin.template:
+    src: 00aptproxy.conf.j2
+    dest: /etc/apt/apt.conf.d/00aptproxy.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable and start Apt-Cacher NG
+  ansible.builtin.systemd_service:
+    name: apt-cacher-ng
+    enabled: true
+    state: started
+
+- name: Apply Apt-Cacher NG guest changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify Apt-Cacher NG HTTP health
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ apt_cacher_ng_port }}/acng-report.html"
+    status_code: 200
+  register: apt_cacher_ng_ssh_health
+  until: apt_cacher_ng_ssh_health.status | default(0) == 200
+  retries: 12
+  delay: 5
+  when: not ansible_check_mode

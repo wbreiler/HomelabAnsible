@@ -10,3 +10,11 @@
       - restart
       - apt-cacher-ng
   changed_when: true
+  when: not (apt_cacher_ng_guest_ssh | bool)
+
+- name: Restart Apt-Cacher NG on SSH guest
+  listen: Restart Apt-Cacher NG
+  ansible.builtin.systemd_service:
+    name: apt-cacher-ng
+    state: restarted
+  when: apt_cacher_ng_guest_ssh | bool

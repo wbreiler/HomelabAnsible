@@ -1,4 +1,6 @@
 ---
+# Direct SSH configures existing Terraform-owned guests without lifecycle writes.
+apt_cacher_ng_guest_ssh: false
 apt_cacher_ng_node: "atlas"
 apt_cacher_ng_vmid: "106"
 apt_cacher_ng_hostname: "apt-nash"

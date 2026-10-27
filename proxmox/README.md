@@ -299,6 +299,29 @@ Four opt-in roles cover complementary monitoring concerns:
 
 Together: `healthcheck_reminder` catches "is the node/guest even up" (Proxmox-native, zero footprint); `gatus` catches "is the app inside actually responding" plus gives you history and a dashboard; `diun` catches "is there a newer image available" for anything running Docker, cluster or not.
 
+### Apt-Cacher NG on Terraform-created guests
+
+Set `app` to `apt_cacher_ng` in the [guest workflow](../terraform/README.md#create-a-guest-and-install-its-application)
+profile. The workflow creates a Debian LXC or Debian/Ubuntu UEFI/Secure Boot VM
+and invokes `apt-cacher-ng-guests.yml` with only that guest in its inventory.
+The role installs Apt-Cacher NG from signed OS repositories, applies the existing
+port and CONNECT settings, configures the guest's own APT proxy, enables the
+service, and checks its report page. It leaves other APT clients unchanged.
+The node-based role remains the default through `apt_cacher_ng_guest_ssh: false`.
+
+For an existing Terraform-owned guest, copy the sanitized
+`apt-cacher-ng-guests.inventory.yml.example` to a private inventory and run
+from `proxmox/`:
+
+```sh
+ansible-playbook -i ../terraform/proxmox/artifacts/cache.inventory.yml apt-cacher-ng-guests.yml
+ansible-playbook -i ../terraform/proxmox/artifacts/cache.inventory.yml apt-cacher-ng-guests.yml --check --diff
+```
+
+`tests/apt-cacher-ng-guests.yml` validates disposable Debian 13 guests. It checks
+APT's signed metadata update through the configured cache, repeated proxy
+requests, matching on-disk cached content, and an enabled, active service.
+
 ### Gatus on Terraform-created guests
 
 For provisioning plus application configuration in one command, use the

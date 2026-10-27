@@ -1,0 +1,61 @@
+---
+- name: Verify disposable Apt-Cacher NG guests
+  hosts: apt_cacher_ng_guests
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Require the Debian validation image
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Debian'
+          - ansible_facts.distribution_release == 'trixie'
+
+    - name: Verify signed repository metadata through the guest cache
+      ansible.builtin.command:
+        argv:
+          - apt-get
+          - update
+          - -o
+          - APT::Update::Error-Mode=any
+      changed_when: false
+
+    - name: Verify repeated proxy requests and matching on-disk cache data
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import hashlib, http.client, json, pathlib, sys
+            target = 'http://deb.debian.org/debian/dists/trixie/InRelease'
+            bodies = []
+            for attempt in range(2):
+                connection = http.client.HTTPConnection('127.0.0.1', int(sys.argv[1]), timeout=60)
+                connection.request('GET', target)
+                response = connection.getresponse()
+                assert response.status == 200, response.status
+                bodies.append(response.read())
+                connection.close()
+            assert bodies[0] == bodies[1]
+            assert bodies[0].startswith(b'-----BEGIN PGP SIGNED MESSAGE-----')
+            digest = hashlib.sha256(bodies[0]).hexdigest()
+            matches = [str(p) for p in pathlib.Path('/var/cache/apt-cacher-ng').rglob('InRelease')
+                       if p.is_file() and hashlib.sha256(p.read_bytes()).hexdigest() == digest]
+            assert matches, 'The served repository metadata is not present in the package cache'
+            print(json.dumps(dict(requests=2, sha256=digest, cached_files=matches)))
+          - "{{ apt_cacher_ng_port | default(3142) | string }}"
+      register: apt_cache_validation
+      changed_when: false
+
+    - name: Verify the cache service is enabled
+      ansible.builtin.command:
+        argv: [systemctl, is-enabled, apt-cacher-ng]
+      changed_when: false
+
+    - name: Verify the cache service is active
+      ansible.builtin.command:
+        argv: [systemctl, is-active, apt-cacher-ng]
+      changed_when: false
+
+    - name: Report verified cache behavior
+      ansible.builtin.debug:
+        msg: "{{ apt_cache_validation.stdout | from_json }}"
