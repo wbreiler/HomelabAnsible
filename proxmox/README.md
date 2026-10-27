@@ -301,6 +301,11 @@ Together: `healthcheck_reminder` catches "is the node/guest even up" (Proxmox-na
 
 ### Gatus on Terraform-created guests
 
+For provisioning plus application configuration in one command, use the
+[Terraform guest workflow](../terraform/README.md#create-a-guest-and-install-its-application).
+The playbook waits for SSH and verifies a supplied Terraform hostname before
+application changes. Its existing direct inventory entry point remains available.
+
 `gatus-guests.yml` installs the existing Gatus application on Debian-family
 AMD64 LXCs or VMs over SSH. Terraform must create and start the guests first.
 Each guest needs Python 3, an authorized SSH key, and root access through SSH
