@@ -1,0 +1,87 @@
+---
+- name: Deploy the LANCache monitoring dashboard
+  hosts: truenas
+  gather_facts: false
+  tags: [apps]
+  vars:
+    lancache_dashboard_root: "{{ lancache_root }}/dashboard"
+  tasks:
+    - name: Require deployment opt-in and local configuration
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode or truenas_allow_changes | bool
+          - lancache_dashboard_address is defined
+          - lancache_dashboard_address != lancache_bind_address
+          - lancache_network_name | length > 0
+          - lancache_root.startswith('/mnt/')
+    - name: Create the dashboard data directory
+      ansible.builtin.file:
+        path: "{{ lancache_dashboard_root }}"
+        state: directory
+        owner: '568'
+        group: '568'
+        mode: '0755'
+    - name: Store the private embedded database password
+      ansible.builtin.copy:
+        content: >-
+          POSTGRES_PASSWORD={{ lookup('ansible.builtin.password',
+          playbook_dir + '/../artifacts/lancache-dashboard-db-password', length=48) }}
+        dest: "{{ lancache_dashboard_root }}/database.env"
+        owner: '568'
+        group: '568'
+        mode: '0600'
+      no_log: true
+    - name: Supply the existing cache capacity without Docker access
+      ansible.builtin.copy:
+        content: "CACHE_DISK_SIZE={{ lancache_disk_size | default('1000g') }}\n"
+        dest: "{{ lancache_dashboard_root }}/lancache.env"
+        owner: '568'
+        group: '568'
+        mode: '0644'
+    - name: Read the current dashboard configuration
+      ansible.builtin.raw: >-
+        midclt call app.query '[["name","=","lancache-dashboard"]]'
+        '{"extra":{"retrieve_config":true}}'
+      check_mode: false
+      register: dashboard_query
+      changed_when: false
+    - name: Reconcile only the LANCache dashboard
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
+      vars:
+        truenas_entities_apps: "{{ dashboard_query.stdout | from_json }}"
+        desired_app:
+          name: lancache-dashboard
+          custom_app: true
+          state: RUNNING
+          custom_compose_config:
+            services:
+              dashboard:
+                image: ghcr.io/regix1/lancache-manager@sha256:ac2311652b2a643c256373ccf93de25d0bf1c3df7c91b04676ec5519dfa598fa
+                restart: unless-stopped
+                env_file:
+                  - "{{ lancache_dashboard_root }}/database.env"
+                environment:
+                  PUID: '568'
+                  PGID: '568'
+                  TZ: "{{ lancache_timezone | default('Etc/UTC') }}"
+                  LanCache__LogPath: /logs/access.log
+                  LanCache__CachePath: /cache/cache
+                  LanCache__EnvFilePath: /settings/lancache.env
+                  NginxLogRotation__Enabled: 'false'
+                volumes:
+                  - "{{ lancache_dashboard_root }}:/data"
+                  - "{{ lancache_root }}/logs:/logs:ro"
+                  - "{{ lancache_root }}/cache:/cache:ro"
+                  - "{{ lancache_dashboard_root }}/lancache.env:/settings/lancache.env:ro"
+                networks:
+                  cache:
+                    ipv4_address: "{{ lancache_dashboard_address }}"
+                logging:
+                  driver: json-file
+                  options:
+                    max-size: 10m
+                    max-file: '3'
+            networks:
+              cache:
+                external: true
+                name: "{{ lancache_network_name }}"

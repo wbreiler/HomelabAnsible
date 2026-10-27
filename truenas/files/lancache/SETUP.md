@@ -194,3 +194,55 @@ summary and LANCache access logs before treating a game as fully cached.
 
 References: [SteamPrefill](https://github.com/tpill90/steam-lancache-prefill) and
 [EpicPrefill](https://github.com/tpill90/epic-lancache-prefill).
+
+## Monitoring dashboard
+
+`playbooks/lancache-dashboard.yml` deploys LANCache Manager as a separate
+TrueNAS custom app. Set `lancache_dashboard_address` in the ignored desired
+state to an unused address on `lancache_network_name`. It must differ from the
+cache, worker, and ISO server addresses.
+
+The dashboard reads `/logs` and `/cache` through read-only mounts. It has no
+Docker socket and cannot start prefill workers or change the cache files.
+Existing tmux prefill sessions continue to work separately. Its own database
+and settings live under `lancache_root/dashboard`.
+
+The app runs as UID/GID 568, which the existing TrueNAS NFSv4 ACLs allow
+to read the cache and log files. No cache ACL or ownership changes are required. Its database uses a separate
+PostgreSQL account. The new data directory allows traversal for that account.
+The generated database password remains in a local ignored artifact and a
+mode-0600 environment file. Never commit either file or the dashboard data.
+
+After a protected configuration backup, run from `truenas/`:
+
+```sh
+ansible-playbook playbooks/lancache-dashboard.yml --check --diff
+ansible-playbook playbooks/lancache-dashboard.yml -e truenas_allow_changes=true
+ansible-playbook playbooks/lancache-dashboard.yml -e truenas_allow_changes=true
+```
+
+Open `http://<lancache_dashboard_address>/`. First-run setup requires the app's
+API key. Retrieve it in a terminal on Erebus, never in chat:
+
+```sh
+docker exec ix-lancache-dashboard-dashboard-1 cat /data/security/api_key.txt
+```
+
+Choose administrator credentials in the setup wizard. Enabling guest access
+lets other LAN users view download and client statistics without those
+credentials. Keep authentication enabled for administrator actions. Import the
+existing logs in the wizard and request a cache size scan to populate history
+and disk usage.
+
+The dashboard shows live transfer
+rates, cache hit statistics, and cache file size. Live rates come from completed
+HTTP requests in the logs. They can lag during a long request or buffered log
+write. HTTPS passthrough traffic is not cached.
+
+The cache directory is `/cache/cache` inside the dashboard because monolithic
+stores its hash directories one level below the mounted cache root. Physical
+cache size comes from a file scan. Historical bytes served can be larger
+because the same cached content can be served repeatedly.
+
+Upstream: [LANCache Manager](https://github.com/regix1/lancache-manager) and
+[configuration reference](https://regix1.github.io/lancache-manager/configuration-reference/).
