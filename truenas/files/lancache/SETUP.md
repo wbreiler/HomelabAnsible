@@ -36,8 +36,8 @@ when you change or remove its owner. Docker does not permit a second network
 with an overlapping subnet.
 
 Macvlan isolates containers from their host by default. Verify clients from
-another machine. Prefill workers on Erebus need a separate supported network
-path before use. See [Docker macvlan networking](https://docs.docker.com/engine/network/drivers/macvlan/).
+another machine. Prefill workers join the same macvlan network with their own
+static addresses. See [Docker macvlan networking](https://docs.docker.com/engine/network/drivers/macvlan/).
 
 Create a fresh protected configuration backup using `playbooks/backup.yml`,
 with unique local and remote paths supplied as extra variables. Then run:
@@ -116,7 +116,18 @@ a mode-`0600` `.env` with the local cache address:
 
 ```dotenv
 LANCACHE_IP=192.0.2.11
+LANCACHE_NETWORK=existing-storage-macvlan
+STEAM_PREFILL_IP=192.0.2.12
+EPIC_PREFILL_IP=192.0.2.13
 ```
+
+Choose two unused addresses within the existing macvlan subnet. Keep them
+outside DHCP allocation, if applicable, and distinct from LANCache and other
+containers. Explicit addresses also work when the network's dynamic allocation
+range has no free addresses. Each worker uses LANCache for DNS and reaches it
+directly on the macvlan network. No host interface or route is required.
+Keep the same Compose project directory so the saved account volumes remain
+attached. Do not replace or delete those volumes during this network update.
 
 Each worker reads `selectedAppsToPrefill.json` from its private Docker volume. The
 format is a JSON array: numeric Steam app IDs, or string Epic app names.

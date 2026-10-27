@@ -37,6 +37,25 @@ class LANCacheTests(unittest.TestCase):
             '/mnt/tank/appdata/lancache/logs:/data/logs',
         ])
 
+    def test_prefill_workers_keep_accounts_and_use_distinct_macvlan_addresses(self):
+        compose = yaml.safe_load(
+            (Path(__file__).resolve().parents[1] /
+             'files/lancache/prefill.compose.yml').read_text()
+        )
+        self.assertTrue(compose['networks']['cache']['external'])
+        self.assertEqual(compose['networks']['cache']['name'],
+                         '${LANCACHE_NETWORK:?Set LANCACHE_NETWORK}')
+        addresses = []
+        for name in ['steam', 'epic']:
+            worker = compose['services'][name]
+            self.assertEqual(worker['dns'], ['${LANCACHE_IP:?Set LANCACHE_IP}'])
+            self.assertEqual(worker['volumes'], [f'{name}-config:/Config'])
+            self.assertEqual(worker['logging']['driver'], 'none')
+            self.assertNotIn('ports', worker)
+            self.assertNotIn('network_mode', worker)
+            addresses.append(worker['networks']['cache']['ipv4_address'])
+        self.assertEqual(len(set(addresses)), 2)
+
 
 if __name__ == '__main__':
     unittest.main()

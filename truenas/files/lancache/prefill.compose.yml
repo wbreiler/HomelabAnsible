@@ -3,6 +3,9 @@ services:
   steam:
     image: tpill90/steam-lancache-prefill@sha256:4c940d040ef422abec322a7b5afabe4adcf052f62d39eca5c2d336ffab0eaccc
     dns: ["${LANCACHE_IP:?Set LANCACHE_IP}"]
+    networks:
+      cache:
+        ipv4_address: "${STEAM_PREFILL_IP:?Set STEAM_PREFILL_IP}"
     volumes:
       - steam-config:/Config
     entrypoint: [/bin/sh, -c, 'umask 077; exec /app/SteamPrefill "$$@"', SteamPrefill]
@@ -12,6 +15,9 @@ services:
   epic:
     image: tpill90/epic-lancache-prefill@sha256:cbfe7a172b8606efe8511319817745dba3681bacdd6c91f2eb0028d1ceb91c65
     dns: ["${LANCACHE_IP:?Set LANCACHE_IP}"]
+    networks:
+      cache:
+        ipv4_address: "${EPIC_PREFILL_IP:?Set EPIC_PREFILL_IP}"
     volumes:
       - epic-config:/Config
     entrypoint: [/bin/sh, -c, 'umask 077; exec /EpicPrefill "$$@"', EpicPrefill]
@@ -21,3 +27,7 @@ services:
 volumes:
   steam-config:
   epic-config:
+networks:
+  cache:
+    external: true
+    name: "${LANCACHE_NETWORK:?Set LANCACHE_NETWORK}"
