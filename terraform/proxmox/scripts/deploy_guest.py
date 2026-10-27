@@ -18,7 +18,8 @@ import urllib.parse
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-APPS = {"gatus": ("gatus-guests.yml", "gatus_guests")}
+APPS = {"gatus": ("gatus-guests.yml", "gatus_guests"),
+        "librespeed": ("librespeed-guests.yml", "librespeed_guests")}
 
 
 def write_json(path, value):
@@ -44,7 +45,7 @@ def validate(profile):
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,45}[a-z0-9]", p.get("name", "")):
         raise ValueError("Use a hostname with 2–47 lowercase letters, digits, or hyphens")
     if p.get("kind") not in {"lxc", "vm"} or p["app"] not in APPS:
-        raise ValueError("Supported guest kinds: lxc/vm. Supported application: gatus")
+        raise ValueError("Supported guest kinds: lxc/vm. Supported applications: " + ", ".join(APPS))
     if p["os"] not in {"debian", "ubuntu"} or p["kind"] == "lxc" and p["os"] != "debian":
         raise ValueError("Gatus supports Debian LXCs and Debian/Ubuntu installation VMs")
     for field in ["node_name", "datastore_id", "bridge"]:

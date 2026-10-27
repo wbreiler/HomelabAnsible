@@ -725,3 +725,16 @@ rotation, and media reconstruction are separate tests and remain unverified.
 
 Provider reference: [bpg/proxmox documentation](https://bpg.sh/docs/),
 [node data source](https://bpg.sh/docs/data-sources/virtual_environment_nodes/).
+
+### LibreSpeed LAN test guest
+
+Use `guest-librespeed.profile.json.example` with `app: librespeed` for a
+Debian 13 LXC. The workflow routes application configuration to
+`proxmox/librespeed-guests.yml`. An unprivileged LXC shares the host kernel and
+avoids a separate VM kernel or nested Docker network. A direct private HTTP
+connection also avoids a reverse proxy and TLS processing in the test path.
+
+The example uses the existing two-core, 2 GiB, 8 GiB defaults. For multi-gigabit Ethernet,
+four cores provide additional capacity for concurrent PHP test streams.
+The guest has no configured network rate limit. See the LibreSpeed section in
+`proxmox/README.md` for measurement limits and application settings.
