@@ -1,8 +1,8 @@
 # Proxmox guest lifecycle
 
 Terraform owns guest provisioning and hardware. Ansible owns host configuration
-and guest software. The local deployment now tracks 34 guests:
-31 LXCs and three VMs, including the Debian pilot and two workflow validation guests. The disposable ISO test passed
+and guest software. The local deployment now tracks 32 guests:
+30 LXCs and two VMs, including the Debian pilot. The disposable ISO test passed
 and its VM was subsequently removed through Terraform.
 Adoption imported 31 existing
 guests with zero creates, updates, or destroys. A post-import plan had no changes.
@@ -21,8 +21,9 @@ Their definitions live in ignored `platform.local.tf` and `pbs.local.tf`.
 The separate ISO library now adds ten installers on each node, for 20 new
 cached files. Disposable boot-test cleanup left 121 managed resources. The
 Gatus test guests were also removed through Terraform. Their installation
-identity, build record, and private ISO increase the total to 124 resources. The current
-workflow validation pair adds three resources, for 127 managed resources.
+identity, build record, and private ISO increase the total to 124 resources.
+The workflow validation pair was also removed through Terraform, returning
+to 124 managed resources without removing any media.
 All destination SHA256 hashes
 matched the trusted NAS files, and the final Terraform plan had no changes.
 
@@ -254,11 +255,13 @@ and passed repeat workflow and Ansible dry-runs with zero changes. The VM
 verified UEFI, Secure Boot, enrolled keys, kernel lockdown, and system health.
 The 32 baseline guests and all 56 media files remain unchanged.
 
-Both validation guests remain running with deletion guards enabled. Their
-cleanup awaits explicit approval after automatic approval review rejected the
-deletions. A reviewed saved plan deletes only these two guests and their
-readiness record. It changes no existing media or baseline guest. Evidence and
-the pending plan remain under `artifacts/workflow-validation-2026-10-26/`.
+After explicit approval, a reviewed Terraform plan removed both validation
+guests, their disks, and their readiness record. All 32 baseline guests and
+56 media files remain unchanged. The reusable workflow, Ansible support,
+private profiles, installation media, and archived guest definition remain
+available. The final plan has no changes, and deletion guards are restored.
+Evidence and the applied plan remain under
+`artifacts/workflow-validation-2026-10-26/`.
 The installed Terraform binary is cached under ignored `terraform/.tools/`,
 and the local `.env` selects it through `TF_BIN`.
 
