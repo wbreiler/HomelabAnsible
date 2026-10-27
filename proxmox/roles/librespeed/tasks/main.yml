@@ -39,24 +39,25 @@
     extra_opts: [--strip-components=1]
     creates: "{{ librespeed_install_dir }}/speedtest.js"
 
-- name: Install upstream single-server interface
-  ansible.builtin.copy:
+- name: Read upstream single-server interface
+  ansible.builtin.slurp:
     src: "{{ librespeed_install_dir }}/index-classic.html"
-    dest: "{{ librespeed_install_dir }}/index.html"
-    remote_src: true
-    force: false
-    mode: "0644"
+  register: librespeed_interface
 
-- name: Configure interface for local bandwidth tests
-  ansible.builtin.replace:
-    path: "{{ librespeed_install_dir }}/index.html"
-    regexp: 's\.setParameter\("telemetry_level", "basic"\);[^\n]*'
-    replace: |-
+- name: Install interface with local bandwidth settings
+  ansible.builtin.copy:
+    content: >-
+      {{ (librespeed_interface.content | b64decode) |
+         replace('s.setParameter("telemetry_level", "basic");', librespeed_lan_settings | trim) }}
+    dest: "{{ librespeed_install_dir }}/index.html"
+    mode: "0644"
+  vars:
+    librespeed_lan_settings: |
       s.setParameter("telemetry_level", "off");
-              s.setParameter("getIp_ispInfo", false);
-              s.setParameter("getIp_ispInfo_distance", false);
-              s.setParameter("overheadCompensationFactor", 1);
-              s.setParameter("time_auto", false);
+      s.setParameter("getIp_ispInfo", false);
+      s.setParameter("getIp_ispInfo_distance", false);
+      s.setParameter("overheadCompensationFactor", 1);
+      s.setParameter("time_auto", false);
 
 - name: Install LibreSpeed PHP settings
   ansible.builtin.copy:
@@ -112,5 +113,20 @@
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ librespeed_port }}/{{ item }}"
     status_code: 200
+    return_content: "{{ item == '' }}"
+  register: librespeed_http
   loop: ['', speedtest.js, speedtest_worker.js, backend/empty.php, 'backend/garbage.php?ckSize=1']
+  when: not ansible_check_mode
+
+- name: Verify LAN settings in the served interface
+  ansible.builtin.assert:
+    that:
+      - >-
+        's.setParameter("telemetry_level", "off")' in librespeed_http.results[0].content
+      - >-
+        's.setParameter("getIp_ispInfo", false)' in librespeed_http.results[0].content
+      - >-
+        's.setParameter("overheadCompensationFactor", 1)' in librespeed_http.results[0].content
+      - >-
+        's.setParameter("time_auto", false)' in librespeed_http.results[0].content
   when: not ansible_check_mode
