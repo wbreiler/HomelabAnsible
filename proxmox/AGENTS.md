@@ -526,3 +526,11 @@ management, LXC installation, system updates, and PBS restores.
 * Optional `zipline_manage_proxy` manages an isolated NPM configuration and
   requires the `homelab-zipline` certificate first. See `docs/zipline.md`.
 * The Mac client and Automator action are under `files/zipline/`.
+
+### librespeed
+
+* Guest-only role, invoked by `librespeed-guests.yml` after Terraform creates a
+  Debian 13 guest. Do not add it to the node-targeted `site.yml`.
+* Pins and checksum-verifies LibreSpeed, with native nginx and PHP FPM.
+* Local tests disable telemetry, ISP lookup, compression, buffering, and
+  bandwidth overhead compensation. Use the direct guest HTTP address.

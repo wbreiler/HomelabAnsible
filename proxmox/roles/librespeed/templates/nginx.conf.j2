@@ -1,0 +1,28 @@
+# {{ ansible_managed }}
+server {
+    listen {{ librespeed_port }} default_server;
+    listen [::]:{{ librespeed_port }} default_server;
+    server_name _;
+    root {{ librespeed_install_dir }};
+    index index.html;
+    client_max_body_size 64m;
+    access_log off;
+    gzip off;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location ~ ^/backend/(garbage|empty|getIP)\.php$ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+        fastcgi_buffering off;
+        fastcgi_request_buffering off;
+        fastcgi_read_timeout 120s;
+    }
+
+    location ~ \.php$ {
+        return 404;
+    }
+}

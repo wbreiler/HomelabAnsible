@@ -1,0 +1,116 @@
+---
+- name: Validate LibreSpeed platform and release
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Debian'
+      - ansible_facts.distribution_major_version == '13'
+      - librespeed_release_checksum is match('^sha256:[0-9a-f]{64}$')
+      - librespeed_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - librespeed_port | int >= 1
+      - librespeed_port | int <= 65535
+
+- name: Install LibreSpeed web server
+  ansible.builtin.apt:
+    name: [ca-certificates, nginx, php8.4-fpm, tar]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create LibreSpeed release directory
+  ansible.builtin.file:
+    path: "{{ librespeed_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download verified LibreSpeed release
+  ansible.builtin.get_url:
+    url: "{{ librespeed_release_url }}"
+    checksum: "{{ librespeed_release_checksum }}"
+    dest: "/var/cache/librespeed-{{ librespeed_version }}.tar.gz"
+    mode: "0644"
+
+- name: Extract LibreSpeed release
+  ansible.builtin.unarchive:
+    src: "/var/cache/librespeed-{{ librespeed_version }}.tar.gz"
+    dest: "{{ librespeed_install_dir }}"
+    remote_src: true
+    extra_opts: [--strip-components=1]
+    creates: "{{ librespeed_install_dir }}/speedtest.js"
+
+- name: Install upstream single-server interface
+  ansible.builtin.copy:
+    src: "{{ librespeed_install_dir }}/index-classic.html"
+    dest: "{{ librespeed_install_dir }}/index.html"
+    remote_src: true
+    force: false
+    mode: "0644"
+
+- name: Configure interface for local bandwidth tests
+  ansible.builtin.replace:
+    path: "{{ librespeed_install_dir }}/index.html"
+    regexp: 's\.setParameter\("telemetry_level", "basic"\);[^\n]*'
+    replace: |-
+      s.setParameter("telemetry_level", "off");
+              s.setParameter("getIp_ispInfo", false);
+              s.setParameter("getIp_ispInfo_distance", false);
+              s.setParameter("overheadCompensationFactor", 1);
+              s.setParameter("time_auto", false);
+
+- name: Install LibreSpeed PHP settings
+  ansible.builtin.copy:
+    content: |
+      post_max_size = 64M
+      upload_max_filesize = 64M
+      memory_limit = 128M
+      output_buffering = Off
+      zlib.output_compression = Off
+      session.upload_progress.enabled = Off
+    dest: /etc/php/8.4/fpm/conf.d/99-librespeed.ini
+    mode: "0644"
+  notify: Restart LibreSpeed PHP
+
+- name: Allow concurrent LibreSpeed PHP streams
+  ansible.builtin.lineinfile:
+    path: /etc/php/8.4/fpm/pool.d/www.conf
+    regexp: '^pm.max_children\s*='
+    line: pm.max_children = 16
+  notify: Restart LibreSpeed PHP
+
+- name: Install LibreSpeed nginx site
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/librespeed
+    mode: "0644"
+  notify: Reload LibreSpeed nginx
+
+- name: Disable default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload LibreSpeed nginx
+
+- name: Enable LibreSpeed nginx site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/librespeed
+    dest: /etc/nginx/sites-enabled/librespeed
+    state: link
+  notify: Reload LibreSpeed nginx
+
+- name: Enable LibreSpeed services
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: [php8.4-fpm, nginx]
+
+- name: Apply LibreSpeed configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify LibreSpeed interface and test endpoints
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ librespeed_port }}/{{ item }}"
+    status_code: 200
+  loop: ['', speedtest.js, speedtest_worker.js, backend/empty.php, 'backend/garbage.php?ckSize=1']
+  when: not ansible_check_mode

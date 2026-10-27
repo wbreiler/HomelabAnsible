@@ -1099,3 +1099,30 @@ release until its migration and backup procedure have been reviewed.
 The `zipline` role deploys digest-pinned Zipline and PostgreSQL in an
 unprivileged LXC. Enable `install_zipline` and run the `zipline` tag.
 See [screenshot setup](docs/zipline.md) for ingress prerequisites and clients.
+
+## LibreSpeed LAN bandwidth test
+
+`librespeed-guests.yml` configures a new Terraform-owned Debian 13 guest through
+SSH. Provision it with `terraform/proxmox/scripts/deploy_guest.py` and the
+sanitized `guest-librespeed.profile.json.example` profile. Set `app` to
+`librespeed`. Do not run this role against Proxmox hosts through `site.yml`.
+
+The role installs pinned, checksum-verified LibreSpeed sources, nginx, and PHP
+FPM directly in the guest. It disables compression, response/request buffering,
+telemetry, ISP lookups, and the default 6% bandwidth compensation. Results show
+application throughput, without an estimated protocol overhead adjustment.
+Uploads accept 64 MiB requests. Only the three test backend PHP scripts are
+served; telemetry and result-sharing PHP endpoints are unavailable.
+
+Open the guest's private HTTP address and press **Start**. Use the direct address
+without a reverse proxy, VPN, or tunnel. Download measures guest-to-client
+traffic. Upload measures client-to-guest traffic. Cross-VLAN tests also measure
+the router path. Browser CPU, Wi-Fi, client Ethernet speed, and shared host or
+uplink traffic can limit results. Repeat a test from a wired client when you
+need a baseline. No public DNS or router port-forward is required.
+
+Reapply the same private Terraform profile to configure the service again.
+The Ansible entry point can also use the private inventory in
+`terraform/proxmox/artifacts/deploy/<name>/inventory.yml`. The role verifies the
+web interface, worker scripts, and ping/download endpoints after installation.
+It starts nginx and PHP FPM automatically after a guest reboot.

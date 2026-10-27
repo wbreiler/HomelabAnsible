@@ -1,0 +1,15 @@
+---
+- name: Restart LibreSpeed PHP
+  ansible.builtin.systemd_service:
+    name: php8.4-fpm
+    state: restarted
+
+- name: Validate LibreSpeed nginx
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  listen: Reload LibreSpeed nginx
+
+- name: Reload LibreSpeed nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    state: reloaded

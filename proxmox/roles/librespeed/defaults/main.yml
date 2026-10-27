@@ -1,0 +1,6 @@
+---
+librespeed_version: "6.3.1"
+librespeed_release_url: "https://codeload.github.com/librespeed/speedtest/tar.gz/refs/tags/v{{ librespeed_version }}"
+librespeed_release_checksum: "sha256:17ea965f1324f06644dc9c8269a1cf16e33df454fcbe477fded95415f2d286de"
+librespeed_install_dir: "/var/www/librespeed-{{ librespeed_version }}"
+librespeed_port: 80
