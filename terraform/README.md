@@ -1,8 +1,8 @@
 # Proxmox guest lifecycle
 
 Terraform owns guest provisioning and hardware. Ansible owns host configuration
-and guest software. The local deployment now tracks 32 guests:
-30 LXCs and two VMs, including the Debian pilot. The disposable ISO test passed
+and guest software. The local deployment now tracks 34 guests:
+31 LXCs and three VMs, including the Debian pilot and two workflow validation guests. The disposable ISO test passed
 and its VM was subsequently removed through Terraform.
 Adoption imported 31 existing
 guests with zero creates, updates, or destroys. A post-import plan had no changes.
@@ -21,7 +21,8 @@ Their definitions live in ignored `platform.local.tf` and `pbs.local.tf`.
 The separate ISO library now adds ten installers on each node, for 20 new
 cached files. Disposable boot-test cleanup left 121 managed resources. The
 Gatus test guests were also removed through Terraform. Their installation
-identity, build record, and private ISO remain managed, for 124 resources.
+identity, build record, and private ISO increase the total to 124 resources. The current
+workflow validation pair adds three resources, for 127 managed resources.
 All destination SHA256 hashes
 matched the trusted NAS files, and the final Terraform plan had no changes.
 
@@ -162,6 +163,110 @@ with real credentials unless you can protect and remove the resulting logs.
 Before managing a persistent guest, verify remote state access, locking, and
 state recovery. Git is not a state backup. Do not run concurrent Terraform
 operations against local state.
+
+## Create a guest and install its application
+
+Run one command from `terraform/proxmox/` after preparing a private profile:
+
+```sh
+python3 scripts/deploy_guest.py status-lxc.profile.json
+```
+
+Copy `guest-lxc.profile.json.example` or `guest-vm.profile.json.example` to a
+local `*.profile.json` file. These local profiles are ignored by Git. Set the
+name, node, unused static IP and gateway, VLAN, DNS, and existing template or
+pinned source ISO. The examples contain documentation addresses only.
+The workflow reads credentials from the protected local `.env`, uses `TF_BIN`
+or Terraform on `PATH`, and uses the configured SSH agent with public-key
+selectors. No secret is passed as a command argument.
+
+The first supported application is **Gatus**, using the existing pinned role.
+LXCs use Debian templates. VMs support Debian or Ubuntu installation ISOs and
+always use UEFI with Secure Boot. Unsupported apps and Fedora profiles fail
+before provisioning because the current guest application role requires a
+Debian-family guest. Other applications need a guest-targeted Ansible entry
+point before they can join the allowlist. Legacy node-targeted roles are not
+called by this workflow.
+
+The command performs these steps without interactive Terraform approval:
+
+1. Validate the profile and select the first unused VMID, unless one is supplied.
+2. Review a saved plan that allows only the new guest and its installation resources.
+3. Grant the existing Terraform role on that unused VMID and apply the saved plan.
+4. Wait for SSH, verify the guest hostname, and configure the app through Ansible.
+5. Require a converged Terraform plan and verify application health through the role.
+
+VMID allocation checks live guests, retained installer inputs, and the ignored
+Minecraft deployment. Retained installer inputs also reserve their original
+VMIDs and IPs in the existing installer schema.
+IP checks reject addresses already present in Terraform state or accepting SSH.
+Use an allocated static IP outside DHCP. These checks cannot prove that every
+unmanaged or powered-off network device has released an address.
+The scoped `TerraformGuest` role must already exist. Trusted root SSH to the
+Proxmox endpoint grants that existing role only on the new `/vms/<id>` path,
+for the configured API user and token. It does not change existing guest,
+cluster, network, or storage permissions.
+
+New LXCs default to two cores, 2 GiB RAM, and an 8 GiB disk. VMs default to two
+cores, 2 GiB RAM, and a 24 GiB disk. Both default to host auto-start enabled.
+VM system disks default to backup enabled. Disposable validation profiles
+explicitly disable both. LXCs follow the existing backup
+selection. Profiles can set `cores`, `memory_mb`, `disk_gb`, `on_boot`, and VM
+`backup`. LXCs remain unprivileged, without host or NFS mounts.
+
+Provider 0.118.0 requires a narrow nesting bootstrap for Debian LXCs. The first
+saved plan creates only the new, stopped container. A Terraform creation
+provisioner verifies its VMID, hostname, privilege mode, and stopped state,
+then sets only `nesting=1` through trusted root SSH. The canonical definition
+then declares nesting, and a second guarded plan may only start that container.
+Before controller SSH, a gateway probe from the new LXC refreshes stale ARP
+entries when an address is reused. Application Ansible never writes guest
+lifecycle or hardware settings.
+
+Use `--plan-only` to validate the creation plan without changing infrastructure
+or running Ansible. Temporary deployment edits are restored afterward. The LXC
+preview covers its initial stopped creation and nesting provisioner. It does
+not apply the subsequent power-only plan. A global lock serializes Terraform
+work, while a per-guest lock prevents concurrent configuration of one guest.
+
+Repeat the same command to resume an application failure or rerun configuration.
+Completed guests retain deletion guards. The workflow refuses guest hardware
+updates, replacements, deletions, missing managed guests, and existing guests
+without its own deployment record. An installation failure preserves the
+configuration and state for review. It never automatically destroys a guest.
+A reviewed new VM creation can reuse an unchanged retained installation entry.
+The previous SSH verification record is archived. The installer verifies the
+installation UUID and OS before accepting the new guest host key.
+
+Generated definitions, private profiles, one-host inventories, host keys,
+plans, state snapshots, logs, and the success record remain under ignored
+local files and `artifacts/deploy/<name>/`. Keep these files protected and
+backed up. The VM input map preserves all other installation entries.
+Optional `app_vars_file` names a protected JSON file containing only `gatus_*`
+settings, excluding `gatus_guest_ssh`. This supports application configuration
+without exposing secret values in process arguments. Paths are resolved from
+the command's working directory.
+
+Live validation on 2026-10-26 created `workflow-lxc-test` (LXC 132) and
+recreated the removed `gatus-vm-test` (VM 133) using its unchanged retained ISO.
+Both installed Gatus, passed dashboard and local-monitoring health checks,
+and passed repeat workflow and Ansible dry-runs with zero changes. The VM
+verified UEFI, Secure Boot, enrolled keys, kernel lockdown, and system health.
+The 32 baseline guests and all 56 media files remain unchanged.
+
+Both validation guests remain running with deletion guards enabled. Their
+cleanup awaits explicit approval after automatic approval review rejected the
+deletions. A reviewed saved plan deletes only these two guests and their
+readiness record. It changes no existing media or baseline guest. Evidence and
+the pending plan remain under `artifacts/workflow-validation-2026-10-26/`.
+The installed Terraform binary is cached under ignored `terraform/.tools/`,
+and the local `.env` selects it through `TF_BIN`.
+
+Validation:
+
+```sh
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+```
 
 ## Gatus application test pair
 

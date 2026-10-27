@@ -1,0 +1,12 @@
+{
+  "name": "status-vm",
+  "kind": "vm",
+  "app": "gatus",
+  "node_name": "example-node",
+  "iso_filename": "debian-example-amd64-netinst.iso",
+  "vlan_id": 40,
+  "ipv4_address": "192.0.2.11/24",
+  "gateway": "192.0.2.1",
+  "dns_servers": ["192.0.2.1"],
+  "ssh_public_key_file": "~/.ssh/lxc.pub"
+}

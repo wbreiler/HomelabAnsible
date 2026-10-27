@@ -1,8 +1,10 @@
 **/.terraform/
+**/.tools/
 **/*.tfstate
 **/*.tfstate.*
 **/*.tfvars
 **/*.tfvars.json
+**/*.profile.json
 **/*.tfplan
 **/crash.log
 **/crash.*.log
