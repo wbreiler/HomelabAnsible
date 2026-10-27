@@ -13,6 +13,8 @@
           - lancache_dashboard_address is defined
           - lancache_dashboard_address != lancache_bind_address
           - lancache_network_name | length > 0
+          - lancache_prefill_network_name | length > 0
+          - lancache_prefill_address is defined
           - lancache_root.startswith('/mnt/')
     - name: Create the dashboard data directory
       ansible.builtin.file:
@@ -58,11 +60,16 @@
               dashboard:
                 image: ghcr.io/regix1/lancache-manager@sha256:ac2311652b2a643c256373ccf93de25d0bf1c3df7c91b04676ec5519dfa598fa
                 restart: unless-stopped
+                dns:
+                  - "{{ lancache_bind_address }}"
                 env_file:
                   - "{{ lancache_dashboard_root }}/database.env"
                 environment:
                   PUID: '568'
                   PGID: '568'
+                  Prefill__NetworkMode: "{{ lancache_prefill_network_name }}"
+                  Prefill__LancacheIp: "{{ lancache_prefill_address }}"
+                  Prefill__LancacheDnsIp: "{{ lancache_prefill_address }}"
                   TZ: "{{ lancache_timezone | default('Etc/UTC') }}"
                   LanCache__LogPath: /logs/access.log
                   LanCache__CachePath: /cache/cache
@@ -78,6 +85,8 @@
                 networks:
                   cache:
                     ipv4_address: "{{ lancache_dashboard_address }}"
+                    gw_priority: 1
+                  prefill: {}
                 logging:
                   driver: json-file
                   options:
@@ -87,3 +96,6 @@
               cache:
                 external: true
                 name: "{{ lancache_network_name }}"
+              prefill:
+                external: true
+                name: "{{ lancache_prefill_network_name }}"

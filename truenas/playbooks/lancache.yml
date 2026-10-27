@@ -11,6 +11,9 @@
           - lancache_bind_address is defined
           - lancache_network_name is defined
           - lancache_network_name | length > 0
+          - lancache_prefill_network_name | length > 0
+          - lancache_prefill_subnet is defined
+          - lancache_prefill_address is defined
           - lancache_root is defined
           - lancache_upstream_dns is defined
           - lancache_upstream_dns != lancache_bind_address
@@ -75,6 +78,9 @@
                 networks:
                   cache:
                     ipv4_address: "{{ lancache_bind_address }}"
+                    gw_priority: 1
+                  prefill:
+                    ipv4_address: "{{ lancache_prefill_address }}"
                 volumes:
                   - "{{ lancache_root }}/cache:/data/cache"
                   - "{{ lancache_root }}/logs:/data/logs"
@@ -87,3 +93,9 @@
               cache:
                 external: true
                 name: "{{ lancache_network_name }}"
+              prefill:
+                name: "{{ lancache_prefill_network_name }}"
+                driver: bridge
+                ipam:
+                  config:
+                    - subnet: "{{ lancache_prefill_subnet }}"

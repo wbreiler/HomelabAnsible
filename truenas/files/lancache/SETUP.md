@@ -9,6 +9,9 @@ Add these settings to the ignored host `desired_state.yml`, with local values:
 ```yaml
 lancache_bind_address: 192.0.2.11
 lancache_network_name: existing-storage-macvlan
+lancache_prefill_network_name: lancache-workers
+lancache_prefill_subnet: 172.30.0.0/24
+lancache_prefill_address: 172.30.0.2
 lancache_root: /mnt/tank/appdata/lancache
 lancache_upstream_dns: 1.1.1.1
 lancache_disk_size: 1000g
@@ -31,7 +34,12 @@ DNS shares the monolithic container's network namespace. Both services use
 one dedicated address for TCP/UDP 53, TCP 80, and TCP 443. The existing cache
 and logs remain in place. Updating the app briefly interrupts its services.
 
-The network remains owned by its original application. Preserve that network
+LANCache also owns a private Docker bridge for manager-created workers. Select
+an unused Docker subnet and a static cache address within it. The external
+macvlan retains gateway priority so existing client traffic keeps its route.
+This does not create a host interface, VLAN, or router route.
+
+The macvlan network remains owned by its original application. Preserve that network
 when you change or remove its owner. Docker does not permit a second network
 with an overlapping subnet.
 
@@ -210,9 +218,18 @@ settings live under `lancache_root/dashboard`.
 
 The image adds its app account to the socket's group at startup. No host socket
 permission change is needed. Log reopening targets `ix-lancache-monolithic-1`.
-Manager-created prefill workers require compatible network settings before use.
+Deploy `playbooks/lancache.yml` before the dashboard so the private worker
+network exists. The manager joins both networks and resolves DNS through the
+external LANCache address. Manager-created workers join the private bridge
+and use `lancache_prefill_address` for DNS and direct cache routing. This avoids
+Docker's host-to-macvlan isolation without changing appliance networking.
 The existing dedicated worker addresses apply only to the standalone Compose
-workers documented above.
+workers documented above. Recreate manager prefill sessions after a worker
+network change. Existing sessions retain their original Docker network.
+
+Manager diagnostics can show the private bridge address as the cache server.
+Gaming PCs still use `lancache_bind_address`. Verify cached domain lookups and
+HTTP cache hits from an actual worker, not only from the manager.
 
 The app runs as UID/GID 568, which the existing TrueNAS NFSv4 ACLs allow
 to access the cache and log files. No cache ACL or ownership changes are required.

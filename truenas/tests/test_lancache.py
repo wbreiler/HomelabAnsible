@@ -1,4 +1,4 @@
-"""Check that LANCache shares one address without host port bindings."""
+"""Check LANCache DNS, client access, and private worker networking."""
 import json
 from pathlib import Path
 import unittest
@@ -8,7 +8,7 @@ import yaml
 
 
 class LANCacheTests(unittest.TestCase):
-    def test_services_share_only_the_dedicated_address(self):
+    def test_dns_and_cache_share_networks_without_host_ports(self):
         playbook = yaml.safe_load(
             (Path(__file__).resolve().parents[1] / 'playbooks/lancache.yml').read_text()
         )
@@ -18,6 +18,9 @@ class LANCacheTests(unittest.TestCase):
         ).render(
             lancache_bind_address='192.0.2.11',
             lancache_network_name='storage-macvlan',
+            lancache_prefill_network_name='lancache-workers',
+            lancache_prefill_subnet='172.30.0.0/24',
+            lancache_prefill_address='172.30.0.2',
             lancache_root='/mnt/tank/appdata/lancache',
             lancache_upstream_dns='1.1.1.1',
         )
@@ -32,6 +35,10 @@ class LANCacheTests(unittest.TestCase):
             self.assertNotIn('ports', service)
         self.assertEqual(compose['networks']['cache'],
                          {'external': True, 'name': 'storage-macvlan'})
+        self.assertEqual(cache['networks']['prefill']['ipv4_address'], '172.30.0.2')
+        self.assertEqual(cache['networks']['cache']['gw_priority'], 1)
+        self.assertEqual(compose['networks']['prefill']['name'], 'lancache-workers')
+        self.assertEqual(compose['networks']['prefill']['driver'], 'bridge')
         self.assertEqual(cache['volumes'], [
             '/mnt/tank/appdata/lancache/cache:/data/cache',
             '/mnt/tank/appdata/lancache/logs:/data/logs',
