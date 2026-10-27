@@ -62,6 +62,34 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(json.loads(run.call_args.kwargs['input']),{'vm_id':132,'identity':'terraform@pve!pilot'})
         self.assertIn('TerraformGuest',run.call_args.args[0][-1])
 
+    def test_application_variables_are_scoped_to_the_selected_app(self):
+        with tempfile.TemporaryDirectory() as d:
+            variables=Path(d)/'vars.json'
+            p=dict(example(),app='apt_cacher_ng',app_vars_file=str(variables))
+            variables.write_text(json.dumps({'apt_cacher_ng_port':3143}))
+            self.assertEqual(deploy.validate(p)['app'],'apt_cacher_ng')
+            for bad in [{'gatus_port':8081},{'apt_cacher_ng_guest_ssh':False},{'ansible_host':'192.0.2.20'}]:
+                variables.write_text(json.dumps(bad))
+                with self.subTest(bad=bad),self.assertRaises(ValueError): deploy.validate(p)
+            variables.write_text(json.dumps({'apt_cacher_ng_port':3143}))
+            with self.assertRaises(ValueError): deploy.validate(dict(p,app='gatus'))
+
+    def test_cache_inventory_contains_only_the_selected_app_group(self):
+        p=dict(example('vm'),app='apt_cacher_ng',vm_id=132)
+        with tempfile.TemporaryDirectory() as d:
+            groups=deploy.inventory(p,Path(d))['all']['children']
+        self.assertEqual(set(groups),{'apt_cacher_ng_guests'})
+        host=next(iter(groups['apt_cacher_ng_guests']['hosts'].values()))
+        self.assertEqual(host['ansible_user'],'ansible')
+        self.assertFalse(any(k.startswith('gatus_') for k in host))
+        self.assertEqual(host['terraform_guest_name'],'workflow-test')
+
+    def test_cache_workflow_routes_to_the_existing_application_role(self):
+        root,p,d,calls,execute=self.harness(app='apt_cacher_ng')
+        execute()
+        self.assertEqual(calls[-1][-1],'apt-cacher-ng-guests.yml')
+        self.assertEqual(json.loads((d/'complete.json').read_text())['app'],'apt_cacher_ng')
+
     def test_profile_boundaries(self):
         p=example()
         for key,value in [('name','x;id'),('name','../test'),('kind','qemu'),('app','unknown'),('os','fedora'),
@@ -127,10 +155,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertLess(len(host['ansible_control_path'].replace('%%C','a'*40)),104)
         self.assertEqual(host['gatus_discord_webhook_url'],'')
 
-    def harness(self,kind='lxc',plan_only=False,owned=False,plans=None,ansible_fails=False):
+    def harness(self,kind='lxc',plan_only=False,owned=False,plans=None,ansible_fails=False,app='gatus'):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         root=Path(temporary.name)/'repo/terraform/proxmox';root.mkdir(parents=True)
-        p=dict(example(kind),vm_id=132)
+        p=dict(example(kind),vm_id=132,app=app)
         profile=root/'profile.json';profile.write_text(json.dumps(p))
         directory=root/'artifacts/deploy'/p['name'];directory.mkdir(parents=True)
         own=deploy.address(p)

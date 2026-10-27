@@ -181,7 +181,20 @@ The workflow reads credentials from the protected local `.env`, uses `TF_BIN`
 or Terraform on `PATH`, and uses the configured SSH agent with public-key
 selectors. No secret is passed as a command argument.
 
-The first supported application is **Gatus**, using the existing pinned role.
+Supported applications use their existing Ansible roles:
+
+| Profile `app` | Application | Guest entry point |
+|---|---|---|
+| `gatus` (default) | Gatus, with pinned source and Go toolchain | `proxmox/gatus-guests.yml` |
+| `apt_cacher_ng` | Apt-Cacher NG, from signed OS repositories | `proxmox/apt-cacher-ng-guests.yml` |
+| `librespeed` | LibreSpeed LAN bandwidth test | `proxmox/librespeed-guests.yml` |
+
+Use `guest-apt-cache.profile.json.example` for a cache LXC. For a cache VM,
+use the VM example and set `app` to `apt_cacher_ng`. The command stays the same.
+The cache role configures only that guest and its local APT proxy. It does not
+change other clients or install Avahi for cache advertisement. Its health
+check verifies the local cache report page.
+
 LXCs use Debian templates. VMs support Debian or Ubuntu installation ISOs and
 always use UEFI with Secure Boot. Unsupported apps and Fedora profiles fail
 before provisioning because the current guest application role requires a
@@ -243,8 +256,10 @@ Generated definitions, private profiles, one-host inventories, host keys,
 plans, state snapshots, logs, and the success record remain under ignored
 local files and `artifacts/deploy/<name>/`. Keep these files protected and
 backed up. The VM input map preserves all other installation entries.
-Optional `app_vars_file` names a protected JSON file containing only `gatus_*`
-settings, excluding `gatus_guest_ssh`. This supports application configuration
+Optional `app_vars_file` names a protected JSON file containing only settings
+for the selected app, such as `gatus_*`, `apt_cacher_ng_*`, or `librespeed_*`.
+The workflow rejects `<app>_guest_ssh` overrides and settings belonging to
+another app. This supports application configuration
 without exposing secret values in process arguments. Paths are resolved from
 the command's working directory.
 
@@ -264,6 +279,20 @@ Evidence and the applied plan remain under
 `artifacts/workflow-validation-2026-10-26/`.
 The installed Terraform binary is cached under ignored `terraform/.tools/`,
 and the local `.env` selects it through `TF_BIN`.
+
+On 2026-10-27, the `apt_cacher_ng` profile installed the existing package-cache
+role on disposable LXC 132 and UEFI/Secure Boot VM 133. The VM reused the
+retained Debian media unchanged. The LXC passed signed metadata updates,
+repeated proxy requests, and matching on-disk cache checks. Both installations
+passed their built-in HTTP health checks. Further validation stopped at the
+user's request.
+
+The user then requested cleanup of these test guests and LibreSpeed LXC 134.
+A reviewed Terraform plan removed only those three guests, their disks, and
+the VM readiness record. Existing guests and ISOs were preserved. The state
+again contains 124 managed resources. Reusable workflows, Ansible roles,
+profiles, and archived guest definitions remain available. Cleanup records
+are under `artifacts/apt-cache-validation-2026-10-27/`.
 
 Validation:
 

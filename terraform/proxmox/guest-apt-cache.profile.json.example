@@ -1,0 +1,14 @@
+{
+  "name": "package-cache",
+  "kind": "lxc",
+  "app": "apt_cacher_ng",
+  "node_name": "example-node",
+  "template_file_id": "local:vztmpl/debian-13-standard_example_amd64.tar.zst",
+  "vlan_id": 40,
+  "ipv4_address": "192.0.2.10/24",
+  "gateway": "192.0.2.1",
+  "dns_servers": [
+    "192.0.2.1"
+  ],
+  "ssh_public_key_file": "~/.ssh/lxc.pub"
+}

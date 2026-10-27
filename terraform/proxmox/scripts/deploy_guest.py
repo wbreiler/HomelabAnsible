@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Provision one new guest with Terraform, then configure Gatus through Ansible."""
+"""Provision one new guest with Terraform, then configure its application through Ansible."""
 
 import argparse
 import fcntl
@@ -18,8 +18,11 @@ import urllib.parse
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-APPS = {"gatus": ("gatus-guests.yml", "gatus_guests"),
-        "librespeed": ("librespeed-guests.yml", "librespeed_guests")}
+APPS = {
+    "gatus": ("gatus-guests.yml", "gatus_guests"),
+    "librespeed": ("librespeed-guests.yml", "librespeed_guests"),
+    "apt_cacher_ng": ("apt-cacher-ng-guests.yml", "apt_cacher_ng_guests"),
+}
 
 
 def write_json(path, value):
@@ -47,7 +50,7 @@ def validate(profile):
     if p.get("kind") not in {"lxc", "vm"} or p["app"] not in APPS:
         raise ValueError("Supported guest kinds: lxc/vm. Supported applications: " + ", ".join(APPS))
     if p["os"] not in {"debian", "ubuntu"} or p["kind"] == "lxc" and p["os"] != "debian":
-        raise ValueError("Gatus supports Debian LXCs and Debian/Ubuntu installation VMs")
+        raise ValueError("Guest applications support Debian LXCs and Debian/Ubuntu installation VMs")
     for field in ["node_name", "datastore_id", "bridge"]:
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,62}", p.get(field, "")):
             raise ValueError("Invalid " + field)
@@ -83,8 +86,8 @@ def validate(profile):
     if p.get("app_vars_file"):
         p["app_vars_file"] = str(Path(p["app_vars_file"]).expanduser().resolve())
         variables = json.loads(Path(p["app_vars_file"]).read_text())
-        if not isinstance(variables, dict) or any(not k.startswith("gatus_") or k == "gatus_guest_ssh" for k in variables):
-            raise ValueError("Application variables must be a JSON object containing only Gatus settings")
+        if not isinstance(variables, dict) or any(not k.startswith(p["app"] + "_") or k == p["app"] + "_guest_ssh" for k in variables):
+            raise ValueError("Application variables must be a JSON object containing only settings for the selected application")
     return p
 
 
@@ -285,8 +288,9 @@ def inventory(p, directory):
         "ansible_ssh_private_key_file": p["ssh_public_key_file"], "ansible_python_interpreter": "/usr/bin/python3",
         "ansible_control_path": str(socket_directory(directory) / "%%C"),
         "ansible_ssh_common_args": "-o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=" + shlex.quote(str(directory / "known_hosts")),
-        "gatus_discord_webhook_url": "", "gatus_extra_endpoints": [{"name": "Local Gatus", "url": "http://127.0.0.1:{{ gatus_port }}/health"}],
     }
+    if p["app"] == "gatus":
+        variables.update(gatus_discord_webhook_url="", gatus_extra_endpoints=[{"name": "Local Gatus", "url": "http://127.0.0.1:{{ gatus_port }}/health"}])
     return {"all": {"children": {APPS[p["app"]][1]: {"hosts": {p["name"].replace("-", "_"): variables}}}}}
 
 
@@ -415,7 +419,7 @@ def deploy(args):
             command = ["ansible-playbook", "-i", str(directory / "inventory.yml"), APPS[p["app"]][0]]
             if p.get("app_vars_file"):
                 command += ["--extra-vars", "@" + p["app_vars_file"]]
-            print("Terraform is converged. Waiting for SSH and configuring Gatus with Ansible.", flush=True)
+            print(f"Terraform is converged. Waiting for SSH and configuring {p['app']} with Ansible.", flush=True)
             run(command, "ansible", ROOT.parents[1] / "proxmox")
             write_json(directory / "complete.json", {"name": p["name"], "kind": p["kind"], "vm_id": p["vm_id"], "app": p["app"], "status": "configured"})
             print(f"Complete: {p['name']} ({p['vm_id']}). Evidence: {directory}")
