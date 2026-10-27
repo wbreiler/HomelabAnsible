@@ -1,5 +1,5 @@
 ---
-- name: Deploy the LANCache monitoring dashboard
+- name: Deploy the LANCache management dashboard
   hosts: truenas
   gather_facts: false
   tags: [apps]
@@ -31,7 +31,7 @@
         group: '568'
         mode: '0600'
       no_log: true
-    - name: Supply the existing cache capacity without Docker access
+    - name: Supply the existing cache capacity
       ansible.builtin.copy:
         content: "CACHE_DISK_SIZE={{ lancache_disk_size | default('1000g') }}\n"
         dest: "{{ lancache_dashboard_root }}/lancache.env"
@@ -67,12 +67,14 @@
                   LanCache__LogPath: /logs/access.log
                   LanCache__CachePath: /cache/cache
                   LanCache__EnvFilePath: /settings/lancache.env
-                  NginxLogRotation__Enabled: 'false'
+                  NginxLogRotation__Enabled: 'true'
+                  NginxLogRotation__ContainerName: ix-lancache-monolithic-1
                 volumes:
                   - "{{ lancache_dashboard_root }}:/data"
-                  - "{{ lancache_root }}/logs:/logs:ro"
-                  - "{{ lancache_root }}/cache:/cache:ro"
+                  - "{{ lancache_root }}/logs:/logs:rw"
+                  - "{{ lancache_root }}/cache:/cache:rw"
                   - "{{ lancache_dashboard_root }}/lancache.env:/settings/lancache.env:ro"
+                  - /var/run/docker.sock:/var/run/docker.sock:rw
                 networks:
                   cache:
                     ipv4_address: "{{ lancache_dashboard_address }}"

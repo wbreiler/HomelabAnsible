@@ -1,4 +1,4 @@
-"""Check that dashboard monitoring cannot modify the cache or control Docker."""
+"""Check manager mounts and log rotation configuration."""
 import json
 from pathlib import Path
 import unittest
@@ -8,7 +8,7 @@ import yaml
 
 
 class DashboardTests(unittest.TestCase):
-    def test_monitoring_boundaries(self):
+    def test_management_mounts(self):
         play = yaml.safe_load((Path(__file__).resolve().parents[1] /
                                'playbooks/lancache-dashboard.yml').read_text())[0]
         compose = play['tasks'][-1]['vars']['desired_app']['custom_compose_config']
@@ -23,12 +23,14 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn('ports', app)
         self.assertNotIn('privileged', app)
         self.assertNotIn('network_mode', app)
-        self.assertFalse(any('docker.sock' in mount for mount in app['volumes']))
         mounts = {mount.split(':')[1]: mount for mount in app['volumes']}
-        for target in ['/cache', '/logs', '/settings/lancache.env']:
-            self.assertTrue(mounts[target].endswith(':ro'))
+        for target in ['/cache', '/logs', '/var/run/docker.sock']:
+            self.assertTrue(mounts[target].endswith(':rw'))
+        self.assertTrue(mounts['/settings/lancache.env'].endswith(':ro'))
         self.assertEqual(app['environment']['LanCache__CachePath'], '/cache/cache')
-        self.assertEqual(app['environment']['NginxLogRotation__Enabled'], 'false')
+        self.assertEqual(app['environment']['NginxLogRotation__Enabled'], 'true')
+        self.assertEqual(app['environment']['NginxLogRotation__ContainerName'],
+                         'ix-lancache-monolithic-1')
         self.assertEqual(app['networks']['cache']['ipv4_address'], '192.0.2.14')
         self.assertTrue(compose['networks']['cache']['external'])
 

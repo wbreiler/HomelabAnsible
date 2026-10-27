@@ -195,21 +195,29 @@ summary and LANCache access logs before treating a game as fully cached.
 References: [SteamPrefill](https://github.com/tpill90/steam-lancache-prefill) and
 [EpicPrefill](https://github.com/tpill90/epic-lancache-prefill).
 
-## Monitoring dashboard
+## Management dashboard
 
 `playbooks/lancache-dashboard.yml` deploys LANCache Manager as a separate
 TrueNAS custom app. Set `lancache_dashboard_address` in the ignored desired
 state to an unused address on `lancache_network_name`. It must differ from the
 cache, worker, and ISO server addresses.
 
-The dashboard reads `/logs` and `/cache` through read-only mounts. It has no
-Docker socket and cannot start prefill workers or change the cache files.
-Existing tmux prefill sessions continue to work separately. Its own database
-and settings live under `lancache_root/dashboard`.
+The manager mounts `/logs` and `/cache` with write access and mounts the
+Docker socket. It can remove cached content, manage logs, and control Docker.
+Treat manager access as privileged host access. Keep administrator credentials
+private. Existing tmux prefill sessions remain separate. Its own database and
+settings live under `lancache_root/dashboard`.
+
+The image adds its app account to the socket's group at startup. No host socket
+permission change is needed. Log reopening targets `ix-lancache-monolithic-1`.
+Manager-created prefill workers require compatible network settings before use.
+The existing dedicated worker addresses apply only to the standalone Compose
+workers documented above.
 
 The app runs as UID/GID 568, which the existing TrueNAS NFSv4 ACLs allow
-to read the cache and log files. No cache ACL or ownership changes are required. Its database uses a separate
-PostgreSQL account. The new data directory allows traversal for that account.
+to access the cache and log files. No cache ACL or ownership changes are required.
+Its database uses a separate PostgreSQL account. The new data directory allows
+traversal for that account.
 The generated database password remains in a local ignored artifact and a
 mode-0600 environment file. Never commit either file or the dashboard data.
 
