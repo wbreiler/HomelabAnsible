@@ -9,6 +9,8 @@
         that:
           - ansible_check_mode or truenas_allow_changes | bool
           - lancache_bind_address is defined
+          - lancache_network_name is defined
+          - lancache_network_name | length > 0
           - lancache_root is defined
           - lancache_upstream_dns is defined
           - lancache_upstream_dns != lancache_bind_address
@@ -20,15 +22,15 @@
       check_mode: false
       register: lancache_query
       changed_when: false
-    - name: Verify TCP ports are unused before first deployment
-      ansible.builtin.wait_for:
-        host: "{{ lancache_bind_address }}"
-        port: "{{ item }}"
-        state: stopped
-        timeout: 3
-      loop: [53, 80, 443]
+    - name: Inspect the existing application network
+      ansible.builtin.raw: "docker network inspect {{ lancache_network_name | quote }}"
       check_mode: false
-      when: lancache_query.stdout | from_json | length == 0
+      register: lancache_network
+      changed_when: false
+    - name: Require an existing macvlan network
+      ansible.builtin.assert:
+        that:
+          - (lancache_network.stdout | from_json | first).Driver == 'macvlan'
     - name: Create dedicated LANCache directories
       ansible.builtin.file:
         path: "{{ lancache_root }}/{{ item }}"
@@ -53,9 +55,8 @@
                   LANCACHE_IP: "{{ lancache_bind_address }}"
                   UPSTREAM_DNS: "{{ lancache_upstream_dns }}"
                   TZ: "{{ lancache_timezone | default('Etc/UTC') }}"
-                ports:
-                  - "{{ lancache_bind_address }}:53:53/udp"
-                  - "{{ lancache_bind_address }}:53:53/tcp"
+                network_mode: service:monolithic
+                depends_on: [monolithic]
                 logging:
                   driver: json-file
                   options:
@@ -71,9 +72,9 @@
                   MIN_FREE_DISK: 100g
                   CACHE_MAX_AGE: 3650d
                   TZ: "{{ lancache_timezone | default('Etc/UTC') }}"
-                ports:
-                  - "{{ lancache_bind_address }}:80:80/tcp"
-                  - "{{ lancache_bind_address }}:443:443/tcp"
+                networks:
+                  cache:
+                    ipv4_address: "{{ lancache_bind_address }}"
                 volumes:
                   - "{{ lancache_root }}/cache:/data/cache"
                   - "{{ lancache_root }}/logs:/data/logs"
@@ -82,3 +83,7 @@
                   options:
                     max-size: 10m
                     max-file: '3'
+            networks:
+              cache:
+                external: true
+                name: "{{ lancache_network_name }}"

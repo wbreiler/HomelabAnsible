@@ -7,7 +7,8 @@ caching and HTTPS passthrough. HTTPS content is not cached.
 Add these settings to the ignored host `desired_state.yml`, with local values:
 
 ```yaml
-lancache_bind_address: 192.0.2.10
+lancache_bind_address: 192.0.2.11
+lancache_network_name: existing-storage-macvlan
 lancache_root: /mnt/tank/appdata/lancache
 lancache_upstream_dns: 1.1.1.1
 lancache_disk_size: 1000g
@@ -21,10 +22,22 @@ The cache starts eviction below 100 GiB of filesystem free space.
 
 ## Deploy
 
-Run from `truenas/`. Inspect both TCP and UDP listeners before deployment,
-including wildcard listeners and Docker port mappings. Ports 80 and 443 need
-TCP; port 53 needs TCP and UDP. The playbook also checks TCP ports on first
-deployment. Preserve the existing TrueNAS UI bindings.
+Run from `truenas/`. Select an unused static address within an existing
+Docker macvlan subnet. Exclude that address from DHCP, if applicable.
+The playbook requires an existing macvlan network and does not change host
+interfaces, routes, or switch settings. It publishes no host ports.
+
+DNS shares the monolithic container's network namespace. Both services use
+one dedicated address for TCP/UDP 53, TCP 80, and TCP 443. The existing cache
+and logs remain in place. Updating the app briefly interrupts its services.
+
+The network remains owned by its original application. Preserve that network
+when you change or remove its owner. Docker does not permit a second network
+with an overlapping subnet.
+
+Macvlan isolates containers from their host by default. Verify clients from
+another machine. Prefill workers on Erebus need a separate supported network
+path before use. See [Docker macvlan networking](https://docs.docker.com/engine/network/drivers/macvlan/).
 
 Create a fresh protected configuration backup using `playbooks/backup.yml`,
 with unique local and remote paths supplied as extra variables. Then run:
@@ -43,7 +56,7 @@ Set `CACHE_IP` to the configured bind address. These checks do not change
 the client's DNS settings:
 
 ```sh
-CACHE_IP=192.0.2.10
+CACHE_IP=192.0.2.11
 dig @"$CACHE_IP" lancache.steamcontent.com A +short
 dig +tcp @"$CACHE_IP" lancache.steamcontent.com A +short
 dig @"$CACHE_IP" example.com A +short
@@ -102,7 +115,7 @@ Copy that file as `compose.yml` into a private directory such as
 a mode-`0600` `.env` with the local cache address:
 
 ```dotenv
-LANCACHE_IP=192.0.2.10
+LANCACHE_IP=192.0.2.11
 ```
 
 Each worker reads `selectedAppsToPrefill.json` from its private Docker volume. The
