@@ -1,8 +1,8 @@
 # Proxmox guest lifecycle
 
 Terraform owns guest provisioning and hardware. Ansible owns host configuration
-and guest software. The local deployment now tracks 34 guests:
-31 LXCs and three VMs, including the Debian pilot and the Gatus test pair. The disposable ISO test passed
+and guest software. The local deployment now tracks 32 guests:
+30 LXCs and two VMs, including the Debian pilot. The disposable ISO test passed
 and its VM was subsequently removed through Terraform.
 Adoption imported 31 existing
 guests with zero creates, updates, or destroys. A post-import plan had no changes.
@@ -20,7 +20,8 @@ were imported without creating, changing, deleting, or downloading anything.
 Their definitions live in ignored `platform.local.tf` and `pbs.local.tf`.
 The separate ISO library now adds ten installers on each node, for 20 new
 cached files. Disposable boot-test cleanup left 121 managed resources. The
-retained Gatus test pair adds six resources, for 127 managed resources.
+Gatus test guests were also removed through Terraform. Their installation
+identity, build record, and private ISO remain managed, for 124 resources.
 All destination SHA256 hashes
 matched the trusted NAS files, and the final Terraform plan had no changes.
 
@@ -164,24 +165,25 @@ operations against local state.
 
 ## Gatus application test pair
 
-The retained test pair contains one unprivileged Debian LXC and one Debian VM
-with UEFI and Secure Boot enabled. Terraform owns provisioning and hardware.
-The existing Gatus role configures both guests through `proxmox/gatus-guests.yml`
-over SSH. The inventory includes only these two guests and enables local and
-peer health checks without Discord notifications.
+The application test used one unprivileged Debian LXC and one Debian VM
+with UEFI and Secure Boot enabled. Both guests were removed through a reviewed
+Terraform plan after validation. All other guests and every ISO remain unchanged,
+including the private Debian installation image. Its Terraform identity, build
+record, and media resource remain managed and protected from deletion.
 
-Machine-specific definitions remain in ignored `app-tests.local.tf` and
+Reusable machine-specific definitions remain in ignored `app-tests.local.tf` and
 `iso-install.auto.tfvars.json`. The protected Ansible inventory is
 `artifacts/app-tests.inventory.yml`, with snapshots and evidence alongside it.
 Never commit these deployment files. The shared app role, playbook, and
-sanitized inventory example are tracked under `proxmox/`.
+sanitized inventory example remain tracked under `proxmox/`.
 
-These test guests remain running, with host auto-start disabled. The LXC follows
-the existing cluster backup selection. The VM system disk has backup disabled.
-Their Terraform deletion guards remain enabled. The LXC
-uses nesting for Debian 13 systemd mounts, with the existing narrow provider
-bootstrap workaround described below. Ansible does not manage this feature
-or perform the restart.
+The ignored `app-tests-cleanup_override.tf` disables the removed test guests and
+their readiness record while retaining their media. Deletion guards are enabled.
+Do not remove this override without reviewing live VMIDs, IP addresses, and a
+new creation plan. Refresh the private Ansible inventory before reusing it.
+The preserved LXC definition uses nesting for Debian 13 systemd mounts, with
+the narrow provider bootstrap workaround described below. Ansible does not
+manage this feature or perform guest restarts.
 
 Run Ansible from `proxmox/` with its project configuration:
 
@@ -194,8 +196,9 @@ Gatus 5.36.0 passed dashboard, local-health, and peer-health checks on both
 guests. A repeat Ansible run made zero changes. Both services survived a
 Terraform-managed restart, and the VM reverified Secure Boot and kernel
 lockdown afterward. The original 32 guests and 55 original cached media files
-remain unchanged. Protected validation results are in
-`artifacts/app-tests-validation-summary-2026-10-26.json`.
+remained unchanged during the installation test. Protected validation results
+are in `artifacts/app-tests-validation-summary-2026-10-26.json`. The cleanup
+audit is in `artifacts/app-tests-cleanup-summary-2026-10-26.json`.
 
 ## Disposable Debian pilot
 
