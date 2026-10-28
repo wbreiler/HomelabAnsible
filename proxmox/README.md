@@ -401,6 +401,10 @@ Application roles preserve these systemd drop-ins but do not deploy them.
 
 ### Centralized logging
 
+The role pins logging packages to exact versions and holds them with APT.
+Normal OS upgrades therefore skip Alloy. Update the version defaults for a
+controlled upgrade. The role permits that explicit upgrade and retains the hold.
+
 Grafana is available at `http://10.10.40.193:3000` over the LAN/Tailscale
 subnet route. The internal NPM name is `http://graf-nash`. No internal DNS
 exists, so clients need `10.10.40.86 graf-nash` in their hosts file to use

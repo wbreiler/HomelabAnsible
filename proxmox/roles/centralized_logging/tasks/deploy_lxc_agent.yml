@@ -34,7 +34,7 @@
             printf '#!/bin/sh\nexit 101\n' > "$policy"
             chmod 0755 "$policy"
             apt-get update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y -q "alloy={{ centralized_logging_alloy_version }}" acl
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -q --allow-change-held-packages "alloy={{ centralized_logging_alloy_version }}" acl
             apt-mark hold alloy
       changed_when: true
 
