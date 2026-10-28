@@ -11,11 +11,19 @@
     - name: Upgrade all packages on Proxmox host
       ansible.builtin.apt:
         upgrade: dist
-        autoremove: true
-        autoclean: true
       register: update_all_node_result
       async: "{{ update_apt_timeout | default(600) }}"
       poll: 30
+
+    - name: Remove unused packages and old kernels on Proxmox host
+      ansible.builtin.apt:
+        autoremove: true
+      async: "{{ update_apt_timeout | default(600) }}"
+      poll: 30
+
+    - name: Clean obsolete package downloads on Proxmox host
+      ansible.builtin.apt:
+        autoclean: true
 
     - name: Check if reboot is required
       ansible.builtin.stat:

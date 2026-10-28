@@ -606,6 +606,10 @@ download or source the upstream orchestration script.
 
 The `update_all` role updates Proxmox hosts and operating-system packages in running LXC containers (apt for Debian/Ubuntu, apk for Alpine). It never executes application-specific updater hooks; applications managed by dedicated roles upgrade only through pinned version bumps.
 
+After apt upgrades, it runs autoremove to remove unused packages and eligible
+old kernels, then autoclean to remove obsolete package downloads. APT and
+Proxmox kernel retention rules still apply.
+
 **Usage:**
 
 ```bash
