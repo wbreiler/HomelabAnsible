@@ -6,7 +6,7 @@ screen. PBS chunk verification and the native Intel Mineways build passed.
 
 ## Current working state
 
-VM 108 (`macos-tahoe`) runs on Atlas with 8 vCPUs and 32 GiB RAM.
+VM 108 (`macos-tahoe`) runs on Prometheus with 8 vCPUs and 32 GiB RAM.
 Connect with `ssh atlas-dev` as `pve` at `10.10.40.9`.
 The laptop SSH alias uses the existing Bitwarden agent key selected by
 `~/.ssh/lxc.pub`. Private keys remain in the configured agent. See the
@@ -14,6 +14,14 @@ migration exclusions below for credential handling.
 Automatic VM startup is enabled. Guest `sleep` and `disksleep` are both zero.
 The 512 GiB disk now has a 549546057728-byte APFS container. The first
 post-growth check reported about 485 GiB available.
+
+The October 28 Atlas maintenance moved VM 108 to Prometheus. Graceful shutdown
+timed out, so the user approved a forced stop. OpenCore and recovery media now
+use `helios:vm-108-disk-3` (`sata0`) and `helios:vm-108-disk-4` (`sata2`). Both
+copies matched the original ISO files byte for byte. The original files remain
+on Atlas. The macOS login screen passed visual verification after migration.
+QEMU reported unsupported CPU feature warnings on Prometheus. Application
+behavior and authenticated SSH remain unverified after this migration.
 
 Node 24.22.1, Python 3.13.17/uv, Git/Git LFS, GitHub CLI, Ansible,
 ansible-lint, CMake, Ninja, tmux, jq, and ripgrep are available.
