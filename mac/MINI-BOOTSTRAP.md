@@ -13,7 +13,7 @@ maps Erebus to `10.10.10.7`. No hosts-task exclusion is required.
 1. Complete Setup Assistant with an administrator account named `wbreiler`.
 2. Install available macOS updates.
 3. Reserve the Mini's Ethernet IP address in your router.
-4. Enable FileVault and store its recovery key in Bitwarden.
+4. Enable FileVault and store its recovery key in 1Password.
 5. Grant Terminal access under **System Settings > Privacy & Security > Full Disk Access**.
 
 Quit and reopen Terminal after granting access. Keep automatic login disabled.
@@ -83,16 +83,16 @@ Install collections, validate the source, and apply the role:
 cd "$HOME/Developer/HomelabAnsible/mac"
 make install
 make validate
-make run-dev
+make run-dev REMOTE_ACCESS=true
 ```
 
 Run these commands as the normal account. Enter the Mini's administrator
 password when Ansible requests it. Do not run Homebrew or the entire playbook
-under sudo. `make run-dev` includes the hosts task and the corrected Erebus entry.
+under sudo. `make run-dev REMOTE_ACCESS=true` includes the hosts task and the corrected Erebus entry.
 
 Require `failed=0` in the play recap. Review any ignored failures before
 continuing. If installation fails, resolve the reported cause and rerun
-`make run-dev` from the same directory.
+`make run-dev REMOTE_ACCESS=true` from the same directory.
 
 Open a fresh login shell after installation:
 
@@ -127,8 +127,8 @@ See Apple's [Screen Sharing instructions](https://support.apple.com/guide/mac-he
 
 ## 6. Complete manual sign-ins — on the Mini
 
-1. Open Bitwarden, sign in, and unlock the vault.
-2. Enable **Settings > Enable SSH agent** in Bitwarden.
+1. Open 1Password, sign in, and unlock the vault.
+2. Enable **Settings > Developer > Use the SSH agent** in 1Password.
 3. Open ChatGPT and sign into the intended account and workspace.
 4. Pair devices through **Settings > Connections > Control this Mac or PC**.
 5. Sign into the Codex CLI with the commands below.
@@ -142,8 +142,8 @@ Complete account verification and macOS permission prompts. The login agent
 opens the ChatGPT desktop host after graphical login. It does not create the
 session, authenticate accounts, or pair devices automatically.
 
-Use the Homebrew-installed Bitwarden desktop app. Its agent socket matches the
-managed configuration. Follow the [Bitwarden SSH agent instructions](https://bitwarden.com/help/ssh-agent/)
+Use the Homebrew-installed 1Password desktop app. Its agent socket matches the
+managed configuration. Follow the [1Password SSH agent instructions](https://developer.1password.com/docs/ssh/get-started/)
 for its authorization settings.
 
 Check the agent and GitHub authentication:
@@ -153,13 +153,13 @@ ssh-add -l
 ssh -T git@github.com
 ```
 
-Approve Bitwarden's key-use prompt. GitHub's success message states that you
+Approve 1Password's key-use prompt. GitHub's success message states that you
 authenticated but that GitHub provides no shell access. Exit status `1` is
 normal for that successful test.
 
 The role installs six public key selectors. Only the cluster key grants
 incoming SSH access by default. Existing authorized keys remain. The matching
-private keys must remain in Bitwarden or another approved credential agent.
+private keys must remain in 1Password or another approved credential agent.
 A forwarded agent is temporary and cannot support independent work after its
 connection ends. Unlock the local agent after login for outbound operations.
 
@@ -171,7 +171,7 @@ First, display the Mini's host-key fingerprint **on the Mini**:
 ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
-On the **controlling Mac**, unlock Bitwarden and enable its SSH agent. Add this
+On the **controlling Mac**, unlock 1Password and enable its SSH agent. Add this
 entry to `~/.ssh/config`. Replace `<reserved-mini-IP>` with the router reservation:
 
 ```sshconfig
@@ -189,7 +189,7 @@ ssh mac-mini-dev
 ```
 
 Compare the offered fingerprint with the Mini's fingerprint before accepting
-it. Approve any controller-side Bitwarden prompt. Exit the session afterward:
+it. Approve any controller-side 1Password prompt. Exit the session afterward:
 
 ```bash
 exit
@@ -235,7 +235,7 @@ for this first test.**
 2. Connect from the controlling Mac with `ssh mac-mini-dev`.
 3. Complete any FileVault authentication prompt.
 4. Connect through Screen Sharing and log into the desktop.
-5. Unlock Bitwarden and repeat the readiness checks below.
+5. Unlock 1Password and repeat the readiness checks below.
 
 Apple supports [SSH FileVault unlock](https://support.apple.com/guide/security/managing-filevault-sec8447f5049/web)
 after restart on Apple silicon with macOS 26 or later, when networking is
@@ -263,7 +263,7 @@ is unavailable.
 2. Start it with the power button.
 3. Test SSH and FileVault unlock from the controlling Mac.
 4. Use local unlock if remote unlock fails.
-5. Repeat desktop login, Bitwarden unlock, and the readiness checks.
+5. Repeat desktop login, 1Password unlock, and the readiness checks.
 
 Desktop Remote Control requires graphical login. SSH-based Codex access can
 work once macOS is unlocked without a graphical session on the Mini. It still

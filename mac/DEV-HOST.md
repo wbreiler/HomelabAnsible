@@ -25,7 +25,7 @@ They live under `~/.local/share/dev-tools`, with links under `~/.local/bin`.
 Update the version and checksum together. Python 3.13 is managed by uv.
 Ansible and ansible-lint use isolated uv tool environments. Existing system Git
 and the Command Line Tools provide the compiler. Homebrew manages tmux, jq,
-ripgrep, VS Code, and Zed. It may build Intel dependencies from source. A repeat run with wxWidgets
+ripgrep and Zed. It may build Intel dependencies from source. A repeat run with wxWidgets
 installed reported `changed=0`, with no failed or unreachable tasks.
 Editors install into the user's Applications directory. The remote package
 list also includes wxWidgets for native Mineways builds.
@@ -50,8 +50,8 @@ Host atlas-dev
 ```
 
 The controller's original SSH configuration was preserved before adding this
-alias. Its key remains in the configured Bitwarden SSH agent. On a replacement
-client, install the agent, restore access to the existing key through Bitwarden,
+alias. Its key remains in the configured 1Password SSH agent. On a replacement
+client, install the agent, restore access to the existing key through 1Password,
 and recreate this alias. Do not copy private keys from another machine.
 
 Zed's **File > Open Remote** accepts `ssh atlas-dev`. Open

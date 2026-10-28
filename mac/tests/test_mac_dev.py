@@ -1,6 +1,5 @@
 """Offline regression checks. Uses the Python environment that runs Ansible."""
 import os
-import json
 from pathlib import Path
 import plistlib
 import re
@@ -69,7 +68,7 @@ class MacDevTests(unittest.TestCase):
         play = load('dev-vm.yml')[0]
         self.assertEqual(play['hosts'], 'dev_host')
         self.assertEqual(play['roles'], ['mac_dev'])
-        self.assertTrue(play['vars']['mac_dev_vm'])
+        self.assertTrue(play['vars']['mac_dev_remote_access'])
         self.assertIn("ansible_connection | default('ssh') != 'local'",
                       play['pre_tasks'][0]['ansible.builtin.assert']['that'])
         self.assertIn("ansible_facts.architecture == 'arm64'",
@@ -82,11 +81,6 @@ class MacDevTests(unittest.TestCase):
                 home = '/Users/VM User'
                 agent = plistlib.loads(render('com.wbreiler.codex-desktop.plist', arch, home, app_dir).encode())
                 self.assertEqual(agent['ProgramArguments'][-1], app_dir + '/ChatGPT.app')
-                settings = json.loads(render('vscode_settings.json', arch, home, app_dir))
-                self.assertEqual(settings['python.defaultInterpreterPath'], prefix + '/bin/python3')
-                self.assertTrue(settings['vs-kubernetes']['vscode-kubernetes.helm-path-mac'].startswith(home + '/'))
-                self.assertIn('darwin-' + ('arm64' if arch == 'arm64' else 'amd64'),
-                              settings['vs-kubernetes']['vscode-kubernetes.helm-path-mac'])
                 for name in ['zprofile', 'zshrc', 'mac-dev-check.sh']:
                     source = render(name, arch, home, app_dir)
                     self.assertIn(prefix, source)
@@ -97,19 +91,22 @@ class MacDevTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual('alias compose="container-compose"' in render('zshrc', arch), arch == 'arm64')
 
-    def test_intel_skips_arm_containers_and_vm_skips_orbstack(self):
+    def test_supported_packages_and_local_access(self):
         defaults = load('roles/mac_dev/defaults/main.yml')
         self.assertNotIn('container-compose', defaults['mac_dev_formulae'])
         self.assertEqual(defaults['mac_dev_arm_formulae'], ['container-compose'])
-        self.assertIn('google-chrome', defaults['mac_dev_casks'])
-        tasks = load('roles/mac_dev/tasks/homebrew.yml')
-        casks = next(t for t in tasks if t['name'] == 'Install mac_dev Homebrew casks')
-        env = jinja2.Environment()
-        env.filters['bool'] = bool
-        condition = env.compile_expression(casks['when'])
-        for vm, item, expected in [(True, 'orbstack', False), (False, 'orbstack', True),
-                                   (True, 'chatgpt', True), (True, 'google-chrome', True)]:
-            self.assertEqual(condition(mac_dev_vm=vm, item=item), expected)
+        self.assertNotIn('docker-completion', defaults['mac_dev_formulae'])
+        main_casks = load('roles/mac_main/defaults/main.yml')['mac_main_casks']
+        for packages in [main_casks, defaults['mac_dev_casks']]:
+            self.assertIn('1password', packages)
+            for retired in ['bitwarden', 'rar', 'timemachinestatus', 'orbstack',
+                            'markedit', 'claude', 'claude-code@latest', 'visual-studio-code']:
+                self.assertNotIn(retired, packages)
+        self.assertFalse(load('main.yml')[0]['vars']['mac_dev_remote_access'])
+        self.assertTrue(defaults['mac_dev_remote_access'])
+        remote = next(t for t in load('roles/mac_dev/tasks/main.yml')
+                      if t['name'] == 'Configure remote_access')
+        self.assertEqual(remote['when'], 'mac_dev_remote_access | bool')
 
     def test_only_valid_public_keys_are_distributed(self):
         keys = ROOT / 'files/ssh_public_keys'
@@ -125,24 +122,23 @@ class MacDevTests(unittest.TestCase):
         for name in re.findall(r'IdentityFile ~/.ssh/(\S+)', config):
             self.assertTrue((keys / name).is_file(), name)
 
-    def test_ssh_preserves_forwarded_agent_without_bitwarden(self):
+    def test_ssh_preserves_forwarded_agent_without_1password(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
+            agent_path = home / 'agent space.sock'
             env = dict(os.environ, HOME=directory, SSH_AUTH_SOCK=str(home / 'forwarded.sock'))
-            # Isolate the socket lookup from any real Bitwarden session.
             config = home / 'config'
             config.write_text((ROOT / 'files/ssh_config').read_text().replace(
-                'test -S ~/.bitwarden-ssh-agent.sock',
-                f'test -S {home}/.bitwarden-ssh-agent.sock'))
+                '$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock', str(agent_path)).replace(
+                '~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock', str(agent_path)))
             command = ['/usr/bin/ssh', '-G', '-F', str(config), 'github.com']
             before = subprocess.run(command, env=env, check=True, capture_output=True, text=True).stdout
             self.assertFalse(any(line.startswith('identityagent ') for line in before.splitlines()))
             with socket.socket(socket.AF_UNIX) as agent:
-                agent.bind(str(home / '.bitwarden-ssh-agent.sock'))
+                agent.bind(str(agent_path))
                 after = subprocess.run(command, env=env, check=True, capture_output=True, text=True).stdout
                 selected = [line for line in after.splitlines() if line.startswith('identityagent ')]
-                self.assertEqual(len(selected), 1)
-                self.assertTrue(selected[0].endswith('/.bitwarden-ssh-agent.sock'))
+                self.assertEqual(selected, ['identityagent ' + str(agent_path)])
 
     def test_ssh_tasks_preserve_existing_keys_and_converge(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -154,7 +150,8 @@ class MacDevTests(unittest.TestCase):
             play = [{
                 'name': 'Exercise SSH tasks in a temporary home',
                 'hosts': 'localhost', 'connection': 'local', 'gather_facts': False,
-                'vars': {'home_dir': directory, 'mac_dev_authorized_key_files': ['cluster.pub']},
+                'vars': {'home_dir': directory, 'mac_dev_authorized_key_files': ['cluster.pub'],
+                         'mac_dev_remote_access': False},
                 'tasks': [{'ansible.builtin.import_tasks': str(ROOT / 'roles/mac_dev/tasks/ssh.yml')}],
             }]
             # playbook_dir must be mac/ so these are the actual role source paths.
@@ -164,6 +161,14 @@ class MacDevTests(unittest.TestCase):
                 command = ['ansible-playbook', harness.name, '-i', 'localhost,']
                 first = subprocess.run(command, capture_output=True, text=True)
                 self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+                self.assertEqual(authorized.read_text(), existing)
+                play[0]['vars']['mac_dev_remote_access'] = True
+                harness.seek(0)
+                harness.truncate()
+                harness.write(yaml.safe_dump(play))
+                harness.flush()
+                incoming = subprocess.run(command, capture_output=True, text=True)
+                self.assertEqual(incoming.returncode, 0, incoming.stdout + incoming.stderr)
                 second = subprocess.run(command, capture_output=True, text=True)
                 self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
                 self.assertRegex(second.stdout, r'changed=0\s')

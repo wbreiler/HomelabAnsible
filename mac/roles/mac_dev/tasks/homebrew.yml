@@ -21,7 +21,5 @@
     path: "{{ homebrew_prefix }}/bin"
     install_options: ["appdir={{ mac_dev_app_dir }}"]
   loop: "{{ mac_dev_casks }}"
-  # OrbStack needs hardware virtualization unavailable in this macOS VM.
-  when: not (mac_dev_vm | bool and item == 'orbstack')
   environment:
     PATH: "{{ homebrew_prefix }}/bin:{{ ansible_facts.env.PATH }}"

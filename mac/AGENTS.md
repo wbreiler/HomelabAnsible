@@ -14,13 +14,13 @@ drifted.
   root. See `DEV-HOST.md` for installation and recovery boundaries.
 - `dev-vm.yml` applies the full `mac_dev` role to an explicitly selected remote
   Intel macOS VM. It uses `/usr/local` and `~/Applications`, rejects root and
-  local execution, skips ARM-only container-compose and VM-incompatible
-  OrbStack, and preserves the original minimal bootstrap entry point.
+  local execution, skips ARM-only container-compose, and preserves the original
+  minimal bootstrap entry point.
 - `main.yml` runs only against `localhost` with `connection: local`. It selects
   `mac_main`, `mac_dev`, or both through `mac_profiles` (default: `[main]`).
   Each role imports the shared CLT/Homebrew bootstrap in `tasks/`.
   `mac_main` owns personal apps, SSH client config, Dock, and desktop defaults.
-  `mac_dev` owns development tools, shell, Git, VS Code, hosts, remote access,
+  `mac_dev` owns development tools, shell, Git, hosts, optional remote access,
   and AC power settings. Both roles can run independently. The dev marker at
   `/Library/Application Support/HomelabAnsible/mac-dev` prevents later main
   runs from resetting sleep. Combined runs skip personal sleep before the
@@ -38,8 +38,8 @@ drifted.
 ```bash
 make install                       # Install requirements.yml collections
 make run-main                      # Apply everyday setup; prompts for sudo
-make run-dev                       # Apply dedicated development setup
-make run-both                      # Apply both, with dev power settings last
+make run-dev REMOTE_ACCESS=true    # Apply dedicated development setup
+make run-both                      # Apply both with outbound-only SSH
 make run-tags PROFILE=dev TAGS=homebrew        # Apply one tag
 make run-tags TAGS=defaults,dock   # Apply multiple tags
 make check PROFILE=dev             # Development check mode; prompts for sudo
@@ -62,16 +62,15 @@ post-change checks.
 | `roles/mac_main/tasks/mas.yml` | `mas` | Installs App Store apps as root with `mas`; the user must already be signed in and some apps depend on account entitlement. |
 | `roles/mac_dev/tasks/shell.yml` | `shell` | Installs Oh My Zsh, deploys `zshrc`/`zprofile`, manages pyenv Python and selected global pip/npm packages, and sets zsh as the login shell. |
 | `roles/mac_dev/tasks/git.yml` | `git` | Sets the global Git name/email and installs Git LFS hooks; commit signing is not configured. |
-| `roles/mac_main/tasks/ssh.yml` | `ssh` | Deploys SSH configuration for the Bitwarden agent and removes obsolete 1Password agent configuration; it does not manage private keys. |
-| `roles/mac_dev/tasks/vscode.yml` | `vscode` | Deploys VS Code settings and installs extensions through `code`. |
+| `roles/mac_main/tasks/ssh.yml` | `ssh` | Deploys SSH configuration for the 1Password agent and preserves existing agent preferences; it does not manage private keys. |
 | `roles/mac_dev/tasks/hosts.yml` | `hosts` | Replaces the Ansible-managed block in `/etc/hosts`; requires privilege escalation. |
 | `roles/mac_main/tasks/dock.yml` | `dock` | Destructively replaces the user's Dock layout, then restarts Dock. |
 | `roles/mac_main/tasks/macos_defaults.yml` | `defaults`, `macos` | Applies user and privileged defaults, power settings, and host naming, then restarts Finder and SystemUIServer. Some settings require logout or reboot. |
 
 Dev `ssh` and `remote_access` also import `roles/mac_dev/tasks/ssh.yml`.
 Both roles reuse `tasks/ssh_client.yml` for the homelab client config, socket
-directory, and six public key selectors. Only dev adds incoming authorized keys
-(default: cluster.pub), preserving existing entries. `startup` installs and
+directory, and six public key selectors. With `mac_dev_remote_access: true`,
+dev also adds incoming authorized keys (default: cluster.pub), preserving existing entries. `startup` installs and
 loads the desktop login agent when a GUI session exists. `MINI-BOOTSTRAP.md`
 covers the full fresh-install procedure, including transfer of unpushed commits.
 `MINI-RECOVERY.md` covers recovery and separate restart/cold-boot acceptance
@@ -84,18 +83,18 @@ Files under `files/` are copied, and files under `templates/` are rendered:
 
 - `templates/zshrc.j2` and `templates/zprofile.j2` provide the shell environment,
   aliases, Homebrew, and pyenv setup.
-- `ssh_config` contains homelab host/network rules and conditional Bitwarden
+- `ssh_config` contains homelab host/network rules and conditional 1Password
   agent wiring. Without the local socket it preserves the default agent.
 - `ssh_public_keys/*.pub` are user-authorized public selectors. Never add
   private keys to this directory. Validate public files with `ssh-keygen -lf`.
-- `templates/vscode_settings.json.j2` provides the complete VS Code settings.
 - The browser setup guide documents manual extension, privacy consent, and
   account pairing. Never force-install an extension or grant TCC permissions.
 
 Do not add private keys, tokens, passwords, or machine-local secrets. Private
 SSH keys must remain outside this project.
-The `ssh` tasks also remove `~/.config/1Password`; review that removal before
-applying the tag. No `1password-agent.toml` is deployed.
+The SSH tasks preserve `~/.config/1Password`. No agent TOML file is deployed.
+Local `main.yml` defaults to outbound-only SSH. Set `mac_dev_remote_access: true`
+for a dedicated host. `dev-vm.yml` retains incoming SSH and Screen Sharing.
 
 ## Dependencies and ordering
 
@@ -103,7 +102,6 @@ applying the tag. No `1password-agent.toml` is deployed.
   MAS, macOS defaults, and Git configuration modules.
 - Homebrew installs `dockutil` before the Dock tasks use it during a full run.
 - App Store tasks need an authenticated App Store session.
-- VS Code extension tasks need the `code` launcher available on `PATH`.
 - sudo-touchid bootstrap writes `/etc/pam.d/sudo_local` under `become`, but its
   Homebrew login service must start as the normal user. Never run `brew services
   start sudo-touchid` as root; doing so can damage Homebrew path ownership.
@@ -111,7 +109,7 @@ applying the tag. No `1password-agent.toml` is deployed.
 ## Safety and validation
 
 - Inspect the exact tagged task before a live run. `homebrew`, `mas`, `shell`,
-  `git`, `ssh`, and `vscode` mutate the user's environment; `hosts`, `dock`, and
+  `git` and `ssh` mutate the user's environment; `hosts`, `dock`, and
   `defaults` also affect system or visible session state.
 - Obtain explicit user approval immediately before applying changes. Syntax,
   lint, and check-mode commands do not authorize a live playbook run.

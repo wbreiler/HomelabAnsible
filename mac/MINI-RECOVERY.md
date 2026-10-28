@@ -10,7 +10,7 @@ For the complete fresh-install procedure, follow
 
 1. Complete Setup Assistant with the normal administrator account.
 2. Connect wired Ethernet and reserve the Mini's address in the router.
-3. Install the dev role with `make run-dev` from `mac/`.
+3. Install the dev role with `make run-dev REMOTE_ACCESS=true` from `mac/`.
 4. Enable Screen Sharing control for the development account in **General > Sharing**.
 5. Complete the account setup below through Screen Sharing.
 
@@ -31,8 +31,8 @@ macOS login, store account passwords, or pair devices automatically.
 1. Sign into the desktop app with the intended account and workspace.
 2. Pair devices in **Settings > Connections > Control this Mac or PC**.
 3. Run `codex login` in the Mini's terminal.
-4. Enable the Bitwarden SSH agent in the Bitwarden desktop app.
-5. Unlock Bitwarden before outbound Git or homelab operations.
+4. Enable the 1Password SSH agent in the 1Password desktop app.
+5. Unlock 1Password before outbound Git or homelab operations.
 
 Approve any required macOS privacy prompts in the graphical session. The role
 installs public key selectors for GitHub, Proxmox, TrueNAS, and other configured
@@ -103,7 +103,7 @@ first test while someone can reach the Mini physically.
 2. Connect with `ssh mac-mini-dev` when the network becomes available.
 3. Complete any FileVault authentication prompt.
 4. Connect through Screen Sharing and log into the development desktop.
-5. Unlock Bitwarden and repeat the access checks above.
+5. Unlock 1Password and repeat the access checks above.
 
 If SSH reports a different host key during recovery, verify it at the Mini.
 Do not disable host-key checking or delete the known key without verification.

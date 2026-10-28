@@ -30,7 +30,7 @@
       ansible.builtin.assert:
         that:
           - "['git', 'git-lfs', 'gh', 'cmake', 'ninja', 'node', 'uv', 'ansible'] | difference(mac_test_dev_packages.mac_dev_formulae) | length == 0"
-          - "['codex', 'visual-studio-code'] | difference(mac_test_dev_packages.mac_dev_casks) | length == 0"
+          - "['codex', 'zed', '1password'] | difference(mac_test_dev_packages.mac_dev_casks) | length == 0"
           - "['discord', 'spotify', 'curseforge'] | difference(mac_test_main_packages.mac_main_casks) | length == 0"
           - "'discord' not in mac_test_dev_packages.mac_dev_casks"
           - "'codex' not in mac_test_main_packages.mac_main_casks"

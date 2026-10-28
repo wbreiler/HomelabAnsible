@@ -1,6 +1,6 @@
 # Environment and command paths.
 export ZSH="$HOME/.oh-my-zsh"
-[[ -S "$HOME/.bitwarden-ssh-agent.sock" ]] && export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
+[[ -S "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock" ]] && export SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
 export PYENV_ROOT="$HOME/.pyenv"
 
 # Zsh keeps PATH synchronized with this array and removes duplicates.
@@ -178,37 +178,6 @@ ghce() {
 	fi
 
 	GH_DEBUG="$GH_DEBUG" GH_HOST="$GH_HOST" gh copilot explain "$@"
-}
-
-# Claude Code routed through the local CLIProxyAPI Codex connection.
-_cliproxyapi_token() {
-    setopt localoptions pipefail
-    local config={{ homebrew_prefix }}/etc/cliproxyapi.conf token
-    if [[ ! -r "$config" ]]; then
-        print -u2 -- "claudex: cannot read $config"
-        return 1
-    fi
-    token="$(sed -n '/^api-keys:/,/^[^[:space:]]/s/^  - "\(.*\)"/\1/p' "$config" | sed -n '1p')" || return 1
-    if [[ -z "${token//[[:space:]]/}" ]]; then
-        print -u2 -- "claudex: no usable API token found in $config"
-        return 1
-    fi
-    print -r -- "$token"
-}
-
-# Remove the previous alias when this file is sourced in an existing shell.
-unalias claudex 2>/dev/null
-claudex() {
-    local token
-    token="$(_cliproxyapi_token)" || return 1
-    ANTHROPIC_BASE_URL=http://127.0.0.1:8317 \
-    ANTHROPIC_AUTH_TOKEN="$token" \
-    CLAUDE_CODE_SUBAGENT_MODEL=gpt-5.6-sol \
-    CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1 \
-    CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY=3 \
-    CLAUDE_CODE_MAX_CONTEXT_TOKENS=1050000 \
-    ENABLE_TOOL_SEARCH=false \
-    claude --model gpt-5.6-sol "$@"
 }
 
 # Syntax highlighting must load after plugins and custom functions.

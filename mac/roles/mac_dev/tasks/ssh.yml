@@ -3,6 +3,7 @@
   ansible.builtin.import_tasks: ../../../tasks/ssh_client.yml
 
 - name: Validate incoming key selection
+  when: mac_dev_remote_access | default(true) | bool
   ansible.builtin.assert:
     that:
       - mac_dev_authorized_key_files is sequence and mac_dev_authorized_key_files is not string
@@ -14,6 +15,7 @@
     fail_msg: Select one or more tracked public key filenames for incoming SSH access.
 
 - name: Authorize controller keys without removing existing keys
+  when: mac_dev_remote_access | default(true) | bool
   ansible.builtin.blockinfile:
     path: "{{ home_dir }}/.ssh/authorized_keys"
     create: true

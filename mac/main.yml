@@ -9,6 +9,7 @@
     username: "{{ ansible_facts.env.USER }}"
     homebrew_prefix: /opt/homebrew
     mac_profiles: [main]
+    mac_dev_remote_access: false
   pre_tasks:
     - name: Validate platform and selected roles
       ansible.builtin.assert:

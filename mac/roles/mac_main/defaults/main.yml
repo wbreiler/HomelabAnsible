@@ -94,7 +94,7 @@ mac_main_casks:
   - bambu-studio
   - cemu
   - utm
-  - bitwarden
+  - 1password
   - logi-options+
   - coconutbattery
   - istat-menus
@@ -102,8 +102,6 @@ mac_main_casks:
   - mx-power-gadget
   - raspberry-pi-imager
   - balenaetcher
-  - rar
-  - timemachinestatus
   - tailscale-app
   - citrix-workspace
   - macusb

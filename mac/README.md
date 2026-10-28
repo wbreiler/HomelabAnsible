@@ -6,8 +6,8 @@ with `/usr/local` through `dev-vm.yml`. Neither role removes the other role's so
 
 | Role | Purpose | Managed areas |
 | --- | --- | --- |
-| `mac_main` | Everyday personal Mac | Personal Homebrew apps, App Store apps, Bitwarden SSH configuration, Dock, desktop defaults, Touch ID |
-| `mac_dev` | Dedicated development Mac or Intel VM | Build tools, language runtimes, Codex, Chrome and editors, shell, Git, VS Code, homelab SSH/public keys, SSH server, Screen Sharing, desktop startup, AC power settings |
+| `mac_main` | Everyday personal Mac | Personal Homebrew apps, App Store apps, 1Password SSH configuration, Dock, desktop defaults, Touch ID |
+| `mac_dev` | Dedicated development Mac or Intel VM | Build tools, language runtimes, Codex, Chrome and editors, shell, Git, homelab SSH/public keys, optional SSH server and Screen Sharing, desktop startup, AC power settings |
 
 Each role installs Command Line Tools and Homebrew when absent. Package lists
 are in `roles/mac_main/defaults/main.yml` and `roles/mac_dev/defaults/main.yml`.
@@ -16,7 +16,7 @@ Use `dev-vm.yml` for the full development role. See [DEV-HOST.md](DEV-HOST.md).
 
 For a fresh dedicated Mini, follow [MINI-BOOTSTRAP.md](MINI-BOOTSTRAP.md).
 It covers tool installation, transfer of unpushed commits, manual sign-ins,
-and restart/cold-boot checks. Use `make run-dev` with the hosts task enabled.
+and restart/cold-boot checks. Use `make run-dev REMOTE_ACCESS=true` with the hosts task enabled.
 
 ## Choose a role
 
@@ -26,8 +26,8 @@ macOS Setup Assistant first. Use an administrator account for sudo tasks.
 ```bash
 cd mac
 make install
-make check PROFILE=dev
-make run-dev                  # Dedicated Mac Mini
+make check PROFILE=dev REMOTE_ACCESS=true
+make run-dev REMOTE_ACCESS=true # Dedicated Mac Mini
 ```
 
 Other selections:
@@ -36,12 +36,13 @@ Other selections:
 make run-main                 # Everyday Mac, also the default for make run
 make run-both                 # Everyday Mac plus development tools
 make check PROFILE=both
-make run-tags PROFILE=dev TAGS=remote_access
+make run-tags PROFILE=dev REMOTE_ACCESS=true TAGS=remote_access
 ```
 
 `make run` now selects only `main`. Use `make run-both` for the old combined
-software selection plus the new remote-access settings. A combined run applies
-`mac_dev` last. The dev role records a marker at
+software selection. Local runs keep SSH outbound-only. Set `REMOTE_ACCESS=true`
+for incoming SSH, Screen Sharing, and the dedicated AC power policy. A combined run applies
+`mac_dev` last. With remote access enabled, the dev role records a marker at
 `/Library/Application Support/HomelabAnsible/mac-dev`. Later main-role runs
 preserve the dev sleep policy. A combined run also skips personal sleep settings
 before that marker exists.
@@ -54,7 +55,7 @@ ansible-playbook main.yml --ask-become-pass -e '{"mac_profiles":["main","dev"]}'
 
 Tags retain their previous names. Main tags are `xcode`, `homebrew`, `mas`,
 `ssh`, `dock`, `defaults`, and `macos`. Dev tags are `xcode`, `homebrew`, `shell`,
-`ssh`, `git`, `vscode`, `hosts`, `startup`, and `remote_access`. Select `PROFILE=dev` or
+`ssh`, `git`, `hosts`, `startup`, and `remote_access`. Select `PROFILE=dev` or
 `PROFILE=both` when using dev tags.
 
 ## Intel development VM
@@ -70,12 +71,11 @@ ansible-playbook -i 'dev_host,' dev-vm.yml -e ansible_host=atlas-dev -u pve --as
 
 This entry point rejects localhost, local connections, root, and non-Intel
 targets. It imports only `mac_dev`. Its apps use `~/Applications`, matching
-the existing VM installation. Shell, Homebrew, VS Code, readiness checks, and
+the existing VM installation. Shell, Homebrew, readiness checks, and
 desktop startup use native Intel paths. The local `main.yml` retains its
 Apple silicon guard and `/Applications` default.
 
-Intel does not install ARM-only `container-compose`. VM runs also skip
-OrbStack because nested hardware virtualization is unavailable. Docker CLI
+Intel does not install ARM-only `container-compose`. Docker CLI
 tools remain available for a separately configured remote engine. Packages
 without compatible bottles can require source builds and extra disk space.
 Homebrew failures stop the role rather than silently skipping development tools.
@@ -86,13 +86,13 @@ permissions, and confirm Chrome shows **Manage**. Account sign-in, device
 pairing, browser site permissions, and macOS privacy consent remain manual.
 The role does not copy authenticated profiles or modify the TCC database.
 
-This is a full provisioning role. It backs up and replaces shell and editor
+This is a full provisioning role. It backs up and replaces shell
 configuration, manages homelab SSH access, edits hosts, and enables remote
 services. Review the complete diff before applying it to an existing VM.
 
 ## Dedicated Mac Mini access
 
-The dev role enables Remote Login with `systemsetup` and enables the native
+With `REMOTE_ACCESS=true`, the local dev role enables Remote Login with `systemsetup` and enables the native
 Screen Sharing launch service. It creates missing access groups and adds the
 current user. Existing allowed users remain. It does not enable a shared VNC
 password or copy private keys. It installs all six public key selectors from
@@ -141,18 +141,18 @@ Control returns.
 The role also installs Chrome and a browser setup guide in `~/Developer/`.
 Browser extension permissions require the user's direct consent.
 
-Bitwarden is included for outbound Git and homelab authentication. Enable its
+1Password is included for outbound Git and homelab authentication. Enable its
 SSH agent and unlock it after login. Incoming SSH needs only the trusted public
-key and the controller agent. A local Bitwarden socket takes precedence when
+key and the controller agent. A local 1Password socket takes precedence when
 present. Otherwise, the SSH config preserves the default or forwarded agent.
 Private keys, passwords, tokens, and authenticated sessions are never copied.
 
 ## Files and existing behavior
 
-The dev role renders `.zshrc`, `.zprofile`, and VS Code settings from templates,
+The dev role renders `.zshrc` and `.zprofile` from templates,
 with backups of existing files.
 It configures the existing Git identity and creates `~/Developer`. Its shell
-preserves a forwarded SSH agent unless a local Bitwarden socket exists.
+preserves a forwarded SSH agent unless a local 1Password socket exists.
 Review the static hosts in `roles/mac_dev/tasks/hosts.yml` before applying them.
 The [2026-10-24 address audit](HOSTS-AUDIT.md) records two corrected addresses,
 the Seerr compatibility alias, and the DHCP/retirement follow-up. Five obsolete
@@ -161,8 +161,8 @@ longer live, resolving the final two uncertain entries. Deluge
 uses the TrueNAS app address `10.10.20.3`. The Erebus management alias uses
 `10.10.10.7`.
 
-The main role replaces `~/.ssh/config` with a backup and removes the obsolete
-`~/.config/1Password` directory. It requires App Store sign-in for MAS apps.
+The main role replaces `~/.ssh/config` with a backup and preserves
+`~/.config/1Password`. It requires App Store sign-in for MAS apps.
 Its Dock task removes the current layout. Its defaults retain the existing
 MacBook computer names, power policy, and UI restarts. Review these files before
 applying main to another machine. Personal package loops still tolerate failures.
@@ -179,9 +179,13 @@ cd mac
 make validate
 ```
 
-After an authorized live installation, run `~/Developer/mac-dev-check.sh` on the
+After an authorized dedicated-host installation, run `~/Developer/mac-dev-check.sh` on the
 Mac. Then verify SSH authentication and Screen Sharing control from another Mac.
 The check verifies CLI sign-in, the desktop app and login agent, public keys,
 access groups, and the AC power policy. It cannot prove network reachability,
 Screen Sharing control, desktop sign-in, or Remote Control pairing. The recovery
 guide supplies the external checks and separate restart/cold-boot procedures.
+
+Retired package entries no longer install Docker completion, Claude, Claude Code,
+VS Code, rar, OrbStack, MarkEdit, or TimeMachineStatus. Existing installations
+and editor settings remain untouched. 1Password replaces Bitwarden in both profiles.

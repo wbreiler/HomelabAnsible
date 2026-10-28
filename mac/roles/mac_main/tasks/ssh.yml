@@ -2,13 +2,8 @@
 - name: Install homelab SSH client configuration and public keys
   ansible.builtin.import_tasks: ../../../tasks/ssh_client.yml
 
-- name: Remove obsolete 1Password SSH agent configuration
-  ansible.builtin.file:
-    path: "{{ home_dir }}/.config/1Password"
-    state: absent
-
 # NOTE: Private SSH keys are NOT managed by this playbook.
 # Add them manually or restore them from a secure backup:
 #   - PiKeys (stored at ~/.ssh/PiKeys)
-# The Bitwarden SSH agent (configured in ~/.ssh/config) handles
-# authentication for most hosts while Bitwarden is running.
+# The 1Password SSH agent (configured in ~/.ssh/config) handles
+# authentication for most hosts while 1Password is running.

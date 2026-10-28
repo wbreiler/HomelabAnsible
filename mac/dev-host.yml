@@ -178,7 +178,7 @@
 
     - name: Install editors and Codex desktop app in user Applications
       community.general.homebrew_cask:
-        name: [visual-studio-code, zed, chatgpt]
+        name: [zed, chatgpt]
         state: present
         path: /usr/local/bin
         install_options: ["appdir={{ dev_home }}/Applications"]

@@ -9,7 +9,7 @@
     username: "{{ ansible_facts.env.USER }}"
     homebrew_prefix: /usr/local
     mac_profiles: [dev]
-    mac_dev_vm: true
+    mac_dev_remote_access: true
     mac_dev_app_dir: "{{ home_dir }}/Applications"
   pre_tasks:
     - name: Require an explicitly selected remote Intel Mac account
