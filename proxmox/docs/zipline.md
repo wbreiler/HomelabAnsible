@@ -54,6 +54,10 @@ It resolves the current application address on each run. Its proxy defaults
 identify NPM as VMID 101 on Prometheus. Keep the application DHCP lease stable
 or rerun the role after an address change.
 
+The proxy buffers larger uploads in `/tmp/nginx/body`. The role creates this
+directory with a systemd-tmpfiles rule and excludes `/tmp/nginx` from age-based
+cleanup. Without it, larger screenshots return HTTP 500 while small images work.
+
 Certbot's existing timer renews the certificate. A deploy hook at
 `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx` validates and reloads Nginx.
 This standalone configuration is outside NPM's proxy-host dashboard.

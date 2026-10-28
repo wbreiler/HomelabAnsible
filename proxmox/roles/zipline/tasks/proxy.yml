@@ -1,4 +1,26 @@
 ---
+- name: Preserve proxy upload buffer directories
+  ansible.builtin.shell:
+    cmd: |
+      pct exec {{ zipline_proxy_vmid }} -- sh -eu -c '
+        config=/etc/tmpfiles.d/homelab-nginx.conf
+        rules="d /tmp/nginx 0755 root root -
+      d /tmp/nginx/body 0700 root root -
+      x /tmp/nginx - - - -"
+        if test "$(cat "$config" 2>/dev/null || true)" != "$rules"; then
+          printf "%s\n" "$rules" > "$config"
+          echo changed
+        fi
+        if ! test -d /tmp/nginx/body; then
+          systemd-tmpfiles --create "$config"
+          echo changed
+        fi
+      '
+    executable: /bin/bash
+  delegate_to: "{{ zipline_proxy_node }}"
+  register: zipline_proxy_tmpfiles
+  changed_when: "'changed' in zipline_proxy_tmpfiles.stdout"
+
 - name: Render screenshot HTTPS ingress
   ansible.builtin.template:
     src: nginx.conf.j2
