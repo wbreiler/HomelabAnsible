@@ -6,9 +6,9 @@ screen. PBS chunk verification and the native Intel Mineways build passed.
 
 ## Current working state
 
-VM 108 (`macos-tahoe`) runs on Prometheus with 8 vCPUs and 32 GiB RAM.
+VM 108 (`macos-tahoe`) runs on Atlas with 8 vCPUs and 32 GiB RAM.
 Connect with `ssh atlas-dev` as `pve` at `10.10.40.9`.
-The laptop SSH alias uses the existing Bitwarden agent key selected by
+The laptop SSH alias uses the configured SSH agent key selected by
 `~/.ssh/lxc.pub`. Private keys remain in the configured agent. See the
 migration exclusions below for credential handling.
 Automatic VM startup is enabled. Guest `sleep` and `disksleep` are both zero.
@@ -22,6 +22,12 @@ copies matched the original ISO files byte for byte. The original files remain
 on Atlas. The macOS login screen passed visual verification after migration.
 QEMU reported unsupported CPU feature warnings on Prometheus. Application
 behavior and authenticated SSH remain unverified after this migration.
+
+The later October 28 Prometheus maintenance returned VM 108 to Atlas. Its
+clean shutdown again timed out, and the user approved another forced stop.
+All four managed ZFS disks migrated successfully. The macOS login screen
+passed visual verification on Atlas. The ignored Terraform definition now
+matches its Atlas placement and retains the managed boot disks.
 
 Node 24.22.1, Python 3.13.17/uv, Git/Git LFS, GitHub CLI, Ansible,
 ansible-lint, CMake, Ninja, tmux, jq, and ripgrep are available.
