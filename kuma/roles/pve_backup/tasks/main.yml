@@ -28,27 +28,25 @@
   changed_when: false
   failed_when: false
 
-- name: Add the PBS storage target
-  ansible.builtin.command:
-    argv:
-      - pvesm
-      - add
-      - pbs
-      - "{{ pve_backup_storage_id }}"
-      - --server
-      - "{{ pve_backup_pbs_server }}"
-      - --datastore
-      - "{{ pve_backup_pbs_datastore }}"
-      - --namespace
-      - "{{ pve_backup_pbs_namespace }}"
-      - --username
-      - "{{ pve_backup_pbs_username }}"
-      - --password
-      - "{{ pve_backup_pbs_password }}"
-      - --fingerprint
-      - "{{ pve_backup_pbs_fingerprint }}"
-      - --content
-      - backup
+- name: Install password prompt support for a new PBS target
+  ansible.builtin.apt:
+    name: python3-pexpect
+    state: present
+  when: pve_backup_storage_check.rc != 0
+
+- name: Add the PBS storage target through its password prompt
+  ansible.builtin.expect:
+    command: >-
+      pvesm add pbs {{ pve_backup_storage_id | quote }}
+      --server {{ pve_backup_pbs_server | quote }}
+      --datastore {{ pve_backup_pbs_datastore | quote }}
+      --namespace {{ pve_backup_pbs_namespace | quote }}
+      --username {{ pve_backup_pbs_username | quote }}
+      --fingerprint {{ pve_backup_pbs_fingerprint | quote }}
+      --content backup --password
+    responses:
+      '(?i)password:': "{{ pve_backup_pbs_password }}"
+    echo: false
   when: pve_backup_storage_check.rc != 0
   changed_when: true
   no_log: true
