@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Verify a freshly emitted journal marker from every expected host in Loki.
 
-Usage: verify_logging.py http://LOKI:3100 MARKER host [host ...]
+Run through SSH inside loki-nash:
+  verify_logging.py http://127.0.0.1:3101 MARKER host [host ...]
 Emit the same MARKER with logger on each host first. This reads no log bodies
 other than the requested marker and prints only host names and label keys.
 """

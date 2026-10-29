@@ -41,12 +41,25 @@
         lxc_nfs_export: ""
         lxc_nfs_mountpoint: ""
 
+    - name: Prepare NexDeck account and persistent directories
+      ansible.builtin.include_tasks: ../../../tasks/service_directories.yml
+      vars:
+        service_directory_vmid: "{{ lxc_resolved_vmid }}"
+        service_directory_user: nexdeck
+        service_directory_home: /var/lib/nexdeck
+        service_directories:
+          - path: /opt/nexdeck
+            mode: "0755"
+          - path: /var/lib/nexdeck
+            mode: "0700"
+
     - name: Read installed NexDeck version
       ansible.builtin.command:
-        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, cat, /opt/nexdeck/.ansible-version]
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, runuser, -u, nexdeck, --, cat, /opt/nexdeck/.ansible-version]
       register: nexdeck_installed_version
       changed_when: false
       failed_when: nexdeck_installed_version.rc not in [0, 1]
+      check_mode: false
 
     - name: Download pinned NexDeck source
       ansible.builtin.get_url:
@@ -54,7 +67,7 @@
         dest: "/tmp/nexdeck-{{ nexdeck_version }}-{{ lxc_resolved_vmid }}.tar.gz"
         checksum: "{{ nexdeck_release_checksum }}"
         mode: "0600"
-      when: nexdeck_installed_version.stdout | trim != nexdeck_version
+      when: not ansible_check_mode and nexdeck_installed_version.stdout | trim != nexdeck_version
 
     - name: Push NexDeck source into LXC
       ansible.builtin.command:
@@ -63,7 +76,7 @@
           - push
           - "{{ lxc_resolved_vmid }}"
           - "/tmp/nexdeck-{{ nexdeck_version }}-{{ lxc_resolved_vmid }}.tar.gz"
-          - /tmp/nexdeck-release.tar.gz
+          - /root/ansible-nexdeck-release.tar.gz
           - --perms
           - "0600"
       changed_when: true
@@ -78,10 +91,11 @@
           - --
           - bash
           - -ceu
-          - >-
-            install -d -m 0700 /var/backups/nexdeck;
-            systemctl stop nexdeck;
-            tar -C /var/lib -czf /var/backups/nexdeck/pre-upgrade-$(date -u +%Y%m%dT%H%M%SZ).tar.gz nexdeck ||
+          - |
+            install -d -m 0700 /var/backups/nexdeck
+            systemctl stop nexdeck
+            runuser -u nexdeck -- tar -C /var/lib -czf - nexdeck \
+              > "/var/backups/nexdeck/pre-upgrade-$(date -u +%Y%m%dT%H%M%SZ).tar.gz" ||
             { systemctl start nexdeck; exit 1; }
       changed_when: true
       when: >-
@@ -97,21 +111,25 @@
           - --
           - bash
           - -ceu
-          - >-
-            id nexdeck >/dev/null 2>&1 || useradd --system --home-dir /var/lib/nexdeck --shell /usr/sbin/nologin nexdeck;
-            systemctl stop nexdeck 2>/dev/null || true;
-            install -d -o nexdeck -g nexdeck -m 0700 /var/lib/nexdeck;
-            install -d -o nexdeck -g nexdeck /opt/nexdeck/app;
-            tar -xzf /tmp/nexdeck-release.tar.gz -C /opt/nexdeck/app --strip-components=1;
-            chown -R nexdeck:nexdeck /opt/nexdeck;
-            runuser -u nexdeck -- python3 -m venv /opt/nexdeck/venv;
-            runuser -u nexdeck -- /opt/nexdeck/venv/bin/pip install --disable-pip-version-check -r /opt/nexdeck/app/backend/requirements.txt;
-            cd /opt/nexdeck/app/frontend;
-            runuser -u nexdeck -- npm ci;
-            runuser -u nexdeck -- npm run build;
-            printf '%s\n' {{ nexdeck_version | quote }} > /opt/nexdeck/.ansible-version;
-            chown nexdeck:nexdeck /opt/nexdeck/.ansible-version;
-            rm -f /tmp/nexdeck-release.tar.gz
+          - |
+            systemctl stop nexdeck 2>/dev/null || true
+            runuser -u nexdeck -- bash -ceu '
+              mkdir -p /opt/nexdeck/app
+              tar -xzf - -C /opt/nexdeck/app --strip-components=1
+              python3 -m venv /opt/nexdeck/venv
+              /opt/nexdeck/venv/bin/pip install --disable-pip-version-check -r /opt/nexdeck/app/backend/requirements.txt
+              cd /opt/nexdeck/app/frontend
+              npm ci
+              npm run build
+              marker=$(mktemp /opt/nexdeck/.version.XXXXXXXXXX)
+              trap '\''rm -f "$marker"'\'' EXIT
+              printf "%s\n" "$1" > "$marker"
+              chmod 0644 "$marker"
+              mv -Tf -- "$marker" /opt/nexdeck/.ansible-version
+            ' nexdeck-install "$1" < /root/ansible-nexdeck-release.tar.gz
+            rm -f /root/ansible-nexdeck-release.tar.gz
+          - nexdeck-install
+          - "{{ nexdeck_version }}"
       changed_when: true
       when: nexdeck_installed_version.stdout | trim != nexdeck_version
 
@@ -156,6 +174,7 @@
       register: nexdeck_service_state
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Start NexDeck if stopped
       ansible.builtin.command:

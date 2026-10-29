@@ -8,9 +8,11 @@ with open(os.environ["LXC_TEST_LOG"], "a", encoding="utf-8") as log:
     log.write(" ".join(args) + "\n")
 if args == ["list"]:
     print("VMID Status Name")
-    if os.environ["LXC_TEST_STATE"] == "stopped":
-        print("9000 stopped ownership-test")
+    if os.environ["LXC_TEST_STATE"] in {"stopped", "running"}:
+        print("9000 " + os.environ["LXC_TEST_STATE"] + " ownership-test")
 elif args == ["status", "9000"]:
-    print("status: stopped")
+    print("status: " + os.environ["LXC_TEST_STATE"])
+elif args == ["exec", "9000", "--", "echo", "ok"] and os.environ["LXC_TEST_STATE"] == "running":
+    print("ok")
 else:
     sys.exit("Unexpected guest mutation: " + " ".join(args))

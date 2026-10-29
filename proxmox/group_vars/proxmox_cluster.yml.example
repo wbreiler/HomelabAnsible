@@ -225,6 +225,12 @@ install_centralized_logging: false
 # centralized_logging_storage: "local-zfs"
 # centralized_logging_retention: "720h"
 # centralized_logging_grafana_hostname: "graf-nash"
+# Required before enabling logging. Use each collector's actual IPv4 route source.
+# Include both Proxmox hosts. These documentation addresses are examples only.
+# centralized_logging_ingest_cidrs:
+#   - "192.0.2.10/32"
+#   - "192.0.2.11/32"
+#   - "192.0.2.20/32"
 # Game servers are excluded initially. Remove a VMID after storage use is known.
 # centralized_logging_excluded_vmids: [113, 115, 116, 120, 121, 124]
 

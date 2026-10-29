@@ -1,0 +1,62 @@
+---
+- name: Verify existing guest checks run without configuration writes in check mode
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  check_mode: true
+  tasks:
+    - name: Create isolated check-mode fixture directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: guest-check-mode-
+      register: ownership_test_directory
+      check_mode: false
+
+    - name: Exercise guest guards and read-only bootstrap
+      block:
+        - name: Verify absent and stopped guest guards remain active
+          ansible.builtin.include_tasks: terraform-ownership-case.yml
+          loop: [missing, stopped]
+          loop_control:
+            loop_var: ownership_case
+
+        - name: Clear running-guest fixture command log
+          ansible.builtin.copy:
+            dest: "{{ ownership_test_directory.path }}/commands.log"
+            content: ""
+            mode: '0600'
+          check_mode: false
+
+        - name: Inspect an existing running guest with a mutation-rejecting fixture
+          ansible.builtin.include_tasks: ../tasks/create_lxc.yml
+          vars:
+            lxc_hostname: ownership-test
+            lxc_packages: []
+            lxc_nfs_server: ""
+          args:
+            apply:
+              environment:
+                PATH: "{{ playbook_dir }}/fixtures/terraform-ownership:{{ lookup('env', 'PATH') }}"
+                LXC_TEST_LOG: "{{ ownership_test_directory.path }}/commands.log"
+                LXC_TEST_STATE: running
+
+        - name: Read running-guest fixture command log
+          ansible.builtin.slurp:
+            src: "{{ ownership_test_directory.path }}/commands.log"
+          register: check_mode_commands
+
+        - name: Require actual discovery, status, and readiness without writes
+          ansible.builtin.assert:
+            that:
+              - lxc_resolved_vmid == '9000'
+              - _lxc_ready.stdout | trim == 'ok'
+              - >-
+                check_mode_commands.content | b64decode ==
+                'list\nstatus 9000\nexec 9000 -- echo ok\n'
+      always:
+        - name: Remove local check-mode fixture artifacts
+          ansible.builtin.file:
+            path: "{{ ownership_test_directory.path }}"
+            state: absent
+          check_mode: false

@@ -11,6 +11,17 @@
       - centralized_logging_grafana_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
       - centralized_logging_alloy_version is match('^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$')
       - centralized_logging_grafana_key_checksum is match('^sha256:[0-9a-f]{64}$')
+      - centralized_logging_ingest_cidrs | type_debug == 'list'
+      - centralized_logging_ingest_cidrs | length > 0
+      - >-
+        centralized_logging_ingest_cidrs |
+        reject('match',
+          '^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}' ~
+          '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/32$') |
+        list | length == 0
+    fail_msg: >-
+      Supply the pinned logging settings and a nonempty list of reviewed IPv4
+      /32 collector and Proxmox source addresses in centralized_logging_ingest_cidrs.
 
 - name: Resolve node currently hosting centralized logging
   ansible.builtin.include_tasks: ../../../tasks/resolve_lxc_node.yml
@@ -70,9 +81,15 @@
 
     - name: Read installed core package versions
       ansible.builtin.command:
-        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, bash, -c, "dpkg-query -W -f='${Package}=${Version}\\n' loki grafana alloy 2>/dev/null || true"]
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, bash, -c, "dpkg-query -W -f='${Package}=${Version}\\n' loki grafana alloy nginx 2>/dev/null || true"]
       register: _centralized_logging_core_versions
       changed_when: false
+
+    - name: Block a new Nginx service until its restricted configuration is installed
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, systemctl, mask, nginx.service]
+      when: "'nginx=' not in _centralized_logging_core_versions.stdout"
+      changed_when: true
 
     - name: Install pinned centralized logging packages
       ansible.builtin.command:
@@ -95,12 +112,13 @@
             DEBIAN_FRONTEND=noninteractive apt-get install -y -q --allow-change-held-packages \
               "loki={{ centralized_logging_loki_version }}" \
               "grafana={{ centralized_logging_grafana_version }}" \
-              "alloy={{ centralized_logging_alloy_version }}"
+              "alloy={{ centralized_logging_alloy_version }}" nginx
             apt-mark hold loki grafana alloy
       when: >-
         ('loki=' ~ centralized_logging_loki_version) not in _centralized_logging_core_versions.stdout or
         ('grafana=' ~ centralized_logging_grafana_version) not in _centralized_logging_core_versions.stdout or
-        ('alloy=' ~ centralized_logging_alloy_version) not in _centralized_logging_core_versions.stdout
+        ('alloy=' ~ centralized_logging_alloy_version) not in _centralized_logging_core_versions.stdout or
+        'nginx=' not in _centralized_logging_core_versions.stdout
       changed_when: true
 
     - name: Create Grafana admin password file
@@ -144,6 +162,33 @@
           - /var/lib/loki/rules
       changed_when: false
 
+    - name: Validate Loki and ingress configurations before installation
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - |
+            temporary=$(mktemp)
+            trap 'rm -f "$temporary"' EXIT
+            cat > "$temporary"
+            if test "$1" = loki; then
+              /usr/bin/loki -verify-config -config.file="$temporary"
+            else
+              /usr/sbin/nginx -t -c "$temporary"
+            fi
+          - validate-config
+          - "{{ item.name }}"
+        stdin: "{{ lookup('template', item.template) }}"
+        stdin_add_newline: false
+      loop:
+        - {name: loki, template: loki.yml.j2}
+        - {name: nginx, template: loki-ingress.conf.j2}
+      changed_when: false
+
     - name: Install centralized logging configuration
       vars:
         centralized_logging_agent_name: "{{ centralized_logging_hostname }}"
@@ -179,6 +224,7 @@
         - {path: /etc/grafana/provisioning/alerting/homelab.yml, owner: "root:grafana", mode: "0640", template: alerts.yml.j2}
         - {path: /var/lib/grafana/dashboards/homelab-logs.json, owner: "grafana:grafana", mode: "0640", template: homelab-logs.json.j2}
         - {path: /etc/alloy/config.alloy, owner: "root:alloy", mode: "0640", template: alloy.config.j2}
+        - {path: /etc/nginx/nginx.conf, owner: "root:root", mode: "0644", template: loki-ingress.conf.j2}
       register: _centralized_logging_core_config
       changed_when: _centralized_logging_core_config.stdout | trim == 'changed'
 
@@ -202,15 +248,51 @@
         argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, systemctl, enable, --now, loki, grafana-server, alloy]
       changed_when: false
 
-    - name: Restart changed centralized logging services
+    - name: Check whether Loki has applied its private listener configuration
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, curl, --fail, --silent, --show-error, --max-time, "5", --noproxy, "*", http://127.0.0.1:3101/ready]
+      register: _centralized_logging_loki_before_restart
+      changed_when: false
+      failed_when: false
+
+    - name: Restart changed or outdated centralized logging services
       ansible.builtin.command:
         argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, systemctl, restart, loki, grafana-server, alloy]
-      when: _centralized_logging_core_config.changed  # noqa no-handler
+      when: >-  # noqa no-handler
+        _centralized_logging_core_config.changed or
+        _centralized_logging_loki_before_restart.rc != 0
       changed_when: true
 
     - name: Wait for Loki readiness
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, curl, --fail, --silent, --show-error, --max-time, "5", --noproxy, "*", http://127.0.0.1:3101/ready]
+      register: _centralized_logging_loki_local_ready
+      changed_when: false
+      until: _centralized_logging_loki_local_ready.rc == 0
+      retries: 24
+      delay: 5
+
+    - name: Start the restricted Loki ingress
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - bash
+          - -ceu
+          - systemctl unmask nginx.service; systemctl enable --now nginx
+      changed_when: false
+
+    - name: Reload the validated Loki ingress policy
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, bash, -ceu, "/usr/sbin/nginx -t; systemctl reload nginx"]
+      changed_when: false
+
+    - name: Wait for Loki ingress readiness from the Proxmox source
       ansible.builtin.uri:
         url: "http://{{ centralized_logging_ip }}:3100/ready"
+        use_proxy: false
       register: _centralized_logging_loki_ready
       until: _centralized_logging_loki_ready.status == 200
       retries: 24

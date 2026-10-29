@@ -14,6 +14,7 @@
     executable: /bin/bash
   register: _lxc_existing_vmid
   changed_when: false
+  check_mode: false
 
 - name: Require an existing Terraform-provisioned container
   ansible.builtin.assert:
@@ -32,6 +33,7 @@
     cmd: pct status {{ lxc_resolved_vmid }}
   register: _lxc_status
   changed_when: false
+  check_mode: false
   failed_when: >-
     _lxc_status.rc != 0 or 'status: running' not in _lxc_status.stdout
 
@@ -43,6 +45,7 @@
   retries: 12
   delay: 5
   changed_when: false
+  check_mode: false
 
 - name: Configure apt-cacher-ng proxy inside container
   ansible.builtin.command:
@@ -70,7 +73,9 @@
       - "{{ apt_proxy_port | default(3142) | string }}"
   register: _lxc_apt_proxy
   changed_when: _lxc_apt_proxy.stdout | trim == 'changed'
-  when: configure_apt_proxy | default(true) | bool
+  when:
+    - not ansible_check_mode
+    - configure_apt_proxy | default(true) | bool
 
 - name: Install packages
   ansible.builtin.command:
@@ -80,6 +85,7 @@
       DEBIAN_FRONTEND=noninteractive apt-get install -y -q {{ lxc_packages | join(' ') }}"
   register: _lxc_apt
   changed_when: "'0 upgraded, 0 newly installed' not in _lxc_apt.stdout"
+  when: not ansible_check_mode
 
 - name: Add SSH public key to container
   ansible.builtin.command:
@@ -93,12 +99,15 @@
       >> /root/.ssh/authorized_keys && echo changed; fi"
   register: _lxc_ssh_key
   changed_when: _lxc_ssh_key.stdout | trim == 'changed'
+  when: not ansible_check_mode
 
 - name: Create NFS mountpoint
   ansible.builtin.command:
     cmd: pct exec {{ lxc_resolved_vmid }} -- mkdir -p {{ lxc_nfs_mountpoint }}
   changed_when: false
-  when: lxc_nfs_server | default('') | length > 0
+  when:
+    - not ansible_check_mode
+    - lxc_nfs_server | default('') | length > 0
 
 - name: Add NFS fstab entry
   ansible.builtin.command:
@@ -108,7 +117,9 @@
       echo '{{ lxc_nfs_server }}:{{ lxc_nfs_export }}
       {{ lxc_nfs_mountpoint }} nfs defaults,_netdev 0 0' >> /etc/fstab"
   changed_when: true
-  when: lxc_nfs_server | default('') | length > 0
+  when:
+    - not ansible_check_mode
+    - lxc_nfs_server | default('') | length > 0
 
 - name: Mount NFS share
   ansible.builtin.command:
@@ -116,4 +127,6 @@
       pct exec {{ lxc_resolved_vmid }} -- bash -c
       "mountpoint -q {{ lxc_nfs_mountpoint }} || mount {{ lxc_nfs_mountpoint }}"
   changed_when: true
-  when: lxc_nfs_server | default('') | length > 0
+  when:
+    - not ansible_check_mode
+    - lxc_nfs_server | default('') | length > 0

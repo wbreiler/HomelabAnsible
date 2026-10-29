@@ -17,8 +17,11 @@ root = pathlib.Path(tempfile.mkdtemp(prefix='loki-retention-check-'))
 config = pathlib.Path('/etc/loki/config.yml').read_text()
 assert 'retention_period: 720h' in config, 'This check expects 30-day production retention'
 config = config.replace('/var/lib/loki', str(root / 'data'))
-config = config.replace('http_listen_address: 0.0.0.0', 'http_listen_address: 127.0.0.1')
-config = config.replace('http_listen_port: 3100', 'http_listen_port: 13100\n  grpc_listen_address: 127.0.0.1\n  grpc_listen_port: 19095')
+assert 'http_listen_address: 127.0.0.1' in config, 'Loki HTTP must remain loopback-only'
+assert 'grpc_listen_address: 127.0.0.1' in config, 'Loki gRPC must remain loopback-only'
+assert 'http_listen_port: 3101' in config and 'grpc_listen_port: 9095' in config, 'Unexpected production Loki ports'
+config = config.replace('http_listen_port: 3101', 'http_listen_port: 13100')
+config = config.replace('grpc_listen_port: 9095', 'grpc_listen_port: 19095')
 config = config.replace('"2026-09-14"', '"2020-01-01"')
 config = config.replace('compaction_interval: 10m', 'compaction_interval: 5s')
 config = config.replace('retention_delete_delay: 2h', 'retention_delete_delay: 1s')

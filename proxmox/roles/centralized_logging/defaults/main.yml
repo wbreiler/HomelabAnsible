@@ -13,6 +13,9 @@ centralized_logging_tags: [logging, monitoring]
 
 centralized_logging_retention: "720h"
 centralized_logging_grafana_hostname: "graf-nash"
+# Reviewed IPv4 /32 sources for Alloy ingestion and Proxmox readiness checks.
+# Loopback and this logging guest's address are included automatically.
+centralized_logging_ingest_cidrs: []
 centralized_logging_loki_version: "3.7.8"
 centralized_logging_grafana_version: "13.2.4"
 centralized_logging_alloy_version: "1.21.2-1"

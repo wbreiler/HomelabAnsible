@@ -1,0 +1,14 @@
+---
+- name: Prepare service account and directories through trusted ancestors
+  ansible.builtin.command:
+    argv: >-
+      {{
+        (["pct", "exec", service_directory_vmid | string, "--"]
+         if service_directory_vmid is defined else []) +
+        ["/usr/bin/python3", "-c",
+         lookup('file', role_path + '/../../files/service-directories.py'),
+         service_directory_user, service_directory_home,
+         service_directories | to_json]
+      }}
+  register: service_directory_prepare
+  changed_when: service_directory_prepare.stdout | trim == 'changed'

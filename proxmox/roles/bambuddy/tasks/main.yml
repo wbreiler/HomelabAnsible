@@ -45,6 +45,16 @@
         lxc_nfs_export: ""
         lxc_nfs_mountpoint: ""
 
+    - name: Prepare Bambuddy account and application directory
+      ansible.builtin.include_tasks: ../../../tasks/service_directories.yml
+      vars:
+        service_directory_vmid: "{{ lxc_resolved_vmid }}"
+        service_directory_user: bambuddy
+        service_directory_home: "{{ bambuddy_install_dir }}"
+        service_directories:
+          - path: "{{ bambuddy_install_dir }}"
+            mode: "0755"
+
     - name: Read managed Bambuddy version
       ansible.builtin.command:
         argv:
@@ -52,11 +62,16 @@
           - exec
           - "{{ lxc_resolved_vmid }}"
           - --
+          - runuser
+          - -u
+          - bambuddy
+          - --
           - cat
           - "{{ bambuddy_install_dir }}/.ansible-version"
       register: bambuddy_managed_version
       changed_when: false
       failed_when: bambuddy_managed_version.rc not in [0, 1]
+      check_mode: false
 
     - name: Download pinned Bambuddy release
       ansible.builtin.get_url:
@@ -65,8 +80,9 @@
         checksum: "{{ bambuddy_release_checksum }}"
         mode: "0600"
       when: >-
-        bambuddy_managed_version.rc != 0 or
-        bambuddy_managed_version.stdout | trim != bambuddy_version
+        not ansible_check_mode and
+        (bambuddy_managed_version.rc != 0 or
+         bambuddy_managed_version.stdout | trim != bambuddy_version)
 
     - name: Push Bambuddy release into container
       ansible.builtin.command:
@@ -75,7 +91,7 @@
           - push
           - "{{ lxc_resolved_vmid }}"
           - "/tmp/bambuddy-{{ bambuddy_version }}-{{ lxc_resolved_vmid }}.tar.gz"
-          - "/tmp/bambuddy-release.tar.gz"
+          - /root/ansible-bambuddy-release.tar.gz
           - --perms
           - "0600"
       changed_when: true
@@ -92,55 +108,50 @@
           - --
           - bash
           - -ceu
-          - >-
-            id bambuddy >/dev/null 2>&1 || useradd --system --home-dir {{ bambuddy_install_dir }} --shell /usr/sbin/nologin bambuddy;
-            systemctl stop bambuddy 2>/dev/null || true;
-            install -d -o bambuddy -g bambuddy {{ bambuddy_install_dir }};
-            tar -xzf /tmp/bambuddy-release.tar.gz -C {{ bambuddy_install_dir }} --strip-components=1;
-            chown -R bambuddy:bambuddy {{ bambuddy_install_dir }};
-            runuser -u bambuddy -- python3 -m venv {{ bambuddy_install_dir }}/venv;
-            runuser -u bambuddy -- {{ bambuddy_install_dir }}/venv/bin/pip install --disable-pip-version-check -r {{ bambuddy_install_dir }}/requirements.txt;
-            cd {{ bambuddy_install_dir }}/frontend;
-            runuser -u bambuddy -- npm ci;
-            runuser -u bambuddy -- env NODE_OPTIONS=--max-old-space-size=3072 npm run build;
-            install -d -o bambuddy -g bambuddy {{ bambuddy_install_dir }}/data {{ bambuddy_install_dir }}/logs;
-            printf '%s\n' {{ bambuddy_version }} > {{ bambuddy_install_dir }}/.ansible-version;
-            chown bambuddy:bambuddy {{ bambuddy_install_dir }}/.ansible-version;
-            rm -f /tmp/bambuddy-release.tar.gz
+          - |
+            systemctl stop bambuddy 2>/dev/null || true
+            runuser -u bambuddy -- bash -ceu '
+              directory="$1"
+              version="$2"
+              tar -xzf - -C "$directory" --strip-components=1
+              python3 -m venv "$directory/venv"
+              "$directory/venv/bin/pip" install --disable-pip-version-check -r "$directory/requirements.txt"
+              cd "$directory/frontend"
+              npm ci
+              NODE_OPTIONS=--max-old-space-size=3072 npm run build
+              mkdir -p "$directory/data" "$directory/logs"
+              marker=$(mktemp "$directory/.version.XXXXXXXXXX")
+              trap '\''rm -f "$marker"'\'' EXIT
+              printf "%s\n" "$version" > "$marker"
+              chmod 0644 "$marker"
+              mv -Tf -- "$marker" "$directory/.ansible-version"
+            ' bambuddy-install "$1" "$2" < /root/ansible-bambuddy-release.tar.gz
+            rm -f /root/ansible-bambuddy-release.tar.gz
+          - bambuddy-install
+          - "{{ bambuddy_install_dir }}"
+          - "{{ bambuddy_version }}"
       changed_when: true
       when: >-
         bambuddy_managed_version.rc != 0 or
         bambuddy_managed_version.stdout | trim != bambuddy_version
 
-    - name: Render Bambuddy configuration artifacts on Proxmox host
+    - name: Render Bambuddy service on Proxmox host
       ansible.builtin.template:
-        src: "{{ item.src }}"
-        dest: "/tmp/{{ item.dest }}-{{ lxc_resolved_vmid }}"
+        src: bambuddy.service.j2
+        dest: "/tmp/bambuddy.service-{{ lxc_resolved_vmid }}"
         mode: "0600"
-      loop:
-        - src: bambuddy.env.j2
-          dest: bambuddy.env
-        - src: bambuddy.service.j2
-          dest: bambuddy.service
       register: bambuddy_config_render
 
-    - name: Push Bambuddy configuration artifacts into container # noqa: no-handler
+    - name: Push Bambuddy service into container # noqa: no-handler
       ansible.builtin.command:
         argv:
           - pct
           - push
           - "{{ lxc_resolved_vmid }}"
-          - "/tmp/{{ item.src }}-{{ lxc_resolved_vmid }}"
-          - "{{ item.dest }}"
+          - "/tmp/bambuddy.service-{{ lxc_resolved_vmid }}"
+          - /etc/systemd/system/bambuddy.service
           - --perms
-          - "{{ item.mode }}"
-      loop:
-        - src: bambuddy.env
-          dest: /tmp/bambuddy.env
-          mode: "0640"
-        - src: bambuddy.service
-          dest: /etc/systemd/system/bambuddy.service
-          mode: "0644"
+          - "0644"
       register: bambuddy_config_push
       changed_when: true
       when: bambuddy_config_render.changed
@@ -152,16 +163,24 @@
           - exec
           - "{{ lxc_resolved_vmid }}"
           - --
+          - runuser
+          - -u
+          - bambuddy
+          - --
           - bash
           - -ceu
-          - >-
-            if test ! -e {{ bambuddy_install_dir }}/.env; then
-            install -o bambuddy -g bambuddy -m 0640 /tmp/bambuddy.env {{ bambuddy_install_dir }}/.env;
-            echo created;
-            fi;
-            rm -f /tmp/bambuddy.env
+          - |
+            if test ! -e "$1/.env"; then
+              umask 027
+              cat > "$1/.env"
+              echo created
+            fi
+          - bambuddy-env
+          - "{{ bambuddy_install_dir }}"
+        stdin: "{{ lookup('template', 'bambuddy.env.j2') }}"
       register: bambuddy_env_init
       changed_when: bambuddy_env_init.stdout is search('created')
+      no_log: true
 
     - name: Enable and restart Bambuddy
       ansible.builtin.command:
@@ -194,6 +213,7 @@
       register: bambuddy_service_state
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Start Bambuddy if stopped
       ansible.builtin.command:
@@ -225,3 +245,4 @@
       delay: 5
       until: bambuddy_health.rc == 0
       changed_when: false
+      when: not ansible_check_mode

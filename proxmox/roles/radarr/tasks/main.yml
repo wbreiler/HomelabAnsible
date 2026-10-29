@@ -99,8 +99,8 @@
             config_file="$1"
             port="$2"
             key="$(sed -n 's:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p' "${config_file}")"
-            printf 'header = "X-Api-Key: %s"\n' "${key}" |
-              curl -fsS --config - \
+            printf 'X-Api-Key: %s\n' "${key}" |
+              curl -fsS --noproxy '*' --header @- \
                 "http://127.0.0.1:${port}/api/v3/system/status" |
               grep -o '"version": *"[^"]*"' | head -1 | grep -o '[0-9][0-9.]*'
           - radarr-version
@@ -110,11 +110,14 @@
       changed_when: false
       failed_when: false
       no_log: true
+      check_mode: false
 
     - name: Install pinned Radarr release
-      when: >-
-        radarr_installed_version.rc != 0 or
-        radarr_installed_version.stdout | trim != radarr_version
+      when:
+        - not ansible_check_mode
+        - >-
+          radarr_installed_version.rc != 0 or
+          radarr_installed_version.stdout | trim != radarr_version
       block:
         - name: Download pinned Radarr release
           ansible.builtin.get_url:
@@ -241,6 +244,7 @@
       register: radarr_legacy_updater
       changed_when: false
       failed_when: radarr_legacy_updater.rc not in [0, 1]
+      check_mode: false
 
     - name: Remove legacy remote updater
       ansible.builtin.command:
@@ -271,6 +275,7 @@
       register: radarr_service_current
       changed_when: false
       failed_when: radarr_service_current.rc not in [0, 1]
+      check_mode: false
 
     - name: Install Radarr service
       ansible.builtin.command:
@@ -328,6 +333,7 @@
       retries: 12
       delay: 5
       until: radarr_health.status == 200
+      when: not ansible_check_mode
 
     - name: Verify Radarr application version
       ansible.builtin.command:
@@ -343,8 +349,8 @@
             config_file="$1"
             port="$2"
             key="$(sed -n 's:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p' "${config_file}")"
-            printf 'header = "X-Api-Key: %s"\n' "${key}" |
-              curl -fsS --config - \
+            printf 'X-Api-Key: %s\n' "${key}" |
+              curl -fsS --noproxy '*' --header @- \
                 "http://127.0.0.1:${port}/api/v3/system/status" |
               grep -o '"version": *"[^"]*"' | head -1 | grep -o '[0-9][0-9.]*'
           - radarr-version
@@ -357,3 +363,4 @@
       delay: 5
       until: radarr_version_check.rc == 0
       failed_when: radarr_version_check.stdout | trim != radarr_version
+      when: not ansible_check_mode

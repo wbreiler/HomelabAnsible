@@ -425,6 +425,35 @@ generated Grafana password without printing it into Ansible logs:
 ssh root@10.10.30.3 'pct exec 127 -- cat /etc/grafana/admin-password'
 ```
 
+Loki HTTP listens only on `127.0.0.1:3101`. Its gRPC listener also uses
+loopback. Grafana queries that local HTTP listener. A dedicated Nginx
+configuration exposes port `3100` for `POST /loki/api/v1/push` and
+`GET /ready`. It rejects every other path and method. It does not start
+the Nginx default website or change other firewall rules.
+
+Before enabling the role, set `centralized_logging_ingest_cidrs` in the
+ignored local group variables. The default is empty and fails validation.
+List each collector's actual IPv4 source as a `/32`. Include both Proxmox
+hosts for collection and readiness checks. For example:
+
+```yaml
+centralized_logging_ingest_cidrs:
+  - "192.0.2.10/32"  # Replace with the first Proxmox source.
+  - "192.0.2.11/32"  # Replace with the second Proxmox source.
+  - "192.0.2.20/32"  # Replace with a guest collector source.
+```
+
+Use each host's route to the logging guest to confirm its source address.
+The role automatically permits loopback and the logging guest's own address.
+Update the list before deploying Alloy to a new guest or changing DHCP
+addresses. This list remains an explicit policy. Discovery does not expand it.
+
+This ingress prevents remote log queries. It does not authenticate ingestion.
+An allowed host can submit forged log records. SNAT also shares its allowed
+source identity with forwarded clients. This includes Tailscale clients when
+the allowed subnet router applies SNAT. Those clients still cannot query logs
+through port `3100`.
+
 Run the role again after a new LXC starts. The role discovers each running LXC
 and installs Alloy. Add an application log path in
 `roles/centralized_logging/templates/alloy.config.j2` and its read-access
@@ -455,9 +484,15 @@ rerun the role and update client hosts-file entries as needed.
 
 For a delivery check, emit the same unique marker with `logger -t
 homelab-logging-check MARKER` on each included host. Then run
-`python3 roles/centralized_logging/files/verify_logging.py
-http://10.10.40.193:3100 MARKER HOST...`. The check requires every expected
-host and rejects labels outside `host`, `job`, and `unit`.
+the verification script inside `loki-nash` through SSH:
+
+```bash
+python3 /root/verify_logging.py http://127.0.0.1:3101 MARKER HOST...
+```
+
+Copy `roles/centralized_logging/files/verify_logging.py` there first. The check
+requires every expected host and rejects labels outside `host`, `job`, and
+`unit`. Direct network queries through port `3100` are refused.
 
 For an isolated retention check, copy
 `roles/centralized_logging/files/verify_retention.py` into `loki-nash` and

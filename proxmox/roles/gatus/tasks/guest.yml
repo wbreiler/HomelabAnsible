@@ -13,20 +13,28 @@
     update_cache: true
     cache_valid_time: 3600
 
-- name: Check managed Gatus version file
-  ansible.builtin.stat:
-    path: "{{ gatus_install_dir }}/.ansible-version"
-  register: gatus_ssh_version_stat
+- name: Prepare Gatus account and application directories
+  ansible.builtin.include_tasks: ../../../tasks/service_directories.yml
+  vars:
+    service_directory_user: gatus
+    service_directory_home: "{{ gatus_install_dir }}"
+    service_directories:
+      - path: "{{ gatus_install_dir }}"
+        mode: "0750"
+      - path: "{{ gatus_data_dir }}"
+        mode: "0750"
 
 - name: Read managed Gatus version
-  ansible.builtin.slurp:
-    src: "{{ gatus_install_dir }}/.ansible-version"
+  ansible.builtin.command:
+    argv: [runuser, -u, gatus, --, cat, "{{ gatus_install_dir }}/.ansible-version"]
   register: gatus_ssh_version_file
-  when: gatus_ssh_version_stat.stat.exists
+  changed_when: false
+  failed_when: gatus_ssh_version_file.rc not in [0, 1]
+  check_mode: false
 
 - name: Resolve managed Gatus version
   ansible.builtin.set_fact:
-    gatus_ssh_installed_version: "{{ gatus_ssh_version_file.content | default('') | b64decode | trim }}"
+    gatus_ssh_installed_version: "{{ gatus_ssh_version_file.stdout | trim }}"
 
 - name: Report required Gatus build
   ansible.builtin.debug:
@@ -34,27 +42,8 @@
   when: gatus_ssh_installed_version != gatus_version
 
 - name: Configure Gatus software on the guest
-  when: not ansible_check_mode or gatus_ssh_version_stat.stat.exists
+  when: not ansible_check_mode or gatus_ssh_version_file.rc == 0
   block:
-    - name: Create Gatus system account
-      ansible.builtin.user:
-        name: gatus
-        system: true
-        home: "{{ gatus_install_dir }}"
-        shell: /usr/sbin/nologin
-        create_home: false
-
-    - name: Create Gatus application directories
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        owner: gatus
-        group: gatus
-        mode: "0750"
-      loop:
-        - "{{ gatus_install_dir }}"
-        - "{{ gatus_data_dir }}"
-
     - name: Build pinned Gatus on the guest
       when: not ansible_check_mode and gatus_ssh_installed_version != gatus_version
       block:
@@ -122,22 +111,43 @@
               changed_when: true
 
             - name: Install Gatus binary atomically
-              ansible.builtin.copy:
-                src: "{{ gatus_ssh_build.path }}/gatus"
-                dest: "{{ gatus_install_dir }}/gatus"
-                remote_src: true
-                owner: gatus
-                group: gatus
-                mode: "0755"
+              ansible.builtin.command:
+                argv:
+                  - bash
+                  - -ceu
+                  - |
+                    runuser -u gatus -- bash -ceu '
+                      temporary=$(mktemp "$1/.gatus.XXXXXXXXXX")
+                      trap '\''rm -f "$temporary"'\'' EXIT
+                      cat > "$temporary"
+                      chmod 0755 "$temporary"
+                      mv -Tf -- "$temporary" "$1/gatus"
+                    ' gatus-binary "$2" < "$1"
+                  - gatus-binary
+                  - "{{ gatus_ssh_build.path }}/gatus"
+                  - "{{ gatus_install_dir }}"
+              changed_when: true
               notify: Restart Gatus
 
             - name: Record installed Gatus version
-              ansible.builtin.copy:
-                content: "{{ gatus_version }}\n"
-                dest: "{{ gatus_install_dir }}/.ansible-version"
-                owner: root
-                group: root
-                mode: "0644"
+              ansible.builtin.command:
+                argv:
+                  - runuser
+                  - -u
+                  - gatus
+                  - --
+                  - bash
+                  - -ceu
+                  - |
+                    temporary=$(mktemp "$1/.version.XXXXXXXXXX")
+                    trap 'rm -f "$temporary"' EXIT
+                    printf '%s\n' "$2" > "$temporary"
+                    chmod 0644 "$temporary"
+                    mv -Tf -- "$temporary" "$1/.ansible-version"
+                  - gatus-version
+                  - "{{ gatus_install_dir }}"
+                  - "{{ gatus_version }}"
+              changed_when: true
           always:
             - name: Remove private Gatus build directory
               ansible.builtin.file:
@@ -145,12 +155,34 @@
                 state: absent
 
     - name: Install Gatus configuration
-      ansible.builtin.template:
-        src: config.yaml.j2
-        dest: "{{ gatus_install_dir }}/config.yaml"
-        owner: gatus
-        group: gatus
-        mode: "0600"
+      ansible.builtin.command:
+        argv:
+          - runuser
+          - -u
+          - gatus
+          - --
+          - bash
+          - -ceu
+          - |
+            temporary=$(mktemp "$1/.config.XXXXXXXXXX")
+            trap 'rm -f "$temporary"' EXIT
+            cat > "$temporary"
+            chmod 0600 "$temporary"
+            if test ! -L "$1/config.yaml" && cmp -s "$temporary" "$1/config.yaml"; then
+              if test "$(stat -c %a -- "$1/config.yaml")" != 600; then
+                chmod 0600 -- "$1/config.yaml"
+                echo changed
+              fi
+            else
+              mv -Tf -- "$temporary" "$1/config.yaml"
+              echo changed
+            fi
+          - gatus-config
+          - "{{ gatus_install_dir }}"
+        stdin: "{{ lookup('template', 'config.yaml.j2') }}"
+        stdin_add_newline: false
+      register: gatus_ssh_config
+      changed_when: gatus_ssh_config.stdout | trim == 'changed'
       no_log: true
       notify: Restart Gatus
 

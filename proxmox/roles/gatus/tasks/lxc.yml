@@ -24,10 +24,23 @@
         lxc_packages:
           - ca-certificates
           - curl
+          - python3
           - tar
         lxc_nfs_server: ""
         lxc_nfs_export: ""
         lxc_nfs_mountpoint: ""
+
+    - name: Prepare Gatus account and application directories
+      ansible.builtin.include_tasks: ../../../tasks/service_directories.yml
+      vars:
+        service_directory_vmid: "{{ lxc_resolved_vmid }}"
+        service_directory_user: gatus
+        service_directory_home: "{{ gatus_install_dir }}"
+        service_directories:
+          - path: "{{ gatus_install_dir }}"
+            mode: "0755"
+          - path: "{{ gatus_data_dir }}"
+            mode: "0750"
 
     - name: Read managed Gatus version
       ansible.builtin.command:
@@ -36,16 +49,23 @@
           - exec
           - "{{ lxc_resolved_vmid }}"
           - --
+          - runuser
+          - -u
+          - gatus
+          - --
           - cat
           - "{{ gatus_install_dir }}/.ansible-version"
       register: gatus_managed_version
       changed_when: false
       failed_when: gatus_managed_version.rc not in [0, 1]
+      check_mode: false
 
     - name: Build and install pinned Gatus release
-      when: >-
-        gatus_managed_version.rc != 0 or
-        gatus_managed_version.stdout | trim != gatus_version
+      when:
+        - not ansible_check_mode
+        - >-
+          gatus_managed_version.rc != 0 or
+          gatus_managed_version.stdout | trim != gatus_version
       block:
         - name: Download pinned Go toolchain
           ansible.builtin.get_url:
@@ -68,7 +88,7 @@
               - push
               - "{{ lxc_resolved_vmid }}"
               - "/tmp/go-{{ gatus_go_version }}-{{ lxc_resolved_vmid }}.tar.gz"
-              - "/tmp/go-toolchain.tar.gz"
+              - /root/ansible-gatus-toolchain.tar.gz
               - --perms
               - "0600"
           changed_when: true
@@ -80,7 +100,7 @@
               - push
               - "{{ lxc_resolved_vmid }}"
               - "/tmp/gatus-src-{{ gatus_version }}-{{ lxc_resolved_vmid }}.tar.gz"
-              - "/tmp/gatus-src.tar.gz"
+              - /root/ansible-gatus-source.tar.gz
               - --perms
               - "0600"
           changed_when: true
@@ -94,20 +114,22 @@
               - --
               - bash
               - -ceu
-              - >-
-                rm -rf /tmp/go-build && mkdir -p /tmp/go-build/src /tmp/go-build/toolchain;
-                tar -xzf /tmp/go-toolchain.tar.gz -C /tmp/go-build/toolchain;
-                tar -xzf /tmp/gatus-src.tar.gz -C /tmp/go-build/src --strip-components=1;
-                cd /tmp/go-build/src;
-                PATH=/tmp/go-build/toolchain/go/bin:$PATH
-                GOTOOLCHAIN=local
-                GOCACHE=/tmp/go-build/cache
-                GOMODCACHE=/tmp/go-build/modcache
-                CGO_ENABLED=0
-                go build -o /tmp/go-build/gatus .;
-                test -x /tmp/go-build/gatus;
-                install -m 0755 /tmp/go-build/gatus /tmp/gatus-built;
-                rm -rf /tmp/go-build /tmp/go-toolchain.tar.gz /tmp/gatus-src.tar.gz
+              - |
+                build=$(mktemp -d /var/tmp/gatus-build.XXXXXXXXXX)
+                trap 'rm -rf "$build" /root/ansible-gatus-toolchain.tar.gz /root/ansible-gatus-source.tar.gz' EXIT
+                mkdir "$build/src" "$build/toolchain" "$build/tmp"
+                tar -xzf /root/ansible-gatus-toolchain.tar.gz -C "$build/toolchain"
+                tar -xzf /root/ansible-gatus-source.tar.gz -C "$build/src" --strip-components=1
+                cd "$build/src"
+                export PATH="$build/toolchain/go/bin:$PATH"
+                export GOTOOLCHAIN=local
+                export GOCACHE="$build/cache"
+                export GOMODCACHE="$build/modcache"
+                export TMPDIR="$build/tmp"
+                export CGO_ENABLED=0
+                go build -o "$build/gatus" .
+                test -x "$build/gatus"
+                install -m 0755 "$build/gatus" /root/ansible-gatus-built
           changed_when: true
 
         - name: Remove Gatus source/toolchain archives from Proxmox host
@@ -118,20 +140,6 @@
             - "/tmp/go-{{ gatus_go_version }}-{{ lxc_resolved_vmid }}.tar.gz"
             - "/tmp/gatus-src-{{ gatus_version }}-{{ lxc_resolved_vmid }}.tar.gz"
 
-        - name: Ensure gatus system user exists
-          ansible.builtin.command:
-            argv:
-              - pct
-              - exec
-              - "{{ lxc_resolved_vmid }}"
-              - --
-              - bash
-              - -ceu
-              - >-
-                id gatus >/dev/null 2>&1 ||
-                useradd --system --home-dir {{ gatus_install_dir }} --shell /usr/sbin/nologin gatus
-          changed_when: true
-
         - name: Install Gatus binary
           ansible.builtin.command:
             argv:
@@ -141,31 +149,24 @@
               - --
               - bash
               - -ceu
-              - >-
-                systemctl stop gatus 2>/dev/null || true;
-                install -d -o gatus -g gatus {{ gatus_install_dir }};
-                install -o gatus -g gatus -m 0755 /tmp/gatus-built {{ gatus_install_dir }}/gatus;
-                rm -f /tmp/gatus-built;
-                printf '%s\n' {{ gatus_version }} > {{ gatus_install_dir }}/.ansible-version
+              - |
+                systemctl stop gatus 2>/dev/null || true
+                runuser -u gatus -- bash -ceu '
+                  binary=$(mktemp "$1/.gatus.XXXXXXXXXX")
+                  marker=$(mktemp "$1/.version.XXXXXXXXXX")
+                  trap '\''rm -f "$binary" "$marker"'\'' EXIT
+                  cat > "$binary"
+                  chmod 0755 "$binary"
+                  mv -Tf -- "$binary" "$1/gatus"
+                  printf "%s\n" "$2" > "$marker"
+                  chmod 0644 "$marker"
+                  mv -Tf -- "$marker" "$1/.ansible-version"
+                ' gatus-install "$1" "$2" < /root/ansible-gatus-built
+                rm -f /root/ansible-gatus-built
+              - gatus-install
+              - "{{ gatus_install_dir }}"
+              - "{{ gatus_version }}"
           changed_when: true
-
-    - name: Create Gatus data directory
-      ansible.builtin.command:
-        argv:
-          - pct
-          - exec
-          - "{{ lxc_resolved_vmid }}"
-          - --
-          - install
-          - -d
-          - -o
-          - gatus
-          - -g
-          - gatus
-          - -m
-          - "0750"
-          - "{{ gatus_data_dir }}"
-      changed_when: true
 
     - name: Build list of managed application health endpoints
       ansible.builtin.set_fact:
@@ -210,6 +211,7 @@
     - name: Render Gatus configuration
       ansible.builtin.set_fact:
         gatus_config: "{{ lookup('template', 'config.yaml.j2') }}"
+      no_log: true
 
     - name: Read installed Gatus configuration
       ansible.builtin.command:
@@ -218,12 +220,17 @@
           - exec
           - "{{ lxc_resolved_vmid }}"
           - --
+          - runuser
+          - -u
+          - gatus
+          - --
           - cat
           - "{{ gatus_install_dir }}/config.yaml"
       register: gatus_config_current
       changed_when: false
       failed_when: gatus_config_current.rc not in [0, 1]
       no_log: true
+      check_mode: false
 
     - name: Install Gatus configuration
       ansible.builtin.command:
@@ -232,8 +239,20 @@
           - exec
           - "{{ lxc_resolved_vmid }}"
           - --
-          - tee
-          - "{{ gatus_install_dir }}/config.yaml"
+          - runuser
+          - -u
+          - gatus
+          - --
+          - bash
+          - -ceu
+          - |
+            temporary=$(mktemp "$1/.config.XXXXXXXXXX")
+            trap 'rm -f "$temporary"' EXIT
+            cat > "$temporary"
+            chmod 0600 "$temporary"
+            mv -Tf -- "$temporary" "$1/config.yaml"
+          - gatus-config
+          - "{{ gatus_install_dir }}"
         stdin: "{{ gatus_config }}"
         stdin_add_newline: false
       when: >-
@@ -243,17 +262,28 @@
       notify: Restart Gatus
       no_log: true
 
-    - name: Fix Gatus configuration ownership
+    - name: Restrict Gatus configuration permissions
       ansible.builtin.command:
         argv:
           - pct
           - exec
           - "{{ lxc_resolved_vmid }}"
           - --
-          - chown
-          - gatus:gatus
+          - runuser
+          - -u
+          - gatus
+          - --
+          - bash
+          - -ceu
+          - |
+            if test "$(stat -c %a -- "$1")" != 600; then
+              chmod 0600 -- "$1"
+              echo changed
+            fi
+          - gatus-config-mode
           - "{{ gatus_install_dir }}/config.yaml"
-      changed_when: true
+      register: gatus_config_mode
+      changed_when: gatus_config_mode.stdout | trim == 'changed'
 
     - name: Render Gatus service
       ansible.builtin.set_fact:
@@ -271,6 +301,7 @@
       register: gatus_service_current
       changed_when: false
       failed_when: gatus_service_current.rc not in [0, 1]
+      check_mode: false
 
     - name: Install Gatus service
       ansible.builtin.command:
@@ -336,3 +367,4 @@
       delay: 5
       until: gatus_health.rc == 0
       changed_when: false
+      when: not ansible_check_mode

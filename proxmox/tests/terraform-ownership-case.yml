@@ -4,6 +4,7 @@
     dest: "{{ ownership_test_directory.path }}/commands.log"
     content: ""
     mode: '0600'
+  check_mode: false
 
 - name: Reject an absent or stopped guest before application configuration
   environment:
