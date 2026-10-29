@@ -15,6 +15,25 @@ LOG_FILE="${LOG_FILE:-/var/log/minecraft-update.log}"
 MODRINTH_API="https://api.modrinth.com/v2"
 CF_API="https://api.curseforge.com/v1"
 UA="MinecraftLXCAnsible/1.0 (will.breiler@gmail.com)"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PACK_ARCHIVE_HELPER="${SCRIPT_DIR}/pack_archive.py"
+
+as_minecraft() { runuser -u minecraft -- "$@"; }
+curl_https() { curl -q --proto '=https' --proto-redir '=https' -fsSL "$@"; }
+minecraft_curl_https() { as_minecraft curl -q --proto '=https' --proto-redir '=https' -fsSL "$@"; }
+
+curl_config_escape() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//$'\n'/\\n}"
+    value="${value//$'\r'/\\r}"
+    printf '%s' "$value"
+}
+
+extract_pack() {
+    as_minecraft python3 "$PACK_ARCHIVE_HELPER" extract "$@"
+}
 
 usage() {
     echo "Usage: $0 [--config <path>] [--dry-run] [--no-wait]" >&2
@@ -67,10 +86,9 @@ discord_notify() {
     fi
     local payload
     payload=$(jq -nc --arg content "$message" '{"content": $content}')
-    curl -fsSL \
+    printf 'url = "%s"\n' "$(curl_config_escape "$DISCORD_WEBHOOK_URL")" | curl_https --config - \
         -H "Content-Type: application/json" \
         -d "$payload" \
-        "$DISCORD_WEBHOOK_URL" \
         || log "WARN: Discord notification failed (non-fatal)."
 }
 
@@ -99,12 +117,11 @@ on_error() {
                 || log "ERROR: Failed to stop ${SERVICE} before rollback."
         fi
         log "Rolling back mod directory after failed update..."
-        rm -rf "$MODS_DIR"
-        if [[ -n "$BACKUP_DIR" && -d "$BACKUP_DIR" ]]; then
-            mv "$BACKUP_DIR" "$MODS_DIR"
+        as_minecraft rm -rf -- "$MODS_DIR"
+        if [[ -n "$BACKUP_DIR" ]] && as_minecraft test -d "$BACKUP_DIR"; then
+            as_minecraft mv -T -- "$BACKUP_DIR" "$MODS_DIR"
         else
-            mkdir -p "$MODS_DIR"
-            chown minecraft:minecraft "$MODS_DIR"
+            as_minecraft mkdir -p -- "$MODS_DIR"
         fi
     fi
     if [[ "$SERVICE_WAS_RUNNING" == true && -n "$SERVICE" ]]; then
@@ -129,6 +146,7 @@ fi
 
 # shellcheck source=/dev/null
 source "$CONFIG_FILE"
+export -n CURSEFORGE_API_KEY DISCORD_WEBHOOK_URL
 
 PACK_SOURCE="${PACK_SOURCE:-modrinth}"
 MINECRAFT_DIR="${MINECRAFT_DIR:-/opt/minecraft}"
@@ -150,11 +168,10 @@ SERVICE="minecraft@${INSTANCE_NAME}.service"
 
 record_running_version() {
     local version_id="$1"
-    RUNNING_VERSION_TMP=$(mktemp "${MINECRAFT_DIR}/.running_version.XXXXXX")
-    printf '%s\n' "$version_id" > "$RUNNING_VERSION_TMP"
-    chown minecraft:minecraft "$RUNNING_VERSION_TMP"
-    chmod 0644 "$RUNNING_VERSION_TMP"
-    mv "$RUNNING_VERSION_TMP" "$RUNNING_VERSION_FILE"
+    RUNNING_VERSION_TMP=$(as_minecraft mktemp "${MINECRAFT_DIR}/.running_version.XXXXXX")
+    printf '%s\n' "$version_id" | as_minecraft tee "$RUNNING_VERSION_TMP" >/dev/null
+    as_minecraft chmod 0644 "$RUNNING_VERSION_TMP"
+    as_minecraft mv -T -- "$RUNNING_VERSION_TMP" "$RUNNING_VERSION_FILE"
     RUNNING_VERSION_TMP=""
 }
 
@@ -217,11 +234,10 @@ cf_loader_id() {
 }
 
 cf_get() {
-    curl -fsSL \
-        -H "x-api-key: ${CURSEFORGE_API_KEY}" \
+    printf 'header = "x-api-key: %s"\n' "$(curl_config_escape "$CURSEFORGE_API_KEY")" | curl_https --config - \
         -H "Accept: application/json" \
         -H "User-Agent: ${UA}" \
-        "${CF_API}${1}"
+        -- "${CF_API}${1}"
 }
 
 # Installs the Forge/NeoForge server loader (run.sh, run.bat, libraries/) from
@@ -235,13 +251,14 @@ install_loader_version() {
         installer_url="https://maven.neoforged.net/releases/net/neoforged/neoforge/${loader_version}/neoforge-${loader_version}-installer.jar"
     fi
     log "Installing ${LOADER} ${loader_version} server..."
-    installer_jar=$(mktemp --suffix='.jar')
-    curl -fsSL -H "User-Agent: ${UA}" -o "$installer_jar" "$installer_url"
-    (cd "$MINECRAFT_DIR" && java -jar "$installer_jar" --installServer)
+    installer_jar=$(mktemp --suffix='.jar' "${ROOT_STAGE}/loader.XXXXXX")
+    curl_https -H "User-Agent: ${UA}" -o "$installer_jar" -- "$installer_url"
+    chgrp minecraft "$installer_jar"
+    chmod 0640 "$installer_jar"
+    as_minecraft bash -c 'cd "$1" && exec java -jar "$2" --installServer' _ "$MINECRAFT_DIR" "$installer_jar"
     rm -f "$installer_jar"
-    chown -R minecraft:minecraft "$MINECRAFT_DIR"
-    if [[ -f "${MINECRAFT_DIR}/run.sh" ]]; then
-        chmod +x "${MINECRAFT_DIR}/run.sh"
+    if as_minecraft test -f "${MINECRAFT_DIR}/run.sh"; then
+        as_minecraft chmod +x "${MINECRAFT_DIR}/run.sh"
         log "${LOADER} ${loader_version} server installed."
     else
         log "ERROR: ${LOADER} installer ran but run.sh was not produced."
@@ -254,20 +271,26 @@ install_loader_version() {
 # fallback when a CurseForge server pack doesn't bundle the loader itself.
 lookup_loader_version_via_modrinth() {
     local slug="$1" version_json download_url mrpack index_tmp result
-    version_json=$(curl -fsSL -H "User-Agent: ${UA}" \
-        "${MODRINTH_API}/project/${slug}/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22${LOADER,,}%22%5D" \
+    version_json=$(curl_https -H "User-Agent: ${UA}" \
+        -- "${MODRINTH_API}/project/${slug}/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22${LOADER,,}%22%5D" \
         | jq -r '[.[] | select(.version_type == "release")] | sort_by(.date_published) | reverse | .[0] | (.files[] | select(.primary == true) | .url) // empty')
     if [[ -z "$version_json" ]]; then
         return 1
     fi
     download_url="$version_json"
-    mrpack=$(mktemp --suffix='.mrpack.zip')
-    index_tmp=$(mktemp -d --tmpdir mc-loaderlookup-XXXXXX)
-    curl -fsSL -H "User-Agent: ${UA}" -o "$mrpack" "$download_url" || { rm -f "$mrpack"; rm -rf "$index_tmp"; return 1; }
-    unzip -o "$mrpack" "modrinth.index.json" -d "$index_tmp" >/dev/null 2>&1 || true
-    result=$(jq -r --arg l "${LOADER,,}" '.dependencies[$l] // empty' "${index_tmp}/modrinth.index.json" 2>/dev/null)
+    mrpack=$(mktemp --suffix='.mrpack.zip' "${ROOT_STAGE}/lookup.XXXXXX")
+    index_tmp=$(as_minecraft mktemp -d --tmpdir mc-loaderlookup-XXXXXX)
+    curl_https -H "User-Agent: ${UA}" -o "$mrpack" -- "$download_url" || { rm -f "$mrpack"; as_minecraft rm -rf -- "$index_tmp"; return 1; }
+    chgrp minecraft "$mrpack"
+    chmod 0640 "$mrpack"
+    if ! extract_pack "$mrpack" "$index_tmp" "modrinth.index.json" >/dev/null; then
+        rm -f "$mrpack"
+        as_minecraft rm -rf -- "$index_tmp"
+        return 1
+    fi
+    result=$(as_minecraft jq -r --arg l "${LOADER,,}" '.dependencies[$l] // empty' "${index_tmp}/modrinth.index.json" 2>/dev/null)
     rm -f "$mrpack"
-    rm -rf "$index_tmp"
+    as_minecraft rm -rf -- "$index_tmp"
     [[ -n "$result" ]] || return 1
     echo "$result"
 }
@@ -285,9 +308,9 @@ CF_SERVER_PACK_ID=""
 if [[ "$PACK_SOURCE" == "modrinth" ]]; then
 
     log "Querying Modrinth API for ${MODPACK_SLUG}..."
-    VERSIONS_JSON=$(curl -fsSL \
+    VERSIONS_JSON=$(curl_https \
         -H "User-Agent: ${UA}" \
-        "${MODRINTH_API}/project/${MODPACK_SLUG}/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22${LOADER}%22%5D")
+        -- "${MODRINTH_API}/project/${MODPACK_SLUG}/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22${LOADER}%22%5D")
 
     LATEST_VERSION=$(echo "$VERSIONS_JSON" | jq -r '
         [.[] | select(.version_type == "release")]
@@ -364,9 +387,9 @@ declare -A EXTRA_MOD_VERSIONS
 EXTRA_MOD_COUNT=0
 EXTRA_MODS_SIG=""
 for _slug in ${EXTRA_MODRINTH_MODS:-}; do
-    _extra_version_id=$(curl -fsSL \
+    _extra_version_id=$(curl_https \
         -H "User-Agent: ${UA}" \
-        "${MODRINTH_API}/project/${_slug}/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22${LOADER}%22%5D" \
+        -- "${MODRINTH_API}/project/${_slug}/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22${LOADER}%22%5D" \
         | jq -r '[.[] | select(.version_type == "release")] | sort_by(.date_published) | reverse | .[0].id // empty')
     if [[ -z "$_extra_version_id" ]]; then
         log "ERROR: No stable release found for extra mod '${_slug}' on MC ${MC_VERSION} / ${LOADER}."
@@ -384,16 +407,16 @@ EXTRA_MODS_SIG="${EXTRA_MODS_SIG% }"
 ###############################################################################
 
 CURRENT_ID="(none)"
-[[ -f "$CURRENT_VERSION_FILE" ]] && CURRENT_ID=$(cat "$CURRENT_VERSION_FILE")
+as_minecraft test -f "$CURRENT_VERSION_FILE" && CURRENT_ID=$(as_minecraft cat -- "$CURRENT_VERSION_FILE")
 
 CURRENT_EXCLUDES=""
-[[ -f "$CURRENT_EXCLUDES_FILE" ]] && CURRENT_EXCLUDES=$(cat "$CURRENT_EXCLUDES_FILE")
+as_minecraft test -f "$CURRENT_EXCLUDES_FILE" && CURRENT_EXCLUDES=$(as_minecraft cat -- "$CURRENT_EXCLUDES_FILE")
 
 CURRENT_EXTRA_MODS=""
-[[ -f "$CURRENT_EXTRA_MODS_FILE" ]] && CURRENT_EXTRA_MODS=$(cat "$CURRENT_EXTRA_MODS_FILE")
+as_minecraft test -f "$CURRENT_EXTRA_MODS_FILE" && CURRENT_EXTRA_MODS=$(as_minecraft cat -- "$CURRENT_EXTRA_MODS_FILE")
 
 RUNNING_ID="(unknown)"
-[[ -f "$RUNNING_VERSION_FILE" ]] && RUNNING_ID=$(cat "$RUNNING_VERSION_FILE")
+as_minecraft test -f "$RUNNING_VERSION_FILE" && RUNNING_ID=$(as_minecraft cat -- "$RUNNING_VERSION_FILE")
 
 log "Installed: ${CURRENT_ID}"
 
@@ -444,72 +467,75 @@ fi
 
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 BACKUP_DIR="${MINECRAFT_DIR}/mods.bak.${TIMESTAMP}"
-MODS_STAGE=$(mktemp -d "${MINECRAFT_DIR}/.mods.stage.XXXXXX")
+MODS_STAGE=$(as_minecraft mktemp -d "${MINECRAFT_DIR}/.mods.stage.XXXXXX")
 log "Building new mod directory in ${MODS_STAGE}."
 
 ###############################################################################
 # Download pack
 ###############################################################################
 
-PACK_FILE="$(mktemp --suffix='.zip')"
+ROOT_STAGE=$(mktemp -d /var/tmp/minecraft-update.XXXXXX)
+chgrp minecraft "$ROOT_STAGE"
+chmod 0750 "$ROOT_STAGE"
+PACK_FILE="${ROOT_STAGE}/pack.zip"
 EXTRACT_TMP=""
 INFRA_TMP=""
 VERSION_TMP=""
 EXCLUDES_TMP=""
 
 cleanup() {
-    rm -f "$PACK_FILE"
-    [[ -n "${VERSION_TMP:-}" ]] && rm -f "$VERSION_TMP"
-    [[ -n "${EXCLUDES_TMP:-}" ]] && rm -f "$EXCLUDES_TMP"
-    [[ -n "${EXTRA_MODS_TMP:-}" ]] && rm -f "$EXTRA_MODS_TMP"
-    [[ -n "${RUNNING_VERSION_TMP:-}" ]] && rm -f "$RUNNING_VERSION_TMP"
-    if [[ -n "${MODS_STAGE:-}" && -d "$MODS_STAGE" ]]; then
-        rm -rf "$MODS_STAGE"
+    rm -rf -- "$ROOT_STAGE"
+    [[ -n "${VERSION_TMP:-}" ]] && as_minecraft rm -f -- "$VERSION_TMP"
+    [[ -n "${EXCLUDES_TMP:-}" ]] && as_minecraft rm -f -- "$EXCLUDES_TMP"
+    [[ -n "${EXTRA_MODS_TMP:-}" ]] && as_minecraft rm -f -- "$EXTRA_MODS_TMP"
+    [[ -n "${RUNNING_VERSION_TMP:-}" ]] && as_minecraft rm -f -- "$RUNNING_VERSION_TMP"
+    if [[ -n "${MODS_STAGE:-}" ]] && as_minecraft test -d "$MODS_STAGE"; then
+        as_minecraft rm -rf -- "$MODS_STAGE"
     fi
     if [[ -n "${EXTRACT_TMP:-}" ]]; then
-        rm -rf "$EXTRACT_TMP"
+        as_minecraft rm -rf -- "$EXTRACT_TMP"
     fi
     if [[ -n "${INFRA_TMP:-}" ]]; then
-        rm -rf "$INFRA_TMP"
+        as_minecraft rm -rf -- "$INFRA_TMP"
     fi
 }
 trap 'cleanup' EXIT
 
 log "Downloading: ${DOWNLOAD_URL}"
 if [[ "$PACK_SOURCE" == "curseforge" ]]; then
-    curl -fsSL \
+    printf 'header = "x-api-key: %s"\n' "$(curl_config_escape "$CURSEFORGE_API_KEY")" | curl_https --config - \
         -H "User-Agent: ${UA}" \
-        -H "x-api-key: ${CURSEFORGE_API_KEY}" \
         -o "$PACK_FILE" \
-        "$DOWNLOAD_URL"
+        -- "$DOWNLOAD_URL"
 else
-    curl -fsSL \
+    curl_https \
         -H "User-Agent: ${UA}" \
         -o "$PACK_FILE" \
-        "$DOWNLOAD_URL"
+        -- "$DOWNLOAD_URL"
 fi
+chgrp minecraft "$PACK_FILE"
+chmod 0640 "$PACK_FILE"
 log "Download complete. $(du -h "$PACK_FILE" | cut -f1) (${DOWNLOAD_URL##*/})"
 
 ###############################################################################
 # Extract mods
 ###############################################################################
 
-EXTRACT_TMP=$(mktemp -d --tmpdir mc-pack-XXXXXX)
+EXTRACT_TMP=$(as_minecraft mktemp -d --tmpdir mc-pack-XXXXXX)
 
 if [[ "$PACK_SOURCE" == "modrinth" ]]; then
 
     # Extract bundled overrides (mods that ship directly in the mrpack)
-    unzip -o "$PACK_FILE" "overrides/mods/*" -d "$EXTRACT_TMP" 2>/dev/null || true
-    if [[ -d "${EXTRACT_TMP}/overrides/mods" ]]; then
-        cp -a "${EXTRACT_TMP}/overrides/mods/." "$MODS_STAGE/"
+    extract_pack "$PACK_FILE" "$EXTRACT_TMP" "overrides/mods/*" "modrinth.index.json"
+    if as_minecraft test -d "${EXTRACT_TMP}/overrides/mods"; then
+        as_minecraft cp -a -- "${EXTRACT_TMP}/overrides/mods/." "$MODS_STAGE/"
         log "Mods extracted from mrpack overrides/mods/."
     fi
 
     # Download mods listed in modrinth.index.json (the majority of mods in most packs)
-    unzip -o "$PACK_FILE" "modrinth.index.json" -d "$EXTRACT_TMP" 2>/dev/null || true
     INDEX="${EXTRACT_TMP}/modrinth.index.json"
-    if [[ -f "$INDEX" ]]; then
-        SERVER_MODS=$(jq -c '[.files[] | select((.env.server // "required") != "unsupported")] | .[]' "$INDEX")
+    if as_minecraft test -f "$INDEX"; then
+        SERVER_MODS=$(as_minecraft jq -c '[.files[] | select((.env.server // "required") != "unsupported")] | .[]' "$INDEX")
         MOD_COUNT=$(echo "$SERVER_MODS" | grep -c '^' || true)
         log "Downloading ${MOD_COUNT} server-side mods from Modrinth index..."
         FAILED_MODS=0
@@ -521,12 +547,12 @@ if [[ "$PACK_SOURCE" == "modrinth" ]]; then
             filename=$(echo "$mod_entry" | jq -r '.path | split("/") | last')
             required=$(echo "$mod_entry" | jq -r '(.env.server // "required") == "required"')
             log "[${MOD_NUM}/${MOD_COUNT}] ${filename}"
-            curl -fsSL \
+            minecraft_curl_https \
                 -H "User-Agent: ${UA}" \
                 -o "${MODS_STAGE}/${filename}" \
-                "$mod_url" \
+                -- "$mod_url" \
             || {
-                rm -f "${MODS_STAGE}/${filename}"
+                as_minecraft rm -f -- "${MODS_STAGE}/${filename}"
                 if [[ "$required" == "true" ]]; then
                     log "ERROR: Required mod ${filename} failed to download."
                     FAILED_MODS=$(( FAILED_MODS + 1 ))
@@ -547,12 +573,12 @@ if [[ "$PACK_SOURCE" == "modrinth" ]]; then
     # first install. Modrinth mrpacks only ship mods — unlike a CurseForge server
     # pack, they never bundle the loader itself. modrinth.index.json declares the
     # exact loader version to install under .dependencies.forge / .dependencies.neoforge.
-    if [[ "${LOADER,,}" == "forge" || "${LOADER,,}" == "neoforge" ]] && [[ ! -f "${MINECRAFT_DIR}/run.sh" ]]; then
-        if [[ ! -f "$INDEX" ]]; then
+    if [[ "${LOADER,,}" == "forge" || "${LOADER,,}" == "neoforge" ]] && ! as_minecraft test -f "${MINECRAFT_DIR}/run.sh"; then
+        if ! as_minecraft test -f "$INDEX"; then
             log "ERROR: modrinth.index.json missing; cannot determine ${LOADER} version to install."
             exit 1
         fi
-        LOADER_VERSION=$(jq -r --arg l "${LOADER,,}" '.dependencies[$l] // empty' "$INDEX")
+        LOADER_VERSION=$(as_minecraft jq -r --arg l "${LOADER,,}" '.dependencies[$l] // empty' "$INDEX")
         if [[ -z "$LOADER_VERSION" ]]; then
             log "ERROR: modrinth.index.json has no dependencies.${LOADER,,} entry; cannot install ${LOADER} server."
             exit 1
@@ -562,23 +588,23 @@ if [[ "$PACK_SOURCE" == "modrinth" ]]; then
 
 elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "server_pack" ]]; then
 
-    unzip -o "$PACK_FILE" "mods/*" -d "$EXTRACT_TMP" 2>/dev/null || true
-    if [[ -d "${EXTRACT_TMP}/mods" ]] && [[ -n "$(ls -A "${EXTRACT_TMP}/mods" 2>/dev/null)" ]]; then
-        cp -a "${EXTRACT_TMP}/mods/." "$MODS_STAGE/"
+    extract_pack "$PACK_FILE" "$EXTRACT_TMP" "mods/*"
+    if as_minecraft test -d "${EXTRACT_TMP}/mods" && [[ -n "$(as_minecraft ls -A "${EXTRACT_TMP}/mods" 2>/dev/null)" ]]; then
+        as_minecraft cp -a -- "${EXTRACT_TMP}/mods/." "$MODS_STAGE/"
         log "Mods extracted from server pack mods/."
     else
         # Some server packs put JARs at the root alongside launcher files
         log "No mods/ dir in server pack; extracting .jar files from root..."
-        unzip -o "$PACK_FILE" "*.jar" -d "$MODS_STAGE" 2>/dev/null || true
+        extract_pack "$PACK_FILE" "$MODS_STAGE" "*.jar"
         log "Extracted .jar files from server pack root."
     fi
 
     # Extract NeoForge/Forge launcher infrastructure so run.sh and libraries/
     # stay in sync with the pack version whenever NeoForge is updated.
-    INFRA_TMP=$(mktemp -d /var/tmp/mc-infra-XXXXXX)
+    INFRA_TMP=$(as_minecraft mktemp -d /var/tmp/mc-infra-XXXXXX)
     log "Extracting launcher infrastructure (libraries/, run.sh) from server pack..."
-    unzip -o "$PACK_FILE" "libraries/*" "run.sh" "run.bat" -d "$INFRA_TMP" 2>/dev/null || true
-    if [[ -d "${INFRA_TMP}/libraries" ]]; then
+    extract_pack "$PACK_FILE" "$INFRA_TMP" "libraries/*" "run.sh" "run.bat"
+    if as_minecraft test -d "${INFRA_TMP}/libraries"; then
         log "Launcher libraries staged."
     else
         log "WARN: No libraries/ in server pack; NeoForge/Forge may not be installed."
@@ -587,7 +613,7 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "server_pack"
     # This CurseForge pack's server pack doesn't bundle the loader (some don't).
     # Cross-reference the same pack on Modrinth (by MODPACK_SLUG) to find the
     # exact loader version, then install it via the official installer.
-    if [[ "${LOADER,,}" == "forge" || "${LOADER,,}" == "neoforge" ]] && [[ ! -f "${MINECRAFT_DIR}/run.sh" ]]; then
+    if [[ "${LOADER,,}" == "forge" || "${LOADER,,}" == "neoforge" ]] && ! as_minecraft test -f "${MINECRAFT_DIR}/run.sh"; then
         log "Looking up ${LOADER} version via Modrinth pack '${MODPACK_SLUG}' (server pack didn't include the loader)..."
         if LOOKUP_VERSION=$(lookup_loader_version_via_modrinth "$MODPACK_SLUG"); then
             install_loader_version "$LOOKUP_VERSION"
@@ -599,11 +625,10 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "server_pack"
 
 elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]]; then
 
-    unzip -o "$PACK_FILE" "manifest.json" -d "$EXTRACT_TMP"
-    unzip -o "$PACK_FILE" "overrides/*" -d "$EXTRACT_TMP" 2>/dev/null || true
+    extract_pack "$PACK_FILE" "$EXTRACT_TMP" "manifest.json" "overrides/*"
 
     MANIFEST="${EXTRACT_TMP}/manifest.json"
-    MOD_COUNT=$(jq '.files | length' "$MANIFEST")
+    MOD_COUNT=$(as_minecraft jq '.files | length' "$MANIFEST")
     log "Downloading ${MOD_COUNT} mods from CurseForge manifest..."
 
     FAILED_MODS=0
@@ -611,6 +636,10 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]]
     while IFS= read -r mod_entry; do
         proj_id=$(echo "$mod_entry" | jq -r '.projectID')
         file_id=$(echo "$mod_entry" | jq -r '.fileID')
+        if [[ ! "$proj_id" =~ ^[0-9]+$ || ! "$file_id" =~ ^[0-9]+$ ]]; then
+            log "ERROR: CurseForge manifest project/file IDs must be numeric."
+            exit 1
+        fi
         required=$(echo "$mod_entry" | jq -r '.required')
         MOD_NUM=$(( MOD_NUM + 1 ))
 
@@ -641,12 +670,12 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]]
 
         filename=$(basename "${mod_url%%\?*}")
         log "[${MOD_NUM}/${MOD_COUNT}] ${filename}"
-        curl -fsSL \
+        minecraft_curl_https \
             -H "User-Agent: ${UA}" \
             -o "${MODS_STAGE}/${filename}" \
-            "$mod_url" \
+            -- "$mod_url" \
         || {
-            rm -f "${MODS_STAGE}/${filename}"
+            as_minecraft rm -f -- "${MODS_STAGE}/${filename}"
             if [[ "$required" == "true" ]]; then
                 log "ERROR: Required mod ${proj_id}/${file_id} failed to download."
                 FAILED_MODS=$(( FAILED_MODS + 1 ))
@@ -655,10 +684,10 @@ elif [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]]
             fi
         }
 
-    done < <(jq -c '.files[]' "$MANIFEST")
+    done < <(as_minecraft jq -c '.files[]' "$MANIFEST")
 
-    if [[ -d "${EXTRACT_TMP}/overrides/mods" ]]; then
-        cp -a "${EXTRACT_TMP}/overrides/mods/." "$MODS_STAGE/"
+    if as_minecraft test -d "${EXTRACT_TMP}/overrides/mods"; then
+        as_minecraft cp -a -- "${EXTRACT_TMP}/overrides/mods/." "$MODS_STAGE/"
     fi
 
     if (( FAILED_MODS > 0 )); then
@@ -675,18 +704,17 @@ fi
 if (( EXTRA_MOD_COUNT > 0 )); then
     log "Downloading ${EXTRA_MOD_COUNT} extra Modrinth mod(s)..."
     for _slug in "${!EXTRA_MOD_VERSIONS[@]}"; do
-        _extra_url=$(curl -fsSL -H "User-Agent: ${UA}" \
-            "${MODRINTH_API}/version/${EXTRA_MOD_VERSIONS[$_slug]}" \
+        _extra_url=$(curl_https -H "User-Agent: ${UA}" \
+            -- "${MODRINTH_API}/version/${EXTRA_MOD_VERSIONS[$_slug]}" \
             | jq -r '.files[] | select(.primary == true) | .url')
         _extra_filename="${_extra_url##*/}"
         log "Extra mod: ${_slug} (${_extra_filename})"
-        curl -fsSL -H "User-Agent: ${UA}" -o "${MODS_STAGE}/${_extra_filename}" "$_extra_url"
+        minecraft_curl_https -H "User-Agent: ${UA}" -o "${MODS_STAGE}/${_extra_filename}" -- "$_extra_url"
     done
 fi
 
-chown -R minecraft:minecraft "$MODS_STAGE"
-find "$MODS_STAGE" -type d -exec chmod 755 {} +
-find "$MODS_STAGE" -type f -exec chmod 644 {} +
+as_minecraft find "$MODS_STAGE" -type d -exec chmod 755 {} +
+as_minecraft find "$MODS_STAGE" -type f -exec chmod 644 {} +
 
 ###############################################################################
 # Stop service and atomically install staged content
@@ -697,35 +725,33 @@ if [[ "$SERVICE_WAS_RUNNING" == true ]]; then
     systemctl stop "$SERVICE"
 fi
 
-if [[ -d "$MODS_DIR" ]]; then
+if as_minecraft test -d "$MODS_DIR"; then
     log "Moving current mods to ${BACKUP_DIR}..."
-    mv "$MODS_DIR" "$BACKUP_DIR"
+    as_minecraft mv -T -- "$MODS_DIR" "$BACKUP_DIR"
 fi
-mv "$MODS_STAGE" "$MODS_DIR"
+as_minecraft mv -T -- "$MODS_STAGE" "$MODS_DIR"
 MODS_STAGE=""
 SWAP_COMPLETE=true
 
 # Apply non-mod overrides only after all required downloads have succeeded.
-if [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" && -d "${EXTRACT_TMP}/overrides" ]]; then
+if [[ "$PACK_SOURCE" == "curseforge" && "$CF_DOWNLOAD_METHOD" == "manifest" ]] && as_minecraft test -d "${EXTRACT_TMP}/overrides"; then
     while IFS= read -r override_path; do
-        cp -a "$override_path" "${MINECRAFT_DIR}/"
-    done < <(find "${EXTRACT_TMP}/overrides" -mindepth 1 -maxdepth 1 ! -name mods -print)
+        as_minecraft cp -a -- "$override_path" "${MINECRAFT_DIR}/"
+    done < <(as_minecraft find "${EXTRACT_TMP}/overrides" -mindepth 1 -maxdepth 1 ! -name mods -print)
     log "Non-mod overrides applied."
 fi
 
 if [[ -n "$INFRA_TMP" ]]; then
-    if [[ -d "${INFRA_TMP}/libraries" ]]; then
-        rm -rf "${MINECRAFT_DIR}/libraries"
-        mv "${INFRA_TMP}/libraries" "${MINECRAFT_DIR}/libraries"
-        chown -R minecraft:minecraft "${MINECRAFT_DIR}/libraries"
+    if as_minecraft test -d "${INFRA_TMP}/libraries"; then
+        as_minecraft rm -rf -- "${MINECRAFT_DIR}/libraries"
+        as_minecraft mv -T -- "${INFRA_TMP}/libraries" "${MINECRAFT_DIR}/libraries"
     fi
     for _f in run.sh run.bat; do
-        if [[ -f "${INFRA_TMP}/${_f}" ]]; then
-            cp "${INFRA_TMP}/${_f}" "${MINECRAFT_DIR}/${_f}"
-            chown minecraft:minecraft "${MINECRAFT_DIR}/${_f}"
+        if as_minecraft test -f "${INFRA_TMP}/${_f}"; then
+            as_minecraft cp --remove-destination -- "${INFRA_TMP}/${_f}" "${MINECRAFT_DIR}/${_f}"
         fi
     done
-    [[ -f "${MINECRAFT_DIR}/run.sh" ]] && chmod +x "${MINECRAFT_DIR}/run.sh"
+    as_minecraft test -f "${MINECRAFT_DIR}/run.sh" && as_minecraft chmod +x "${MINECRAFT_DIR}/run.sh"
     log "Launcher infrastructure updated."
 fi
 
@@ -748,42 +774,39 @@ fi
 # Write version ID only after installation and service startup succeed
 ###############################################################################
 
-EXCLUDES_TMP=$(mktemp "${MINECRAFT_DIR}/.current_excludes.XXXXXX")
-printf '%s' "${EXCLUDE_CF_PROJECTS:-}" > "$EXCLUDES_TMP"
-chown minecraft:minecraft "$EXCLUDES_TMP"
-chmod 0644 "$EXCLUDES_TMP"
+EXCLUDES_TMP=$(as_minecraft mktemp "${MINECRAFT_DIR}/.current_excludes.XXXXXX")
+printf '%s' "${EXCLUDE_CF_PROJECTS:-}" | as_minecraft tee "$EXCLUDES_TMP" >/dev/null
+as_minecraft chmod 0644 "$EXCLUDES_TMP"
 
-EXTRA_MODS_TMP=$(mktemp "${MINECRAFT_DIR}/.current_extra_mods.XXXXXX")
-printf '%s' "$EXTRA_MODS_SIG" > "$EXTRA_MODS_TMP"
-chown minecraft:minecraft "$EXTRA_MODS_TMP"
-chmod 0644 "$EXTRA_MODS_TMP"
+EXTRA_MODS_TMP=$(as_minecraft mktemp "${MINECRAFT_DIR}/.current_extra_mods.XXXXXX")
+printf '%s' "$EXTRA_MODS_SIG" | as_minecraft tee "$EXTRA_MODS_TMP" >/dev/null
+as_minecraft chmod 0644 "$EXTRA_MODS_TMP"
 
-VERSION_TMP=$(mktemp "${MINECRAFT_DIR}/.current_version.XXXXXX")
-printf '%s\n' "$LATEST_ID" > "$VERSION_TMP"
-chown minecraft:minecraft "$VERSION_TMP"
-chmod 0644 "$VERSION_TMP"
+VERSION_TMP=$(as_minecraft mktemp "${MINECRAFT_DIR}/.current_version.XXXXXX")
+printf '%s\n' "$LATEST_ID" | as_minecraft tee "$VERSION_TMP" >/dev/null
+as_minecraft chmod 0644 "$VERSION_TMP"
 
 # Move the version marker last. It remains authoritative if committing either
 # supporting marker fails, so the next run retries the installation.
-mv "$EXCLUDES_TMP" "$CURRENT_EXCLUDES_FILE"
-mv "$EXTRA_MODS_TMP" "$CURRENT_EXTRA_MODS_FILE"
+as_minecraft mv -T -- "$EXCLUDES_TMP" "$CURRENT_EXCLUDES_FILE"
+as_minecraft mv -T -- "$EXTRA_MODS_TMP" "$CURRENT_EXTRA_MODS_FILE"
 EXTRA_MODS_TMP=""
 if [[ "$SERVICE_WAS_RUNNING" == true ]]; then
     record_running_version "$LATEST_ID"
 else
-    rm -f "$RUNNING_VERSION_FILE"
+    as_minecraft rm -f -- "$RUNNING_VERSION_FILE"
 fi
-mv "$VERSION_TMP" "$CURRENT_VERSION_FILE"
+as_minecraft mv -T -- "$VERSION_TMP" "$CURRENT_VERSION_FILE"
 SWAP_COMPLETE=false
 
 log "Pruning old backups (keeping latest 3)..."
 mapfile -t OLD_BACKUPS < <(
-    find "$MINECRAFT_DIR" -maxdepth 1 -type d -name 'mods.bak.*' -printf '%T@ %p\n' \
+    as_minecraft find "$MINECRAFT_DIR" -maxdepth 1 -type d -name 'mods.bak.*' -printf '%T@ %p\n' \
         | sort -rn | cut -d' ' -f2- | tail -n +4
 )
 for old in "${OLD_BACKUPS[@]}"; do
     log "Removing: ${old}"
-    rm -rf "$old"
+    as_minecraft rm -rf -- "$old"
 done
 
 ###############################################################################

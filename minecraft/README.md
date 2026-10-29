@@ -14,6 +14,8 @@ official server packs.
 - `update-script/update-modpack.sh` is deployed to automatically managed guests.
 - `update-script/apply-manual-pack.sh` deploys official server-pack ZIP or
   Modrinth `.mrpack` files from the controller.
+- `update-script/pack_archive.py` validates archives for both update scripts.
+  Keep it beside either script when copying the tools outside this checkout.
 
 Run Ansible commands from `minecraft/ansible/` so its `ansible.cfg`, inventory,
 and relative paths apply.
@@ -105,6 +107,14 @@ forwarding from the controller through the source host to the destination.
 The Ansible configuration requests `ForwardAgent=yes`; ordinary direct SSH
 does not. Verify the forwarded agent can authenticate the second hop before
 migration. A working direct guest connection does not prove that path.
+Migration keeps its optional root sender for the forwarded agent and reads
+the explicitly selected source. A preflight rejects source symlinks and
+requires protected root-owned ancestors. Rsync preserves nested symlinks and
+runs the destination receiver as `minecraft`. This trusted-source exception
+does not apply to normal updates or manual pack imports.
+The second hop uses `StrictHostKeyChecking=accept-new` without another agent
+forward. Its first connection enrolls the destination key on the source.
+Verify that enrollment over a trusted network. Later key mismatches fail.
 `provision.yml` now imports `site.yml`. It uses the configured `ansible_host`
 and does not discover DHCP addresses, modify HA policy, or merge backup VMIDs.
 Review HA policy and backup selection in Terraform. Preserve the existing
@@ -135,6 +145,12 @@ and `--config PATH`; logs are written to `/var/log/minecraft-update.log` and the
 latest three mod-directory backups are retained. `--dry-run` can still send a
 Discord notification. It does not apply the pack.
 
+The updater uses root for service control, private staging, logs, and its
+root-only `update.conf`. It reads and changes Minecraft data as `minecraft`.
+The role also installs loaders and changes game files as that user. It does
+not recursively change existing file ownership. Existing data must permit the
+service user to perform the requested operation.
+
 `extra_modrinth_mods` can layer standalone Modrinth releases onto either kind of
 automatically managed pack. It does not apply to `pack_source: manual`.
 
@@ -154,6 +170,11 @@ an outage, check player counts, restart the service, or provide automatic
 rollback. Complete those checks before deployment. Preserve custom mods and
 configuration separately, then reconcile and verify startup. Existing world
 datapacks are overlaid without deleting files absent from the new pack.
+
+Both importers reject archive links, special files, and paths outside the
+staging directory. Downloads require HTTPS, including redirects. The manual
+importer validates the pack before SSH and runs remote file operations as
+`minecraft`.
 
 If `run.sh` already exists, reconciliation
 does not verify its loader version, so replace or verify loader files when the
@@ -183,6 +204,7 @@ ansible-lint
 ansible-playbook site.yml --syntax-check --ask-vault-pass
 bash -n ../update-script/update-modpack.sh ../update-script/apply-manual-pack.sh
 python3 ../update-script/test_apply_manual_pack.py
+python3 -m unittest discover -s ../update-script -p 'test_*.py'
 ```
 
 Syntax/lint checks do not prove live convergence or service health.

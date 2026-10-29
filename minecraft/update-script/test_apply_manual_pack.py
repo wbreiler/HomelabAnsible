@@ -22,16 +22,20 @@ if command == "ssh":
     assert sys.argv[1] == "root@fixture"
     subprocess.run(["bash", "-eu", "-c", sys.argv[2].replace("/opt/minecraft", remote)], check=True)
 elif command == "rsync":
+    assert "--rsync-path=runuser -u minecraft -- rsync" in sys.argv
     source, destination = sys.argv[-2:]
     assert destination.startswith("root@fixture:/opt/minecraft/")
     destination = destination.split(":", 1)[1].replace("/opt/minecraft", remote)
     shutil.copytree(source, destination, dirs_exist_ok=True)
 elif command == "systemctl" and sys.argv[1] == "list-units":
     print("minecraft@fixture.service loaded active running")
+elif command == "runuser":
+    assert sys.argv[1:5] == ["-u", "minecraft", "--", "bash"]
+    subprocess.run(sys.argv[4:], check=True)
 elif command not in ("systemctl", "chown"):
     raise AssertionError(command)
 '''
-        for command in ("ssh", "rsync", "systemctl", "chown"):
+        for command in ("ssh", "rsync", "systemctl", "runuser"):
             executable = commands / command
             executable.write_text(stub)
             executable.chmod(0o755)

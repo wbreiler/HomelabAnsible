@@ -35,50 +35,9 @@ trap 'rm -rf "$WORKDIR"' EXIT
 
 SERVERPACK="$WORKDIR/serverpack"
 mkdir -p "$SERVERPACK"
-
-if unzip -l "$PACK" | grep -q "modrinth.index.json"; then
-  log "Detected .mrpack format. Assembling server pack..."
-
-  unzip -q -o "$PACK" -d "$WORKDIR/mrpack"
-  INDEX="$WORKDIR/mrpack/modrinth.index.json"
-
-  MC_VERSION=$(jq -r '.dependencies.minecraft // empty' "$INDEX")
-  FORGE_VERSION=$(jq -r '.dependencies.forge // empty' "$INDEX")
-  NEOFORGE_VERSION=$(jq -r '.dependencies.neoforge // empty' "$INDEX")
-  FABRIC_VERSION=$(jq -r '.dependencies["fabric-loader"] // empty' "$INDEX")
-  QUILT_VERSION=$(jq -r '.dependencies["quilt-loader"] // empty' "$INDEX")
-
-  log "mc_version: ${MC_VERSION:-?}"
-  [[ -n "$FORGE_VERSION" ]] && log "loader: forge, loader_version: $FORGE_VERSION"
-  [[ -n "$NEOFORGE_VERSION" ]] && log "loader: neoforge, loader_version: $NEOFORGE_VERSION"
-  [[ -n "$FABRIC_VERSION" ]] && log "loader: fabric, loader_version: $FABRIC_VERSION (fabric installs itself; loader_version informational only)"
-  [[ -n "$QUILT_VERSION" ]] && log "loader: quilt, loader_version: $QUILT_VERSION (quilt installs itself; loader_version informational only)"
-  log "Make sure servers.yml has matching loader/mc_version/loader_version values."
-
-  FILE_COUNT=$(jq '[.files[] | select(.env.server != "unsupported")] | length' "$INDEX")
-  log "Downloading ${FILE_COUNT} server-required file(s) from the index..."
-
-  jq -c '.files[] | select(.env.server != "unsupported") | {path: .path, url: .downloads[0]}' "$INDEX" |
-    while IFS= read -r row; do
-      path=$(echo "$row" | jq -r '.path')
-      url=$(echo "$row" | jq -r '.url')
-      dest="$SERVERPACK/$path"
-      mkdir -p "$(dirname "$dest")"
-      curl -fsSL -o "$dest" "$url"
-    done
-
-  if [[ -d "$WORKDIR/mrpack/overrides" ]]; then
-    log "Layering overrides/ onto the assembled pack..."
-    cp -R "$WORKDIR/mrpack/overrides/." "$SERVERPACK/"
-  fi
-  if [[ -d "$WORKDIR/mrpack/server-overrides" ]]; then
-    log "Layering server-overrides/ onto the assembled pack (takes priority)..."
-    cp -R "$WORKDIR/mrpack/server-overrides/." "$SERVERPACK/"
-  fi
-else
-  log "Detected plain server pack zip. Extracting..."
-  unzip -q -o "$PACK" -d "$SERVERPACK"
-fi
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+python3 "$SCRIPT_DIR/pack_archive.py" assemble "$PACK" "$SERVERPACK"
+[[ -d "$SERVERPACK/mods" ]] || { log "ERROR: Server pack has no mods directory."; exit 1; }
 
 log "Assembled pack contents:"
 for d in mods config defaultconfigs kubejs datapacks; do
@@ -92,21 +51,21 @@ TS=$(date +%Y%m%d_%H%M%S)
 ssh "$REMOTE" "
   svc=\$(systemctl list-units 'minecraft@*' --no-legend | awk '{print \$1}')
   [[ -n \"\$svc\" ]] && systemctl stop \"\$svc\"
+  runuser -u minecraft -- bash -eu -c '
   cd /opt/minecraft
   for d in mods config defaultconfigs kubejs; do
     [[ -d \"\$d\" ]] && mv \"\$d\" \"\${d}.pre-zip-recreate.${TS}\"
   done
   mkdir -p mods config defaultconfigs kubejs world/datapacks
+  '
 "
 
 log "Syncing mods/config/defaultconfigs/kubejs/datapacks to $REMOTE..."
-rsync -az "$SERVERPACK/mods/" "$REMOTE:/opt/minecraft/mods/"
-[[ -d "$SERVERPACK/config" ]] && rsync -az "$SERVERPACK/config/" "$REMOTE:/opt/minecraft/config/"
-[[ -d "$SERVERPACK/defaultconfigs" ]] && rsync -az "$SERVERPACK/defaultconfigs/" "$REMOTE:/opt/minecraft/defaultconfigs/"
-[[ -d "$SERVERPACK/kubejs" ]] && rsync -az "$SERVERPACK/kubejs/" "$REMOTE:/opt/minecraft/kubejs/"
-[[ -d "$SERVERPACK/datapacks" ]] && rsync -az "$SERVERPACK/datapacks/" "$REMOTE:/opt/minecraft/world/datapacks/"
-
-ssh "$REMOTE" "chown -R minecraft:minecraft /opt/minecraft"
+rsync -az --rsync-path='runuser -u minecraft -- rsync' "$SERVERPACK/mods/" "$REMOTE:/opt/minecraft/mods/"
+[[ -d "$SERVERPACK/config" ]] && rsync -az --rsync-path='runuser -u minecraft -- rsync' "$SERVERPACK/config/" "$REMOTE:/opt/minecraft/config/"
+[[ -d "$SERVERPACK/defaultconfigs" ]] && rsync -az --rsync-path='runuser -u minecraft -- rsync' "$SERVERPACK/defaultconfigs/" "$REMOTE:/opt/minecraft/defaultconfigs/"
+[[ -d "$SERVERPACK/kubejs" ]] && rsync -az --rsync-path='runuser -u minecraft -- rsync' "$SERVERPACK/kubejs/" "$REMOTE:/opt/minecraft/kubejs/"
+[[ -d "$SERVERPACK/datapacks" ]] && rsync -az --rsync-path='runuser -u minecraft -- rsync' "$SERVERPACK/datapacks/" "$REMOTE:/opt/minecraft/world/datapacks/"
 
 log "Done. Old dirs backed up as *.pre-zip-recreate.${TS} on $REMOTE."
 log "Next: ansible-playbook site.yml --vault-password-file ~/.vaultpass -e server_filter=<hostname>"

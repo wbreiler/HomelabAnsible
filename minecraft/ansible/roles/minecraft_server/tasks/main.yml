@@ -35,7 +35,7 @@
 
 - name: Install utility packages
   ansible.builtin.apt:
-    name: [cron, curl, jq, openssl, unzip, rsync]
+    name: [cron, curl, jq, openssl, python3, rsync]
     state: present
 
 - name: Set timezone to US/Central
@@ -68,13 +68,28 @@
           }}
   when: minecraft_server_jvm_distro == 'graalvm'
 
+- name: Create private GraalVM download directory
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: minecraft-graalvm
+  register: minecraft_server_graalvm_download_dir
+  when:
+    - not ansible_check_mode
+    - minecraft_server_jvm_distro == 'graalvm'
+    - not (minecraft_server_graalvm_stat.stat.exists | default(false))
+
 - name: Download GraalVM CE for Java {{ minecraft_server_java_version }}
   ansible.builtin.get_url:
     url: "{{ minecraft_server_graalvm_ce_url }}"
-    dest: /tmp/graalvm-ce.tar.gz
+    dest: "{{ minecraft_server_graalvm_download_dir.path }}/graalvm-ce.tar.gz"
+    owner: root
+    group: root
     mode: "0644"
     timeout: 300
-  when: minecraft_server_jvm_distro == 'graalvm' and not (minecraft_server_graalvm_stat.stat.exists | default(false))
+  when:
+    - not ansible_check_mode
+    - minecraft_server_jvm_distro == 'graalvm'
+    - not (minecraft_server_graalvm_stat.stat.exists | default(false))
 
 - name: Create /opt/graalvm-ce
   ansible.builtin.file:
@@ -87,7 +102,7 @@
 
 - name: Extract GraalVM CE
   ansible.builtin.unarchive:
-    src: /tmp/graalvm-ce.tar.gz
+    src: "{{ minecraft_server_graalvm_download_dir.path }}/graalvm-ce.tar.gz"
     dest: /opt/graalvm-ce
     remote_src: true
     extra_opts: ["--strip-components=1"]
@@ -105,11 +120,11 @@
     - not (minecraft_server_graalvm_stat.stat.exists | default(false))
   changed_when: true
 
-- name: Remove GraalVM CE archive
+- name: Remove private GraalVM download directory
   ansible.builtin.file:
-    path: /tmp/graalvm-ce.tar.gz
+    path: "{{ minecraft_server_graalvm_download_dir.path }}"
     state: absent
-  when: minecraft_server_jvm_distro == 'graalvm'
+  when: minecraft_server_graalvm_download_dir.path is defined
 
 # --- Temurin (Java 17, MC 1.18–1.20.4) ---
 
@@ -179,40 +194,48 @@
     owner: "{{ item.owner | default('minecraft') }}"
     group: "{{ item.group | default('minecraft') }}"
     mode: "{{ item.mode | default('0755') }}"
+    follow: false
   loop:
     - { path: /opt/minecraft }
-    - { path: /opt/minecraft/mods }
-    - { path: /opt/minecraft/world }
     - { path: /etc/minecraft, owner: root, group: minecraft, mode: "0750" }
 
-- name: Reconcile existing mod ownership and permissions
+- name: Create Minecraft data directories as the service user
   ansible.builtin.file:
-    path: /opt/minecraft/mods
-    owner: minecraft
-    group: minecraft
-    mode: u=rwX,g=rX,o=rX
-    recurse: true
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+    follow: false
+  loop:
+    - /opt/minecraft/mods
+    - /opt/minecraft/world
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 ###############################################################################
 # 5. Deploy update script and config
 # Done early so CurseForge provisioning can call the script for its download.
 ###############################################################################
 
-- name: Install update-modpack.sh
+- name: Install modpack update tools
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../update-script/update-modpack.sh"
-    dest: /usr/local/bin/update-modpack.sh
+    src: "{{ playbook_dir }}/../update-script/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
     owner: root
     group: root
     mode: "0755"
+  loop:
+    - update-modpack.sh
+    - pack_archive.py
 
 - name: Deploy /etc/minecraft/update.conf
   ansible.builtin.template:
     src: update.conf.j2
     dest: /etc/minecraft/update.conf
     owner: root
-    group: minecraft
-    mode: "0640"
+    group: root
+    mode: "0600"
   no_log: true
 
 ###############################################################################
@@ -282,6 +305,10 @@
     timeout: 300
     checksum: "sha1:{{ minecraft_server_mojang_version_meta.json.downloads.server.sha1 }}"
   when: modpack_slug == "vanilla"
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 ###############################################################################
 # 9. Migrate server data from an existing server (optional)
@@ -301,6 +328,21 @@
     path: /opt/minecraft/.migrated
   register: minecraft_server_migration_sentinel
   when: migrate_from is defined
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
+
+- name: Validate protected migration source path
+  ansible.builtin.script:
+    cmd: >-
+      {{ (playbook_dir ~ '/../update-script/check_migration_source.py') | quote }}
+      {{ migrate_from.src_base | quote }}
+    executable: python3
+  delegate_to: "{{ (migrate_from | default({})).host | default(inventory_hostname) }}"
+  when: migrate_from is defined and not minecraft_server_migration_sentinel.stat.exists
+  changed_when: false
+  check_mode: false
 
 - name: Migrate server data directly from source to new server
   ansible.builtin.command:
@@ -308,7 +350,8 @@
       - rsync
       - -az
       - --stats
-      - "--rsh=ssh -A -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      - "--rsh=ssh -a -o StrictHostKeyChecking=accept-new"
+      - "--rsync-path=runuser -u minecraft -- rsync"
       - --exclude=mods/
       - --exclude=libraries/
       - --exclude=run.sh
@@ -325,22 +368,18 @@
   when: migrate_from is defined and not minecraft_server_migration_sentinel.stat.exists
   changed_when: true
 
-- name: Fix ownership of migrated files
-  ansible.builtin.file:
-    path: /opt/minecraft
-    owner: minecraft
-    group: minecraft
-    recurse: true
-  when: migrate_from is defined and not minecraft_server_migration_sentinel.stat.exists
-
 - name: Mark migration complete
   ansible.builtin.copy:
     content: "{{ ansible_date_time.iso8601 }}\n"
     dest: /opt/minecraft/.migrated
-    owner: root
-    group: root
+    owner: minecraft
+    group: minecraft
     mode: "0444"
   when: migrate_from is defined and not minecraft_server_migration_sentinel.stat.exists
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 ###############################################################################
 # 9b. Deploy user_jvm_args.txt for NeoForge/Forge packs
@@ -356,6 +395,10 @@
     group: minecraft
     mode: "0644"
   when: (loader | default('')) in ['neoforge', 'forge']
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 ###############################################################################
 # 9c. Fabric/Quilt server setup
@@ -370,6 +413,10 @@
     path: /opt/minecraft/server.jar
   register: minecraft_server_server_jar_stat
   when: (loader | default('')) in ['fabric', 'quilt']
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Find migrated Fabric launcher jar
   ansible.builtin.find:
@@ -380,6 +427,10 @@
   when:
     - (loader | default('')) in ['fabric', 'quilt']
     - not (minecraft_server_server_jar_stat.stat.exists | default(false))
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Symlink migrated Fabric launcher jar as server.jar
   ansible.builtin.file:
@@ -392,6 +443,10 @@
     - (loader | default('')) in ['fabric', 'quilt']
     - not (minecraft_server_server_jar_stat.stat.exists | default(false))
     - (minecraft_server_fabric_launcher_jars.files | default([]) | length) > 0
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Fetch latest stable Fabric installer version
   ansible.builtin.uri:
@@ -403,41 +458,69 @@
     - not (minecraft_server_server_jar_stat.stat.exists | default(false))
     - (minecraft_server_fabric_launcher_jars.files | default([]) | length) == 0
 
-- name: Download Fabric installer
-  ansible.builtin.get_url:
-    url: "{{ (minecraft_server_fabric_installer_meta.json | selectattr('stable', 'equalto', true) | first).url }}"
-    dest: /tmp/fabric-installer.jar
-    mode: "0644"
-    timeout: 120
+- name: Create private Fabric installer directory
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: minecraft-fabric
+  register: minecraft_server_fabric_installer_dir
   when:
+    - not ansible_check_mode
     - (loader | default('')) in ['fabric', 'quilt']
     - not (minecraft_server_server_jar_stat.stat.exists | default(false))
     - (minecraft_server_fabric_launcher_jars.files | default([]) | length) == 0
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
+
+- name: Download Fabric installer
+  ansible.builtin.get_url:
+    url: "{{ (minecraft_server_fabric_installer_meta.json | selectattr('stable', 'equalto', true) | first).url }}"
+    dest: "{{ minecraft_server_fabric_installer_dir.path }}/installer.jar"
+    mode: "0644"
+    timeout: 120
+  when:
+    - not ansible_check_mode
+    - (loader | default('')) in ['fabric', 'quilt']
+    - not (minecraft_server_server_jar_stat.stat.exists | default(false))
+    - (minecraft_server_fabric_launcher_jars.files | default([]) | length) == 0
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Run Fabric installer to create server.jar
   ansible.builtin.command:
-    cmd: java -jar /tmp/fabric-installer.jar server -dir /opt/minecraft -mcversion {{ mc_version }} -downloadMinecraft
+    argv:
+      - java
+      - -jar
+      - "{{ minecraft_server_fabric_installer_dir.path }}/installer.jar"
+      - server
+      - -dir
+      - /opt/minecraft
+      - -mcversion
+      - "{{ mc_version }}"
+      - -downloadMinecraft
   when:
+    - not ansible_check_mode
     - (loader | default('')) in ['fabric', 'quilt']
     - not (minecraft_server_server_jar_stat.stat.exists | default(false))
     - (minecraft_server_fabric_launcher_jars.files | default([]) | length) == 0
   changed_when: true
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
-- name: Remove Fabric installer
+- name: Remove private Fabric installer directory
   ansible.builtin.file:
-    path: /tmp/fabric-installer.jar
+    path: "{{ minecraft_server_fabric_installer_dir.path }}"
     state: absent
-  when: (loader | default('')) in ['fabric', 'quilt']
-
-- name: Fix ownership of Fabric server files
-  ansible.builtin.file:
-    path: /opt/minecraft
-    owner: minecraft
-    group: minecraft
-    recurse: true
-  when:
-    - (loader | default('')) in ['fabric', 'quilt']
-    - not (minecraft_server_server_jar_stat.stat.exists | default(false))
+  when: minecraft_server_fabric_installer_dir.path is defined
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 ###############################################################################
 # 9d. Forge/NeoForge loader install for manually-provided packs
@@ -454,6 +537,25 @@
   when:
     - (pack_source | default('modrinth')) == 'manual'
     - (loader | default('')) in ['forge', 'neoforge']
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
+
+- name: Create private loader installer directory (manual pack)
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: minecraft-loader
+  register: minecraft_server_loader_installer_dir
+  when:
+    - not ansible_check_mode
+    - (pack_source | default('modrinth')) == 'manual'
+    - (loader | default('')) in ['forge', 'neoforge']
+    - not (minecraft_server_manual_run_sh_stat.stat.exists | default(false))
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Download Forge installer (manual pack)
   ansible.builtin.get_url:
@@ -463,53 +565,63 @@
         ~ mc_version ~ '-' ~ loader_version ~ '/forge-'
         ~ mc_version ~ '-' ~ loader_version ~ '-installer.jar'
       }}
-    dest: /tmp/loader-installer.jar
+    dest: "{{ minecraft_server_loader_installer_dir.path }}/installer.jar"
     mode: "0644"
     timeout: 300
   when:
+    - not ansible_check_mode
     - (pack_source | default('modrinth')) == 'manual'
     - loader | default('') == 'forge'
     - not (minecraft_server_manual_run_sh_stat.stat.exists | default(false))
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Download NeoForge installer (manual pack)
   ansible.builtin.get_url:
     url: "https://maven.neoforged.net/releases/net/neoforged/neoforge/{{ loader_version }}/neoforge-{{ loader_version }}-installer.jar"
-    dest: /tmp/loader-installer.jar
+    dest: "{{ minecraft_server_loader_installer_dir.path }}/installer.jar"
     mode: "0644"
     timeout: 300
   when:
+    - not ansible_check_mode
     - (pack_source | default('modrinth')) == 'manual'
     - loader | default('') == 'neoforge'
     - not (minecraft_server_manual_run_sh_stat.stat.exists | default(false))
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Run loader installer (manual pack)
   ansible.builtin.command:
-    cmd: java -jar /tmp/loader-installer.jar --installServer
+    argv:
+      - java
+      - -jar
+      - "{{ minecraft_server_loader_installer_dir.path }}/installer.jar"
+      - --installServer
     chdir: /opt/minecraft
   when:
+    - not ansible_check_mode
     - (pack_source | default('modrinth')) == 'manual'
     - (loader | default('')) in ['forge', 'neoforge']
     - not (minecraft_server_manual_run_sh_stat.stat.exists | default(false))
   changed_when: true
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
-- name: Remove loader installer jar (manual pack)
+- name: Remove private loader installer directory (manual pack)
   ansible.builtin.file:
-    path: /tmp/loader-installer.jar
+    path: "{{ minecraft_server_loader_installer_dir.path }}"
     state: absent
-  when:
-    - (pack_source | default('modrinth')) == 'manual'
-    - (loader | default('')) in ['forge', 'neoforge']
-
-- name: Fix ownership and run.sh permissions after loader install (manual pack)
-  ansible.builtin.file:
-    path: /opt/minecraft
-    owner: minecraft
-    group: minecraft
-    recurse: true
-  when:
-    - (pack_source | default('modrinth')) == 'manual'
-    - (loader | default('')) in ['forge', 'neoforge']
-    - not (minecraft_server_manual_run_sh_stat.stat.exists | default(false))
+  when: minecraft_server_loader_installer_dir.path is defined
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Ensure run.sh is executable (manual pack)
   ansible.builtin.file:
@@ -518,6 +630,10 @@
   when:
     - (pack_source | default('modrinth')) == 'manual'
     - (loader | default('')) in ['forge', 'neoforge']
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 ###############################################################################
 # 10. EULA, server.properties, ops.json
@@ -530,6 +646,10 @@
     owner: minecraft
     group: minecraft
     mode: "0644"
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Check for an existing RCON password
   ansible.builtin.stat:
@@ -603,6 +723,10 @@
     src: /opt/minecraft/server.properties
   register: minecraft_server_current_properties
   no_log: true
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Compute current and desired RCON properties
   ansible.builtin.set_fact:
@@ -640,6 +764,11 @@
     owner: minecraft
     group: minecraft
     mode: "0640"
+  no_log: true
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Request restart when RCON settings change
   ansible.builtin.command: /bin/true
@@ -668,6 +797,10 @@
     group: minecraft
     mode: "0644"
   when: (ops | default([]) | length) > 0
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 ###############################################################################
 # 11. Optional BlueMap installation and configuration
@@ -701,6 +834,10 @@
     mode: "0644"
   when: bluemap_enabled | default(false) | bool
   notify: Restart Minecraft service
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Find superseded BlueMap jars
   ansible.builtin.find:
@@ -709,6 +846,10 @@
     file_type: file
   register: minecraft_server_bluemap_existing_jars
   when: bluemap_enabled | default(false) | bool
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Remove superseded BlueMap jars
   ansible.builtin.file:
@@ -721,6 +862,10 @@
       item.path != '/opt/minecraft/mods/bluemap-'
       ~ minecraft_server_bluemap_version ~ '.jar'
   notify: Restart Minecraft service
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Create BlueMap configuration directories
   ansible.builtin.file:
@@ -733,6 +878,10 @@
     - /opt/minecraft/config/bluemap
     - /opt/minecraft/config/bluemap/maps
   when: bluemap_enabled | default(false) | bool
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Deploy managed BlueMap configuration
   ansible.builtin.template:
@@ -752,6 +901,10 @@
       dest: /opt/minecraft/config/bluemap/maps/default.conf
   when: bluemap_enabled | default(false) | bool
   notify: Restart Minecraft service
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Remove duplicate generated Overworld map
   ansible.builtin.file:
@@ -759,6 +912,10 @@
     state: absent
   when: bluemap_enabled | default(false) | bool
   notify: Restart Minecraft service
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 ###############################################################################
 # 12. Optional Chunky installation
@@ -785,6 +942,10 @@
     mode: "0644"
   when: chunky_pregen_enabled | default(false) | bool
   notify: Restart Minecraft service
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Find superseded Chunky jars
   ansible.builtin.find:
@@ -793,6 +954,10 @@
     file_type: file
   register: minecraft_server_chunky_existing_jars
   when: chunky_pregen_enabled | default(false) | bool
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 - name: Remove superseded Chunky jars
   ansible.builtin.file:
@@ -805,6 +970,10 @@
       item.path != '/opt/minecraft/mods/Chunky-NeoForge-'
       ~ minecraft_server_chunky_version ~ '.jar'
   notify: Restart Minecraft service
+  become: true
+  become_user: minecraft
+  become_method: ansible.builtin.su
+  become_flags: '-s /bin/sh'
 
 ###############################################################################
 # 13. Deploy systemd minecraft@.service template
