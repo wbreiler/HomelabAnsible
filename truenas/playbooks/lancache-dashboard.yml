@@ -46,8 +46,10 @@
         '{"extra":{"retrieve_config":true}}'
       check_mode: false
       register: dashboard_query
+      no_log: true
       changed_when: false
     - name: Reconcile only the LANCache dashboard
+      no_log: true
       ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
       vars:
         truenas_entities_apps: "{{ dashboard_query.stdout | from_json }}"

@@ -14,6 +14,7 @@
         else desired_app['values']
       }}
   changed_when: false
+  no_log: true
 
 - name: "Report application drift for {{ desired_app.name }}"
   ansible.builtin.debug:
@@ -28,9 +29,17 @@
       truenas_is_subset(truenas_entities_current_app.config))
 
 - name: "Create application {{ desired_app.name }}"
-  ansible.builtin.raw: >-
-    midclt call -j app.create
-    {{
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import json, sys
+        from truenas_api_client import Client
+        with Client() as client:
+            client.call('app.create', json.load(sys.stdin), job=True, timeout=None)
+    stdin: >-
+      {{
       (
         {
           'app_name': desired_app.name,
@@ -45,25 +54,37 @@
           'train': desired_app.train | default('stable'),
           'values': desired_app.get('values', {})
         }
-      ) | to_json | quote
-    }}
+      ) | to_json
+      }}
   changed_when: true
+  no_log: true
   when:
     - truenas_entities_current_app | length == 0
     - not ansible_check_mode
     - not truenas_entities_audit_only | default(false)
 
 - name: "Update application {{ desired_app.name }}"
-  ansible.builtin.raw: >-
-    midclt call -j app.update {{ desired_app.name | quote }}
-    {{
-      (
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import json, sys
+        from truenas_api_client import Client
+        data = json.load(sys.stdin)
+        with Client() as client:
+            client.call('app.update', data['name'], data['config'], job=True, timeout=None)
+    stdin: >-
+      {{ {
+        'name': desired_app.name,
+        'config': (
         {'custom_compose_config': truenas_entities_app_config}
         if desired_app['custom_app']
         else {'values': truenas_entities_app_config}
-      ) | to_json | quote
-    }}
+        )
+      } | to_json }}
   changed_when: true
+  no_log: true
   when:
     - truenas_entities_current_app | length > 0
     - >-

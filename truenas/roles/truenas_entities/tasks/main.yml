@@ -17,6 +17,7 @@
     file: dataset.yml
     apply:
       tags: [storage]
+  no_log: true
   loop: "{{ truenas_datasets }}"
   loop_control:
     loop_var: desired_dataset
@@ -165,16 +166,19 @@
   ansible.builtin.raw: midclt call user.query
   changed_when: false
   register: truenas_entities_user_query
+  no_log: true
   tags: [identity]
 
 - name: Parse local users
   ansible.builtin.set_fact:
     truenas_entities_users: "{{ truenas_entities_user_query.stdout | from_json }}"
   changed_when: false
+  no_log: true
   tags: [identity]
 
 - name: Reconcile local users
   ansible.builtin.include_tasks: user.yml
+  no_log: true
   loop: "{{ truenas_local_users }}"
   loop_control:
     loop_var: desired_user

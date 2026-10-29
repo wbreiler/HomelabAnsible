@@ -3,6 +3,7 @@
   ansible.builtin.raw: "midclt call {{ singleton.query_method }}"
   changed_when: false
   register: truenas_config_singleton_query
+  no_log: true
 
 - name: "Parse {{ singleton.name }}"
   ansible.builtin.set_fact:
@@ -10,11 +11,13 @@
       {{ truenas_config_singleton_query.stdout | from_json }}
     truenas_config_singleton_needs_update: false
   changed_when: false
+  no_log: true
 
 - name: "Detect drift in {{ singleton.name }}"
   ansible.builtin.set_fact:
     truenas_config_singleton_needs_update: true
   changed_when: false
+  no_log: true
   when: >-
     truenas_config_singleton_current[item.key] | default(none) != item.value
   loop: "{{ singleton.desired | dict2items }}"
@@ -44,10 +47,19 @@
     - singleton.requires_management_access | default(false)
 
 - name: "Update {{ singleton.name }}"
-  ansible.builtin.raw: >-
-    midclt call {{ singleton.update_method }}
-    {{ singleton.desired | to_json | quote }}
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import json, sys
+        from truenas_api_client import Client
+        data = json.load(sys.stdin)
+        with Client() as client:
+            client.call(data['method'], data['desired'])
+    stdin: "{{ {'method': singleton.update_method, 'desired': singleton.desired} | to_json }}"
   changed_when: true
+  no_log: true
   when:
     - not ansible_check_mode
     - not truenas_config_audit_only | default(false)

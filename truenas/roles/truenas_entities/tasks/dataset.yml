@@ -14,6 +14,7 @@
         items2dict
       }}
   changed_when: false
+  no_log: true
 
 - name: "Refuse to recreate missing pool root {{ desired_dataset.name }}"
   ansible.builtin.assert:
@@ -33,17 +34,26 @@
     - ansible_check_mode or truenas_entities_audit_only | default(false)
 
 - name: "Create dataset {{ desired_dataset.name }}"
-  ansible.builtin.raw: >-
-    midclt call pool.dataset.create
-    {{
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import json, sys
+        from truenas_api_client import Client
+        with Client() as client:
+            client.call('pool.dataset.create', json.load(sys.stdin))
+    stdin: >-
+      {{
       truenas_entities_dataset_payload |
       combine({
         'name': desired_dataset.name,
         'type': desired_dataset.type | default('FILESYSTEM')
       }) |
-      to_json | quote
-    }}
+      to_json
+      }}
   changed_when: true
+  no_log: true
   when:
     - truenas_entities_current_dataset | length == 0
     - not ansible_check_mode
@@ -74,11 +84,20 @@
     - ansible_check_mode or truenas_entities_audit_only | default(false)
 
 - name: "Update dataset {{ desired_dataset.name }}"
-  ansible.builtin.raw: >-
-    midclt call pool.dataset.update
-    {{ desired_dataset.name | quote }}
-    {{ truenas_entities_dataset_payload | to_json | quote }}
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import json, sys
+        from truenas_api_client import Client
+        data = json.load(sys.stdin)
+        with Client() as client:
+            client.call('pool.dataset.update', data['name'], data['properties'])
+    stdin: >-
+      {{ {'name': desired_dataset.name, 'properties': truenas_entities_dataset_payload} | to_json }}
   changed_when: true
+  no_log: true
   when:
     - truenas_entities_current_dataset | length > 0
     - truenas_entities_dataset_drift

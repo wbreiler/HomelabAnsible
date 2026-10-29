@@ -29,10 +29,12 @@
         '{"extra":{"retrieve_config":true}}'
       check_mode: false
       register: fastchannels_query
+      no_log: true
       changed_when: false
       tags: apps
 
     - name: Reconcile only FastChannels
+      no_log: true
       ansible.builtin.include_tasks:
         file: ../roles/truenas_entities/tasks/app.yml
         apply:

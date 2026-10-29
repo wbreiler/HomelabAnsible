@@ -58,8 +58,10 @@
         '{"extra":{"retrieve_config":true}}'
       check_mode: false
       register: spotdl_query
+      no_log: true
       changed_when: false
     - name: Reconcile only spotDL
+      no_log: true
       ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
       vars:
         truenas_entities_apps: "{{ spotdl_query.stdout | from_json }}"

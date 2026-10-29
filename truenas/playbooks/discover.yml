@@ -103,6 +103,7 @@
       failed_when: false
       loop: "{{ discovery_methods }}"
       register: discovery_calls
+      no_log: true
       tags:
         - discovery
 

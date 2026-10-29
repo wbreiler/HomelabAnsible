@@ -181,9 +181,10 @@ The audit reports modeled drift and verifies desired datasets, shares, and
 applications, including explicitly absent SMB/NFS shares. It does not prove
 that unmodeled live objects are safe or intended, and it never deletes them.
 
-Before mutation, inspect `playbooks/backup.yml`: its appliance name, remote and
-local paths, archive filename, and date are deliberately explicit. Update them
-for the reviewed run, then create the credential-bearing backup:
+Before mutation, inspect `playbooks/backup.yml`. Supply fresh remote and local
+paths for the reviewed run, then create the credential-bearing backup. Both
+paths must be new files in protected directories. The playbook refuses to
+replace an existing file or symlink.
 
 ```sh
 ansible-playbook playbooks/backup.yml

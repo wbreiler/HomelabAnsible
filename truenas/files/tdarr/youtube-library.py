@@ -15,6 +15,12 @@ def command(*args):
     return subprocess.check_output(args, text=True)
 
 
+def update_app(config):
+    from truenas_api_client import Client
+    with Client() as client:
+        client.call("app.update", "tdarr", {"custom_compose_config": config}, job=True, timeout=None)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True)
@@ -108,8 +114,7 @@ def main():
         if mount_changed:
             volumes.append(mount)
         service["environment"]["startPaused"] = "false"
-        command("midclt", "call", "-j", "app.update", "tdarr",
-                json.dumps({"custom_compose_config": config}))
+        update_app(config)
         for attempt in range(60):
             try:
                 node = gpu_node()

@@ -16,6 +16,7 @@
         ) | truenas_normalize_user(truenas_entities_groups)
       }}
   changed_when: false
+  no_log: true
 
 - name: "Report user drift for {{ desired_user.username }}"
   ansible.builtin.debug:
@@ -59,15 +60,24 @@
         })
       }}
   changed_when: false
+  no_log: true
 
 - name: "Create user {{ desired_user.username }}"
-  ansible.builtin.raw: >-
-    midclt call user.create
-    {{
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import json, sys
+        from truenas_api_client import Client
+        with Client() as client:
+            client.call('user.create', json.load(sys.stdin))
+    stdin: >-
+      {{
       truenas_entities_user_payload |
       combine({'password': vault_truenas_user_passwords[desired_user.username]}) |
-      to_json | quote
-    }}
+      to_json
+      }}
   changed_when: true
   no_log: true
   when:
@@ -76,14 +86,22 @@
     - not truenas_entities_audit_only | default(false)
 
 - name: "Update user {{ desired_user.username }}"
-  ansible.builtin.raw: >-
-    midclt call user.update {{ truenas_entities_current_user.id }}
-    {{
-      truenas_entities_user_payload | dict2items |
-      rejectattr('key', 'equalto', 'username') | items2dict |
-      to_json | quote
-    }}
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import json, sys
+        from truenas_api_client import Client
+        data = json.load(sys.stdin)
+        with Client() as client:
+            client.call('user.update', data['id'], data['user'])
+    stdin: >-
+      {{ {'id': truenas_entities_current_user.id, 'user':
+          (truenas_entities_user_payload | dict2items |
+           rejectattr('key', 'equalto', 'username') | items2dict)} | to_json }}
   changed_when: true
+  no_log: true
   when:
     - truenas_entities_current_user | length > 0
     - >-

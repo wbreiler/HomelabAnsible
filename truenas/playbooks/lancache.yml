@@ -24,6 +24,7 @@
         '{"extra":{"retrieve_config":true}}'
       check_mode: false
       register: lancache_query
+      no_log: true
       changed_when: false
     - name: Inspect the existing application network
       ansible.builtin.raw: "docker network inspect {{ lancache_network_name | quote }}"
@@ -41,6 +42,7 @@
         mode: '0755'
       loop: [cache, logs]
     - name: Reconcile only LANCache
+      no_log: true
       ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
       vars:
         truenas_entities_apps: "{{ lancache_query.stdout | from_json }}"

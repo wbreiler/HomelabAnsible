@@ -87,6 +87,7 @@
       ansible.builtin.raw: midclt call user.query
       changed_when: false
       register: legacy_user_query
+      no_log: true
 
     - name: Query datasets before creating replacement home
       ansible.builtin.raw: midclt call pool.dataset.query
@@ -123,6 +124,7 @@
             legacy_user_query.stdout | from_json |
             selectattr('username', 'equalto', legacy_user) | list
           }}
+      no_log: true
 
     - name: Verify legacy account-home scope
       ansible.builtin.assert:

@@ -30,8 +30,10 @@
         '{"extra":{"retrieve_config":true}}'
       check_mode: false
       register: lidarr_query
+      no_log: true
       changed_when: false
     - name: Reconcile only Lidarr
+      no_log: true
       ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
       vars:
         truenas_entities_apps: "{{ lidarr_query.stdout | from_json }}"

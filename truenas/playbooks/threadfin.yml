@@ -29,10 +29,12 @@
         '{"extra":{"retrieve_config":true}}'
       check_mode: false
       register: threadfin_query
+      no_log: true
       changed_when: false
       tags: apps
 
     - name: Reconcile only Threadfin
+      no_log: true
       ansible.builtin.include_tasks:
         file: ../roles/truenas_entities/tasks/app.yml
         apply:

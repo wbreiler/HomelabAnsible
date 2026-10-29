@@ -53,6 +53,7 @@
       check_mode: false
       changed_when: false
       register: youtube_apps
+      no_log: true
     - name: Preserve application ownership for the non-root container
       ansible.builtin.file:
         path: '{{ youtube_config_path }}'
@@ -61,6 +62,7 @@
         group: '{{ youtube_gid }}'
         recurse: true
     - name: Reconcile only Pinchflat
+      no_log: true
       ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
       vars:
         truenas_entities_apps: '{{ youtube_apps.stdout | from_json }}'

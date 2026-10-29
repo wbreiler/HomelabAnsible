@@ -1,6 +1,7 @@
 ---
 - name: Reconcile singleton configuration
   ansible.builtin.include_tasks: singleton.yml
+  no_log: true
   loop: "{{ truenas_singleton_configs }}"
   loop_control:
     loop_var: singleton

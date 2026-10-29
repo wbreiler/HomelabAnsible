@@ -8,52 +8,56 @@
       {{ playbook_dir }}/../artifacts/erebus-config-2026-09-24.tar
 
   tasks:
-    - name: Start buffered TrueNAS configuration export
-      ansible.builtin.raw: >-
-        midclt call core.download config.save
-        '[{"secretseed":true,"pool_keys":false,"root_authorized_keys":true}]'
-        erebus-config-2026-09-24.tar true
-      changed_when: true
-      register: truenas_backup_download
-      no_log: true
-
-    - name: Parse protected download URL
-      ansible.builtin.set_fact:
-        truenas_backup_url: >-
-          {{ (truenas_backup_download.stdout | from_json)[1] }}
-      no_log: true
-
     - name: Transfer configuration archive
       block:
-        - name: Download archive to protected remote temporary file
-          ansible.builtin.raw: >-
-            umask 077 &&
-            curl --fail --silent --show-error
-            --output {{ truenas_backup_remote_path | quote }}
-            {{
-              (
-                'http://127.0.0.1:' +
-                (truenas_system_general.ui_port | string) +
-                truenas_backup_url
-              ) | quote
-            }}
+        - name: Export archive to a new protected remote file
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/python3
+              - -c
+              - "{{ lookup('file', playbook_dir + '/../files/backup-config.py') }}"
+            stdin: "{{ {'mode': 'export', 'target': truenas_backup_remote_path} | to_json }}"
+          register: truenas_backup_export
           changed_when: true
           no_log: true
 
-        - name: Fetch configuration archive locally
+        - name: Create private local transfer directory
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: truenas-backup-
+          delegate_to: localhost
+          register: truenas_backup_staging
+
+        - name: Fetch configuration archive into private staging
           ansible.builtin.fetch:
             src: "{{ truenas_backup_remote_path }}"
-            dest: "{{ truenas_backup_local_path }}"
+            dest: "{{ truenas_backup_staging.path }}/config.tar"
             flat: true
             fail_on_missing: true
           no_log: true
 
-        - name: Set restrictive local backup permissions
-          ansible.builtin.file:
-            path: "{{ truenas_backup_local_path }}"
-            mode: "0600"
+        - name: Publish protected local backup without replacing existing files
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/python3
+              - -c
+              - "{{ lookup('file', playbook_dir + '/../files/backup-config.py') }}"
+            stdin: >-
+              {{ {'mode': 'publish', 'source': truenas_backup_staging.path + '/config.tar',
+                  'target': truenas_backup_local_path} | to_json }}
           delegate_to: localhost
-      always:
-        - name: Remove remote temporary configuration archive
-          ansible.builtin.raw: "rm -f {{ truenas_backup_remote_path | quote }}"
           changed_when: true
+          no_log: true
+      always:
+        - name: Remove local transfer directory
+          ansible.builtin.file:
+            path: "{{ truenas_backup_staging.path }}"
+            state: absent
+          delegate_to: localhost
+          when: truenas_backup_staging.path is defined
+
+        - name: Remove remote temporary configuration archive
+          ansible.builtin.file:
+            path: "{{ truenas_backup_remote_path }}"
+            state: absent
+          when: truenas_backup_export is defined and truenas_backup_export is succeeded
