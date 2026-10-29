@@ -2,7 +2,7 @@
 
 [Restore and disaster recovery guide](RESTORE.md)
 
-## Verified configuration — 2026-10-22
+## Verified configuration — 2026-10-29
 
 PBS 4.2.8 has an IDrive e2 S3 datastore named `pbs-backup`. Its endpoint is
 `s3.us-east-1.idrivee2.com`, in Virginia (`us-east-1`), with HTTPS and path-style
@@ -10,8 +10,11 @@ addressing. The endpoint configuration ID is `idrive-e2-virginia`.
 
 The user approved the full sync and a nightly PBS schedule after the initial
 sync succeeds. The initial encrypted sync started on 2026-10-22 at 21:00
-America/Chicago. Live checks confirmed the first production archive uploads.
-The complete offsite copy is not yet established.
+America/Chicago. It completed on 2026-10-24 at 06:58 with two warnings.
+The nightly schedule is enabled. The 2026-10-29 run completed at 08:04
+with two warnings about a source macOS snapshot removed during the sync.
+See the retention correction below. These warnings do not establish that
+every historical snapshot reached the cloud.
 
 | Setting | Configured value |
 | --- | --- |
@@ -26,8 +29,8 @@ The complete offsite copy is not yet established.
 | Namespace depth | 7, including source namespaces |
 | Encryption key ID | `idrive-e2` |
 | Remove vanished backups | Disabled |
-| Nightly schedule | 03:00 America/Chicago, enabled only after initial success |
-| Automatic pruning | Not configured |
+| Nightly schedule | 03:00 America/Chicago, enabled |
+| Cloud pruning | Not configured |
 | Completion notifications | Discord, on sync success or failure |
 
 The loopback writer `e2-sync@pbs!cloud` and its parent account have
@@ -98,10 +101,10 @@ cron job or a separate recurring timer. If the initial sync fails, the
 schedule remains absent. Inspect its task log before retrying. The initial
 service is transient and does not restart automatically after a host reboot.
 
-No pruning or retention policy was added. Until retention is configured,
-cloud backup history accumulates. The initial local source measurement was
-approximately 761 GB. Cloud usage can differ because encryption during sync
-affects chunk deduplication.
+No cloud pruning or retention policy was added. Until cloud retention is
+configured, cloud backup history accumulates. The initial local source
+measurement was approximately 761 GB. Cloud usage can differ because
+encryption during sync affects chunk deduplication.
 
 ## Discord completion notifications
 
@@ -121,7 +124,7 @@ The existing email matcher remains intact.
 The Discord target test delivered successfully on 2026-10-22. The matcher
 configuration was read back and verified. The temporary configuration token
 was restricted to `/system/notifications` and revoked afterward. Actual
-initial-sync completion delivery remains pending while the job runs.
+completion delivery was not independently verified during the 2026-10-29 check.
 
 Useful read-only checks:
 
@@ -166,3 +169,23 @@ These samples covered small incremental updates in previously completed
 groups. They demonstrate functioning concurrency and greater CPU use, but
 do not establish a sustained upload speedup or a revised completion time.
 Two workers remain configured; no additional tuning was applied.
+
+## macOS retention correction — 2026-10-29
+
+The 03:00 cloud sync enumerated `vm/108/2026-10-29T05:15:03Z`.
+The PVE all-guests job then removed that source snapshot at 06:30 CDT.
+Its prune log explicitly reports removal of the 00:15 CDT snapshot while
+retaining the duplicate 00:30 snapshot. The cloud sync later reported both
+an absent `index.json.blob` and a failed manifest load for that snapshot.
+These two warnings describe one missing snapshot.
+
+The initial correction excluded VM 108 from the six-hour all-guests job,
+leaving its dedicated hourly job and PBS midnight pruning. The user then
+requested retirement of the macOS VM. Its dedicated backup job is retired
+with the VM. The all-guests exclusion list returns to its original value.
+Terraform remains the owner of the PVE jobs.
+
+Existing local and cloud backups remain available. No cloud snapshots were
+deleted, and `remove-vanished` remains false. PBS local retention still applies
+to the retired group, so local snapshots can expire through normal pruning.
+The previously removed local snapshot cannot be recreated by a sync.
