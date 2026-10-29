@@ -1,10 +1,28 @@
 # Atlas development VM follow-up
 
-Status: work resumed by the user on 2026-10-24. GPT repair, APFS growth, and
-code migration completed. An isolated full restore reached the macOS login
-screen. PBS chunk verification and the native Intel Mineways build passed.
+Status: the user requested retirement of VM 108 on 2026-10-29.
+Existing PBS and S3 backups are preserved. Local PBS retention still applies.
+The development and recovery results below are historical records.
 
-## Current working state
+## Retirement verified — 2026-10-29
+
+Terraform removed VM 108, its four managed disks, and `macos-dev-hourly`.
+The clean shutdown timed out after 180 seconds. The VM was stopped before
+applying the saved removal plan. No VM 108 disks remain on either node.
+HCP state no longer contains the VM or its dedicated backup job.
+The six-hour all-guests job has its original exclusion list.
+
+PBS retained 24 completed local macOS snapshots and 51 completed cloud
+snapshots at the check. The newest local snapshot is
+`vm/108/2026-10-29T20:15:03Z`. The newest completed cloud snapshot at that
+check is `vm/108/2026-10-29T10:15:00Z`. An encrypted copy of the newest local
+snapshot continues independently. The unscheduled validation job definition
+was removed without stopping that task. The nightly cloud job remains enabled.
+Original ISO files are preserved. Private Terraform definitions and the
+pre-removal state are saved under ignored
+`terraform/proxmox/artifacts/macos-retired-20261029/`.
+
+## State before retirement
 
 VM 108 (`macos-tahoe`) runs on Atlas with 8 vCPUs and 32 GiB RAM.
 Connect with `ssh atlas-dev` as `pve` at `10.10.40.9`.
@@ -88,9 +106,9 @@ access through Bitwarden and recreate the documented SSH alias.
 
 ## 3. Prove recovery
 
-The dedicated `macos-dev-hourly` job backs up only VM 108 at :15 each hour
-to storage `mnemosyne`. It does not prune. The existing six-hour all-guests
-job retains its existing selection and retention rules.
+Before retirement, the dedicated `macos-dev-hourly` job backed up VM 108
+at :15 each hour to storage `mnemosyne`. That job is retired with the VM.
+The six-hour all-guests job retains its original selection and retention rules.
 Relevant recovery points on PBS datastore `mneme`, namespace `cluster-nash`:
 
 - `vm/108/2026-10-24T04:11:32Z`: first VM backup. PBS verified every included
