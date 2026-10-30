@@ -15,11 +15,16 @@ idempotency passed verification.
 | Address | `10.10.10.7` |
 | SSH port | `2747` |
 | SSH user | `root` |
-| Verified release (2026-10-02) | TrueNAS Community Edition `25.10.4` |
+| Verified release (2026-10-29) | TrueNAS Community Edition `25.10.7` |
 | Authentication | SSH key via the configured local SSH agent |
 
 The exact platform and release are verified by read-only discovery rather than
-assumed from the reported product name.
+assumed from the reported product name. The 25.10.7 update retained the 25.10.4
+boot environment and a protected configuration backup for recovery.
+
+Post-restart checks passed for both pools, the GPU, all 13 applications, and
+eight NFS mounts across three clients. The LANCache dashboard now uses a fixed
+private address to prevent a startup collision with the cache.
 
 ### TrueNAS 26 API compatibility
 

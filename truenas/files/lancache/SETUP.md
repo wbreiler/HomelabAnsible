@@ -12,6 +12,7 @@ lancache_network_name: existing-storage-macvlan
 lancache_prefill_network_name: lancache-workers
 lancache_prefill_subnet: 172.30.0.0/24
 lancache_prefill_address: 172.30.0.2
+lancache_dashboard_prefill_address: 172.30.0.3
 lancache_root: /mnt/tank/appdata/lancache
 lancache_upstream_dns: 1.1.1.1
 lancache_disk_size: 1000g
@@ -208,7 +209,10 @@ References: [SteamPrefill](https://github.com/tpill90/steam-lancache-prefill) an
 `playbooks/lancache-dashboard.yml` deploys LANCache Manager as a separate
 TrueNAS custom app. Set `lancache_dashboard_address` in the ignored desired
 state to an unused address on `lancache_network_name`. It must differ from the
-cache, worker, and ISO server addresses.
+cache, worker, and ISO server addresses. Set `lancache_dashboard_prefill_address`
+to an unused address on the private worker network. It must differ from
+`lancache_prefill_address`. These static addresses prevent an address collision
+when the apps start in a different order after a reboot.
 
 The manager mounts `/logs` and `/cache` with write access and mounts the
 Docker socket. It can remove cached content, manage logs, and control Docker.

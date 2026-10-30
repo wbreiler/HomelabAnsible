@@ -20,7 +20,8 @@ class DashboardTests(unittest.TestCase):
                 lancache_network_name='storage-macvlan',
                 lancache_bind_address='192.0.2.11',
                 lancache_prefill_network_name='lancache-workers',
-                lancache_prefill_address='172.30.0.2'))
+                lancache_prefill_address='172.30.0.2',
+                lancache_dashboard_prefill_address='172.30.0.3'))
         app = compose['services']['dashboard']
         self.assertRegex(app['image'], r'@sha256:[0-9a-f]{64}$')
         self.assertNotIn('ports', app)
@@ -40,7 +41,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(app['environment']['Prefill__NetworkMode'], 'lancache-workers')
         self.assertEqual(app['environment']['Prefill__LancacheIp'], '172.30.0.2')
         self.assertEqual(app['environment']['Prefill__LancacheDnsIp'], '172.30.0.2')
-        self.assertIn('prefill', app['networks'])
+        self.assertEqual(app['networks']['prefill']['ipv4_address'], '172.30.0.3')
         self.assertEqual(compose['networks']['prefill'],
                          {'external': True, 'name': 'lancache-workers'})
 
