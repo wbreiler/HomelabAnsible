@@ -26,13 +26,38 @@ and this checkout. A Git clone alone is insufficient for recovery.
 | --- | --- |
 | `archive` | Archive collections, excluding YouTube |
 | `clips` | Personal clips |
-| `appdata` | Application files and consistent SQLite copies under `_cloud-backup/sqlite/` |
+| `appdata` | Application files, `_cloud-backup/media-catalog.json`, and consistent SQLite copies under `_cloud-backup/sqlite/` |
 | `app-settings` | Exported application settings under `configs/` |
 | `system-config` | Exported TrueNAS configuration, including secret seed and pool keys |
 
 Each prefix is a separate encrypted restic repository with 30 retained
 versions. Time Machine, replaceable media, downloads, and excluded caches are
 not covered. The configuration export is not a backup of all pool contents.
+
+## Recover the media catalog
+
+The catalog records file paths, sizes, modification dates, and library totals
+for `/mnt/gaia/media`. It covers movies, TV, anime, music, and additional folders
+without requiring Plex. It does not contain the media itself.
+
+Use the `appdata` task (currently ID `4`, verify before use) with the native
+restore procedure below. Browse `/_cloud-backup` and restore only
+`/_cloud-backup/media-catalog.json` into a new recovery directory. Choose an
+older snapshot to see the library before a deletion. The repository retains
+30 backup versions. Snapshots before catalog deployment do not contain it.
+
+For recovery without TrueNAS, configure credentials as described below and
+select the repository ending in `/appdata`. Extract the catalog directly:
+
+```sh
+umask 077
+restic dump latest /_cloud-backup/media-catalog.json > recovered-media-catalog.json
+```
+
+Use a new output filename to preserve an existing local copy. Replace `latest`
+with a snapshot ID for an older list. The output is ordinary JSON after restic
+decrypts it. For example, `jq '.libraries' recovered-media-catalog.json` displays
+the per-library totals.
 
 ## Restore through the existing TrueNAS host
 
@@ -190,6 +215,12 @@ from IDrive e2. All restored SHA-256 hashes matched the originals. The report
 is `/mnt/gaia/appdata/_cloud-backup/clips-restore-test.json`; the tested snapshot
 is `b8aa46ced94bba628489e3789dec78ddb5833d4a621fb5d5094c5432022124f3`.
 A separate synthetic restore also passed, including its SQLite record check.
+
+On 2026-11-01, the 682,815-byte media catalog was restored from appdata snapshot
+`f789f9553d85698e136b87792c64fb06689877783e1b6be1b41f9d015a2b560f`.
+Its SHA-256 hash matched the original. It contained 2,726 file records across
+six libraries. The report is
+`/mnt/gaia/appdata/_cloud-backup/media-catalog-restore-test.json`.
 
 Whole-host recovery, full Archive restore, and production application recovery
 have not been rehearsed. The three-clip test does not verify every cloud file.

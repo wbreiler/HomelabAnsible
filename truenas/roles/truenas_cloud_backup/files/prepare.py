@@ -1,10 +1,13 @@
 #!/usr/bin/python3
-"""Prepare consistent SQLite copies or a supported TrueNAS configuration export."""
+"""Prepare a media catalog, consistent SQLite copies, or TrueNAS exports."""
 import argparse
 from contextlib import closing
+from datetime import datetime, timezone
+import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 import shutil
 import subprocess
 import uuid
@@ -12,6 +15,52 @@ import tempfile
 import urllib.request
 
 SKIP = {'lancache', 'ollama', 'standalone-tools', '_cloud-backup', '.zfs'}
+
+
+def catalog_media(source, target):
+    """Publish a complete filename inventory without reading media contents."""
+    started = datetime.now(timezone.utc).isoformat()
+    if source.is_symlink() or not source.is_dir():
+        raise RuntimeError('Media source must be an accessible directory')
+    if target.resolve().is_relative_to(source.resolve()):
+        raise RuntimeError('Media catalog must be outside the media source')
+
+    def fail(error):
+        raise error
+
+    files, libraries = [], {}
+    for directory, directories, filenames in os.walk(source, followlinks=False, onerror=fail):
+        directories[:] = sorted(d for d in directories if d != '.zfs' and not (Path(directory) / d).is_symlink())
+        for filename in sorted(filenames):
+            path = Path(directory) / filename
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode):
+                continue
+            relative = path.relative_to(source)
+            library = relative.parts[0] if len(relative.parts) > 1 else '_root'
+            totals = libraries.setdefault(library, {'file_count': 0, 'size_bytes': 0})
+            totals['file_count'] += 1
+            totals['size_bytes'] += info.st_size
+            files.append({
+                'library': library, 'path': relative.as_posix(), 'size_bytes': info.st_size,
+                'modified_at': datetime.fromtimestamp(info.st_mtime, timezone.utc).isoformat(),
+            })
+    catalog = {
+        'schema_version': 1, 'source': str(source), 'started_at': started,
+        'generated_at': datetime.now(timezone.utc).isoformat(),
+        'file_count': len(files), 'size_bytes': sum(item['size_bytes'] for item in libraries.values()),
+        'libraries': libraries, 'files': files,
+    }
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=target.parent, prefix='.media-catalog-')
+    try:
+        with os.fdopen(fd, 'w') as output:
+            json.dump(catalog, output, indent=2)
+            output.write('\n')
+        os.replace(temporary, target)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    return len(files)
 
 
 def backup_sqlite(source, destination):
@@ -80,12 +129,17 @@ def export_config(target):
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['sqlite', 'config', 'apps'])
+    parser.add_argument('mode', choices=['sqlite', 'config', 'apps', 'media'])
     parser.add_argument('destination', type=Path)
     args = parser.parse_args()
     if args.mode == 'sqlite':
+        count = catalog_media(Path('/mnt/gaia/media'), args.destination.parent / 'media-catalog.json')
+        print(f'Cataloged {count} media files')
         count = backup_sqlite(Path('/mnt/gaia/appdata'), args.destination)
         print(f'Prepared {count} consistent SQLite backups')
+    elif args.mode == 'media':
+        count = catalog_media(Path('/mnt/gaia/media'), args.destination)
+        print(f'Cataloged {count} media files')
     elif args.mode == 'apps':
         args.destination.mkdir(mode=0o700, parents=True, exist_ok=True)
         shutil.copytree('/mnt/.ix-apps/app_configs', args.destination / 'configs', dirs_exist_ok=True, symlinks=True)

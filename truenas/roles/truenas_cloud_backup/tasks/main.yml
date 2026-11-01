@@ -34,7 +34,7 @@
     mode: '0700'
   loop: '{{ truenas_cloud_backup_scopes }}'
 
-- name: Install consistent database and system export helper
+- name: Install media catalog, consistent database, and system export helper
   ansible.builtin.copy:
     src: prepare.py
     dest: '{{ truenas_cloud_backup_root }}/prepare.py'

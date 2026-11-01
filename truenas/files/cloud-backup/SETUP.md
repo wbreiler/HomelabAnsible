@@ -36,7 +36,7 @@ scope's snapshots. The user explicitly approved this retention policy.
 | --- | --- | --- |
 | Archive | `/mnt/gaia/Archive`, excluding `YouTube` | File backup; nested dataset prevents native snapshot mode |
 | Clips | `/mnt/gaia/clips` | Temporary native ZFS snapshot |
-| Application data | `/mnt/gaia/appdata` | Consistent SQLite copies plus ordinary application files |
+| Application data | `/mnt/gaia/appdata` | Media catalog, consistent SQLite copies, and ordinary application files |
 | Application settings | `/mnt/gaia/backups/truenas-app-settings` | Protected export from the hidden app-config mount |
 | System configuration | `/mnt/gaia/backups/truenas-config` | Supported configuration export with secret seed, pool keys, and root authorized keys |
 
@@ -44,11 +44,63 @@ The last two scopes use pre-scripts to refresh their exports before backup.
 The current application settings export is under `configs/`. The preliminary
 export at the directory root remains as an additional recovery copy.
 
-No media, downloads, ISO, model, or YouTube source is included. Appdata excludes
+No media contents, downloads, ISO, model, or YouTube source is included. Appdata excludes
 LANCache, Ollama, standalone tool downloads, the Tdarr transcode cache, and
 backup caches/test directories. Native backup paths are relative to the task
 source. **Do not prepend `/` to these exclusion patterns**: the restore test
 proved that leading-slash patterns did not exclude the synthetic files.
+
+## Media catalog
+
+The appdata pre-script refreshes
+`/mnt/gaia/appdata/_cloud-backup/media-catalog.json` before copying databases.
+It inventories every regular file beneath `/mnt/gaia/media`, including movies,
+TV, anime, music, and any additional folders. It does not depend on Plex indexing.
+Subtitles, artwork, and other companion files appear alongside media files.
+It reads file metadata only and does not upload the media contents.
+
+The JSON contains a schema version, source path, UTC scan timestamps, file and
+byte totals, totals per library, and a `files` array. Each file has `library`,
+`path` (relative to the source), `size_bytes`, and UTC `modified_at` fields.
+The first path component identifies the library. Files directly in the source
+use `_root`. Folder and file names preserve movie titles, episode names, and
+artist/album names as stored on disk. These are filenames, not normalized
+metadata or a count of distinct titles.
+
+Symlinks, special files, and `.zfs` snapshots are excluded. A missing source,
+unreadable directory, or disappearing file fails preparation and leaves the
+previous catalog intact. Publication uses an atomic replacement with mode
+`0600`. The scan is not a simultaneous filesystem snapshot. Downloads or
+renames during a scan can require a retry.
+
+The existing 04:00 Central backup job uploads the catalog in the encrypted
+`appdata` repository. Its 30 retained backup versions preserve previous lists,
+including files subsequently removed from the current library. This does not
+provide permanent deletion history beyond those retained versions. No extra
+schedule, credentials, package, or media-content backup is required.
+
+To refresh only the local catalog on TrueNAS:
+
+```sh
+python3 /mnt/gaia/appdata/_cloud-backup/prepare.py media \
+  /mnt/gaia/appdata/_cloud-backup/media-catalog.json
+```
+
+To inspect the JSON after downloading or restoring it:
+
+```sh
+jq '.libraries' media-catalog.json
+jq -r '.files[] | select(.library == "movies") | .path' media-catalog.json
+```
+
+See [RESTORE.md](RESTORE.md#recover-the-media-catalog) for cloud recovery.
+
+On 2026-11-01, the first catalog contained 2,726 files across six libraries and
+occupied 682,815 bytes. The native appdata upload completed, and the catalog
+restored from S3 matched the original SHA-256 hash. The protected verification
+report is `_cloud-backup/media-catalog-restore-test.json`. The repeat Ansible
+deployment reported `changed=0`. Unit checks cover library names, Unicode,
+symlinks, snapshots, special files, permissions, and failed scan/publication.
 
 ## Application databases
 
