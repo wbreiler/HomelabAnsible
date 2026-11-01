@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly OS package updates for running LXCs
+
+[Timer]
+OnCalendar={{ lxc_auto_update_schedule }}
+RandomizedDelaySec={{ lxc_auto_update_randomized_delay }}
+# Do not run a missed maintenance window during daytime host startup.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

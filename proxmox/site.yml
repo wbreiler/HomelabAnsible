@@ -112,6 +112,10 @@
       when: install_update_apps | default(false) | bool
       tags: ['update_apps', 'maintenance']
 
+    - role: lxc_auto_update
+      when: install_lxc_auto_update | default(false) | bool
+      tags: ['lxc_auto_update', 'maintenance']
+
     - role: update_all
       when: run_updates | default(false) | bool
       tags: ['update', 'maintenance']

@@ -394,6 +394,16 @@ management, LXC installation, system updates, and PBS restores.
   managed applications.
 * Never downloads or sources the upstream orchestration script at runtime.
 
+### lxc_auto_update
+
+* Installs a native systemd timer on each node for running Debian LXCs only.
+* Requires a recent LXC backup before every update. Preserves APT holds and
+  pins, refuses package removal, and never changes guest power or host packages.
+* Opt in with `install_lxc_auto_update: true` and `lxc_auto_update_enabled: true`.
+* Keep Terraform backup schedules and application release ownership intact.
+* Validate with `python3 tests/test_lxc_auto_update.py` and a live
+  `lxc-auto-update --dry-run` on both nodes before enabling the timer.
+
 ### update_reminder
 
 * Installs a systemd timer on every Proxmox node and checks the node plus its

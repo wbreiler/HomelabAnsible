@@ -250,6 +250,14 @@ install_tailscale_router: false
 install_update_apps: false  # Install the reviewed Community Scripts application updater
 update_apps_backup_storage: "{{ pbs_storage_id }}"
 
+install_lxc_auto_update: false
+lxc_auto_update_enabled: true
+lxc_auto_update_schedule: "*-*-* 03:15:00 America/Chicago"
+lxc_auto_update_randomized_delay: 15m
+lxc_auto_update_backup_storage: "{{ pbs_storage_id }}"
+lxc_auto_update_backup_max_age_hours: 8
+lxc_auto_update_skip_vmids: []
+
 run_updates: false  # Set to true to run system updates
 update_nodes: true  # Update Proxmox host nodes
 update_lxcs: true   # Update LXC containers

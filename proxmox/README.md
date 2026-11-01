@@ -632,6 +632,44 @@ ansible-playbook -i inventory.yml site.yml --tags tailscale_router -e 'install_t
 
 ### System Updates
 
+#### Automatic LXC OS updates
+
+The `lxc_auto_update` role installs a systemd timer on each Proxmox node.
+It runs nightly at 03:15 America/Chicago with up to 15 minutes of delay.
+Each run discovers the node's running LXCs, including guests moved by HA.
+The Mac and Codex do not need to be online.
+
+```bash
+ansible-playbook site.yml --tags lxc_auto_update \
+  -e 'install_lxc_auto_update=true lxc_auto_update_enabled=true'
+```
+
+Set these flags in the ignored group variables to preserve the configuration.
+The updater requires an LXC backup on `lxc_auto_update_backup_storage` from
+the last eight hours. A missing, stale, or failed-verification backup blocks
+that guest's update and fails the service. Existing Terraform backup jobs
+remain responsible for backups. No backup schedules are changed.
+
+APT updates preserve package holds, pins, and modified configuration files.
+They permit new dependencies but forbid package removals. This updates apps
+installed as eligible APT packages as well as OS packages. Source releases,
+Docker images, and Minecraft modpacks require their separate update methods.
+The job never updates host packages, executes `/usr/bin/update`, starts a
+stopped guest, or reboots a guest. Package upgrades can restart services.
+New failed systemd services fail the job. Missed windows do not run at boot.
+
+```bash
+# On each Proxmox node; simulation uses the existing package metadata.
+lxc-auto-update --dry-run
+systemctl list-timers lxc-auto-update.timer
+journalctl -u lxc-auto-update.service
+```
+
+Use `lxc_auto_update_skip_vmids` to exclude guests. To disable the timer, rerun
+the role with `install_lxc_auto_update=true lxc_auto_update_enabled=false`.
+
+#### Manual system and application updates
+
 Install the repository-owned Community Scripts application updater with:
 
 ```bash

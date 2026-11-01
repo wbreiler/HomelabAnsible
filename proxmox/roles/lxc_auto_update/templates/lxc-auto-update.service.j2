@@ -1,0 +1,16 @@
+[Unit]
+Description=Update running LXC packages after checking recent backups
+Wants=network-online.target
+After=network-online.target pve-cluster.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lxc-auto-update
+TimeoutStartSec=infinity
+User=root
+Group=root
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+Environment=PYTHONUNBUFFERED=1

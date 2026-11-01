@@ -113,13 +113,18 @@
               "loki={{ centralized_logging_loki_version }}" \
               "grafana={{ centralized_logging_grafana_version }}" \
               "alloy={{ centralized_logging_alloy_version }}" nginx
-            apt-mark hold loki grafana alloy
       when: >-
         ('loki=' ~ centralized_logging_loki_version) not in _centralized_logging_core_versions.stdout or
         ('grafana=' ~ centralized_logging_grafana_version) not in _centralized_logging_core_versions.stdout or
         ('alloy=' ~ centralized_logging_alloy_version) not in _centralized_logging_core_versions.stdout or
         'nginx=' not in _centralized_logging_core_versions.stdout
       changed_when: true
+
+    - name: Preserve package holds even when logging versions already match
+      ansible.builtin.command:
+        argv: [pct, exec, "{{ lxc_resolved_vmid }}", --, apt-mark, hold, loki, grafana, alloy]
+      register: _centralized_logging_package_holds
+      changed_when: "_centralized_logging_package_holds.stdout is search('(?m)^\\S+ set on hold\\.$')"
 
     - name: Create Grafana admin password file
       ansible.builtin.command:

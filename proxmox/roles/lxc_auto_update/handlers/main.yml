@@ -1,0 +1,8 @@
+---
+- name: Restart automatic LXC update timer
+  ansible.builtin.systemd_service:
+    name: lxc-auto-update.timer
+    daemon_reload: true
+    enabled: "{{ lxc_auto_update_enabled | bool }}"
+    state: "{{ 'restarted' if lxc_auto_update_enabled | bool else 'stopped' }}"
+  when: not ansible_check_mode

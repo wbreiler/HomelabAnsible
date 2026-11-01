@@ -33,6 +33,7 @@ python3 tests/test_iptag.py
 python3 tests/test_zipline_client.py
 python3 tests/test_service_boundaries.py
 python3 tests/test_logging_ingress.py
+python3 tests/test_lxc_auto_update.py
 ```
 
 These cover IP-tag parsing/filtering, the local upload client, and application

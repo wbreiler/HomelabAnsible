@@ -1,0 +1,44 @@
+---
+- name: Validate automatic LXC update settings
+  ansible.builtin.assert:
+    that:
+      - lxc_auto_update_backup_storage is match('^[a-zA-Z][a-zA-Z0-9_-]*$')
+      - lxc_auto_update_backup_max_age_hours | int > 0
+      - lxc_auto_update_skip_vmids | map('string') | reject('match', '^[1-9][0-9]*$') | list | length == 0
+
+- name: Install automatic LXC updater
+  ansible.builtin.copy:
+    src: lxc-auto-update.py
+    dest: /usr/local/sbin/lxc-auto-update
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Configure automatic LXC updater
+  ansible.builtin.copy:
+    content: >-
+      {{ {'backup_storage': lxc_auto_update_backup_storage,
+          'backup_max_age_hours': lxc_auto_update_backup_max_age_hours | int,
+          'skip_vmids': lxc_auto_update_skip_vmids | map('int') | list} | to_nice_json }}
+    dest: /etc/lxc-auto-update.json
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Install automatic LXC update units
+  ansible.builtin.template:
+    src: "lxc-auto-update.{{ item }}.j2"
+    dest: "/etc/systemd/system/lxc-auto-update.{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: [service, timer]
+  notify: Restart automatic LXC update timer
+
+- name: Enable automatic LXC update timer
+  ansible.builtin.systemd_service:
+    name: lxc-auto-update.timer
+    daemon_reload: true
+    enabled: "{{ lxc_auto_update_enabled | bool }}"
+    state: "{{ 'started' if lxc_auto_update_enabled | bool else 'stopped' }}"
+  when: not ansible_check_mode

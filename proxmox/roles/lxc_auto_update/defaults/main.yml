@@ -1,0 +1,7 @@
+---
+lxc_auto_update_enabled: false
+lxc_auto_update_schedule: "*-*-* 03:15:00 America/Chicago"
+lxc_auto_update_randomized_delay: 15m
+lxc_auto_update_backup_storage: "{{ pbs_storage_id | default('') }}"
+lxc_auto_update_backup_max_age_hours: 8
+lxc_auto_update_skip_vmids: []
