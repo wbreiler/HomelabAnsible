@@ -135,6 +135,12 @@ storage configuration.
 2. **Password Protection**: Tasks handling credentials (e.g., `pbs_storage`) must use `no_log: true` and must not place secrets in process arguments. Use a supported prompt, stdin, or secret-file mechanism.
 3. **Gitignore Strategy**: `inventory.yml`, `group_vars/proxmox_cluster.yml`, and `host_vars/*.yml` are all gitignored to protect sensitive data. Their sanitized `*.yml.example` templates remain tracked.
 4. **Installer Integrity**: Third-party releases and source revisions are pinned and checksum-verified before root executes or installs them. Bump versions and checksums together after reviewing upstream changes. The explicitly authorized `lxc_app_updates` workflow may select compatible stable releases automatically, resolve exact checksums or image digests, and deploy only after a fresh backup. Preserve its release, backup, health, and failed-retry guards.
+5. **Transferred domain**: The user confirmed on 2026-11-01 that `meownow.app`
+   was transferred and is no longer theirs. `s3.meownow.app` is retired locally.
+   Its remaining public DNS and certificate administration belong to the current
+   domain owner, not homelab maintenance. Do not treat historical records as
+   authorization to manage that domain. See the certificate renewal notes in
+   `README.md`.
 
 ## Development Conventions
 

@@ -1207,6 +1207,16 @@ outside their active directories. Retain the certificate lineage and keys
 for recovery rather than revoking them. Confirm both NPM and the system
 Certbot timer stop selecting the retired certificate.
 
+**Transferred domain — confirmed November 1, 2026:** `meownow.app` was
+transferred and is no longer owned by this homelab's operator. The former
+`s3.meownow.app` endpoint is retired. Its local NPM proxy and certificate
+records are disabled, and its renewal configuration is archived.
+Any remaining public DNS records belong to the current domain owner's
+administration. They are not pending homelab cleanup. Do not seek replacement
+credentials, renew certificates, or change DNS for this domain as part of
+homelab maintenance. Historical certificates and backups do not establish
+current ownership or authorization.
+
 ### Checking PBS Backups
 
 ```bash
