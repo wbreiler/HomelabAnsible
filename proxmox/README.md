@@ -1186,6 +1186,27 @@ Use `mnemosyne` for the current cluster storage ID. Its PBS datastore is
 
 ## Maintenance
 
+### Nginx Proxy Manager certificate renewals
+
+NPM certificate metadata and Certbot renewal files must agree. If an HTTP
+challenge reaches another site or an unavailable origin through Cloudflare,
+use DNS validation with a credential authorized for the certificate's zone.
+Test against staging before production issuance. Include every hostname
+served by the certificate; an apex certificate alone does not cover its
+subdomains. Keep credentials out of command arguments and logs.
+
+After changing validation methods, reconcile NPM's domains, expiry, DNS
+provider, and credential metadata. Verify a renewal dry run using the saved
+configuration and check the certificate actually served for each affected
+SNI hostname. Validate Nginx before `nginx -s reload`; this installation's
+OpenResty unit does not implement `systemctl reload`.
+
+For an explicitly retired endpoint, preserve a backup, disable its NPM host
+and certificate records, and archive its generated proxy and renewal files
+outside their active directories. Retain the certificate lineage and keys
+for recovery rather than revoking them. Confirm both NPM and the system
+Certbot timer stop selecting the retired certificate.
+
 ### Checking PBS Backups
 
 ```bash
