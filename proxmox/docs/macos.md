@@ -1,9 +1,10 @@
 # macOS Tahoe on Atlas
 
-> Provisioning changed on 2026-10-26. Terraform now owns this VM. The old
-> `macos.yml` entry point refuses changes. Commands below describe the original
-> installation and remain historical reference. Review hardware changes in
-> Terraform and preserve existing boot media and backup jobs.
+> VM 108 was retired on 2026-10-29 through Terraform. Its dedicated backup job
+> was also retired. Existing backups and original ISO files were retained.
+> The old `macos.yml` entry point refuses changes. This document records the
+> original installation, not an active deployment procedure. See
+> [the retirement record](macos-follow-up.md) before using any old address or VMID.
 
 
 `macos.yml` creates VM 108 (`macos-tahoe`) on Atlas with 8 cores, 32 GiB RAM,

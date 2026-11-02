@@ -20,7 +20,9 @@ represent every raw LXC setting. Do not claim that import proves disaster recove
 
 ## Project Overview
 
-This is an Ansible automation project for deploying and managing a Proxmox VE cluster. It handles repository configuration, cluster formation, Proxmox Backup Server (PBS) storage, ISO management, LXC/VM deployment, network tuning, and system updates.
+This project configures Proxmox hosts and existing guest software. It manages
+repositories, optional cluster formation, network tuning, monitoring, updates,
+and explicit recovery operations. Terraform owns guest and platform resources.
 
 **Target Environment**: Homelab infrastructure (2 Proxmox nodes: prometheus/10.10.30.3 and atlas/10.10.30.9) running PVE 9 / Debian trixie.
 
@@ -33,9 +35,9 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
 * Gatus and Diun are opt-in monitoring roles; Discord update and health
   reminders are also managed here.
 * The main playbook `site.yml` has two plays: the first sets up Proxmox nodes, the second runs `network_tuning` on both `proxmox_cluster` and `pbs_nodes` groups.
-* SSH uses the agent selected by the user's SSH configuration. On the current
-  controller this is Bitwarden, with `~/.ssh/cluster.pub` selecting the PVE/PBS
-  key. The old `private_key_file` setting in `ansible.cfg` is commented out.
+* SSH uses the agent selected by the user's SSH configuration. The Mac
+  profiles configure 1Password when available, with `~/.ssh/cluster.pub`
+  selecting the PVE/PBS key. The old `private_key_file` setting in `ansible.cfg` is commented out.
 
 ## Project Structure
 
@@ -46,28 +48,30 @@ This is an Ansible automation project for deploying and managing a Proxmox VE cl
 * **`roles/`**: Contains the logic for specific tasks:
   * `configure_repos`: Sets up Proxmox repositories (disables enterprise, enables no-subscription).
   * `cluster_setup`: Creates or joins a Proxmox cluster.
-  * `pbs_storage`: Configures Proxmox Backup Server storage with shared namespace.
-  * `manage_isos`: Downloads or mounts ISOs.
+  * `pbs_storage`: Retired guard. Terraform owns the PBS connection.
+  * `manage_isos`: Retired guard. Terraform owns cached media.
   * `iptag`: Tags LXC containers with IPs in the Proxmox UI.
-  * `download_templates`: Fetches latest LXC OS templates.
-  * `apt_cacher_ng`: Creates and configures a repository-owned Apt-Cacher NG LXC.
-  * `prowlarr`: Configures existing the Prowlarr LXC with a pinned, checksum-verified release.
-  * `homebridge`: Configures existing the Homebridge LXC with a pinned Debian package.
-  * `spoolman`: Configures existing the Spoolman LXC with pinned application and uv releases.
-  * `bambuddy`: Configures existing the Bambuddy LXC with a pinned release.
-  * `nexdeck`: Configures existing the NexDeck LXC with a pinned source release.
-  * `gitea_mirror`: Configures existing the Gitea Mirror LXC with pinned application and Bun releases.
-  * `seerr`: Configures existing the Seerr LXC with pinned application and pnpm releases.
-  * `pocket_id`: Configures existing the Pocket ID LXC with a pinned release binary.
-  * `vaultwarden`: Configures existing the Vaultwarden LXC from pinned source and web-vault releases.
-  * `forgejo`: Configures existing the Forgejo LXC with a pinned release binary and strict upgrade guards.
-  * `sonarr`: Configures existing the Sonarr LXC with a pinned, checksum-verified release.
-  * `radarr`: Configures existing the Radarr LXC with a pinned, checksum-verified release.
-  * `gatus`: Configures existing the Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain.
-  * `diun`: Configures existing the Diun image-update watcher LXC.
-  * `centralized_logging`: Creates Loki and Grafana and deploys Alloy.
-  * `tailscale_router`: Configures existing the Tailscale subnet-router LXC.
+  * `download_templates`: Retired guard. Terraform owns pinned templates.
+  * `apt_cacher_ng`: Configures an existing guest through node or direct SSH tasks.
+  * `prowlarr`: Configures the existing Prowlarr LXC with a pinned, checksum-verified release.
+  * `homebridge`: Configures the existing Homebridge LXC with a pinned Debian package.
+  * `spoolman`: Configures the existing Spoolman LXC with pinned application and uv releases.
+  * `bambuddy`: Configures the existing Bambuddy LXC with a pinned release.
+  * `nexdeck`: Configures the existing NexDeck LXC with a pinned source release.
+  * `gitea_mirror`: Configures the existing Gitea Mirror LXC with pinned application and Bun releases.
+  * `seerr`: Configures the existing Seerr LXC with pinned application and pnpm releases.
+  * `pocket_id`: Configures the existing Pocket ID LXC with a pinned release binary.
+  * `vaultwarden`: Configures the existing Vaultwarden LXC from pinned source and web-vault releases.
+  * `forgejo`: Configures the existing Forgejo LXC with a pinned release binary and strict upgrade guards.
+  * `sonarr`: Configures the existing Sonarr LXC with a pinned, checksum-verified release.
+  * `radarr`: Configures the existing Radarr LXC with a pinned, checksum-verified release.
+  * `gatus`: Configures the existing Gatus LXC (uptime monitoring/status page), built from a pinned source tarball with a pinned Go toolchain.
+  * `diun`: Configures the existing Diun image-update watcher LXC.
+  * `centralized_logging`: Configures Loki/Grafana in an existing guest and deploys Alloy.
+  * `tailscale_router`: Configures the existing Tailscale subnet-router LXC.
   * `update_all`: Updates Proxmox host nodes and LXC containers.
+  * `lxc_auto_update`: Schedules guarded Debian LXC package updates.
+  * `lxc_app_updates`: Schedules compatible stable application updates with fresh backups.
   * `update_reminder`: Installs per-node Discord package-update reminders.
   * `healthcheck_reminder`: Installs a cluster-master-only Discord alert for down nodes/guests.
   * `cleanup_storage`: Detects and optionally destroys stale ZFS datasets.
@@ -96,7 +100,7 @@ cp host_vars/node.yml.example host_vars/atlas.yml  # repeat for each node
 
 ### Inventory & Configuration Model
 
-* **Inventory**: `inventory.yml` (gitignored) - Contains node IPs and VMID ranges.
+* **Inventory**: `inventory.yml` (gitignored) - Contains node addresses and network settings. Legacy VMID ranges do not provision guests.
 * **Group Variables**: `group_vars/proxmox_cluster.yml` (gitignored, Ansible Vault encrypted) - Cluster-wide secrets and configuration.
 * **Host Variables**: `host_vars/<nodename>.yml` (gitignored via `host_vars/*.yml` pattern) - Per-node corosync ring1 configuration, plus PBS identity on the cluster master.
 
@@ -125,14 +129,14 @@ Each node's `host_vars/<nodename>.yml` configures:
 
 * `corosync_ring1_addr` — IP on the dedicated cluster sync network (10.10.50.x).
 
-The cluster master's host variables additionally set `pbs_username` and
-`pbs_namespace`; `pbs_storage` uses that one identity for the cluster-wide
-storage configuration.
+Legacy host variables can still contain `pbs_username` and `pbs_namespace`.
+They no longer configure the cluster connection. Review that identity and
+namespace in the ignored Terraform deployment instead.
 
 ### Security Model
 
-1. **Ansible Vault**: `group_vars/proxmox_cluster.yml` is encrypted and contains secrets like the PBS password and fingerprint.
-2. **Password Protection**: Tasks handling credentials (e.g., `pbs_storage`) must use `no_log: true` and must not place secrets in process arguments. Use a supported prompt, stdin, or secret-file mechanism.
+1. **Ansible Vault**: Keep application credentials and webhooks in encrypted local variables. Terraform separately protects its PBS connection credential.
+2. **Password Protection**: Tasks handling credentials must use `no_log: true` and must not place secrets in process arguments. Use a supported prompt, stdin, or secret-file mechanism.
 3. **Gitignore Strategy**: `inventory.yml`, `group_vars/proxmox_cluster.yml`, and `host_vars/*.yml` are all gitignored to protect sensitive data. Their sanitized `*.yml.example` templates remain tracked.
 4. **Installer Integrity**: Third-party releases and source revisions are pinned and checksum-verified before root executes or installs them. Bump versions and checksums together after reviewing upstream changes. The explicitly authorized `lxc_app_updates` workflow may select compatible stable releases automatically, resolve exact checksums or image digests, and deploy only after a fresh backup. Preserve its release, backup, health, and failed-retry guards.
 5. **Transferred domain**: The user confirmed on 2026-11-01 that `meownow.app`
@@ -181,23 +185,23 @@ ansible-playbook -i inventory.yml site.yml --ask-vault-pass
 # Deploy to a single node
 ansible-playbook -i inventory.yml site.yml --limit atlas --ask-vault-pass
 
-# Run a specific role only by using tags
-ansible-playbook -i inventory.yml site.yml --tags pbs --ask-vault-pass
+# Configure repositories only
+ansible-playbook -i inventory.yml site.yml --tags repos --ask-vault-pass
 
 # Run specific roles on a specific node
-ansible-playbook -i inventory.yml site.yml --limit atlas --tags "pbs,update" --ask-vault-pass
+ansible-playbook -i inventory.yml site.yml --limit atlas --tags "repos,update" -e run_updates=true --ask-vault-pass
 ```
 
 ### Tags for Granular Execution
 
 * `repos`: Configure repositories only.
 * `cluster`: Run cluster setup logic.
-* `pbs`: Configure PBS storage.
-* `isos`: Manage ISO downloads/mounts.
+* `pbs` and `restore`: Explicit PBS recovery, gated by `restore_from_pbs`. These tags do not configure storage.
+* `lxc_auto_update` and `lxc_app_updates`: Install the separately gated update services.
 * `update`: Update nodes and LXC containers (requires `-e 'run_updates=true'`).
 * `update_reminder`: Install per-node Discord package-update reminders.
 * `healthcheck_reminder`: Install the cluster-master-only Discord down-node/guest alert.
-* `gatus`: Create or adopt the Gatus uptime monitoring LXC.
+* `gatus`: Configure Gatus in an existing LXC, gated by `install_gatus`.
 * `restore`: Restore containers from PBS backups (requires `-e 'restore_from_pbs=true'`).
 * `network`: Apply network tuning.
 
@@ -223,13 +227,13 @@ ansible proxmox_cluster -i inventory.yml -a "pvecm status" --become
 
 ### Role-Specific Commands
 
-See `README.md` for extensive examples of role-specific commands for ISO
-management, LXC installation, system updates, and PBS restores.
+See `README.md` for guest software, system updates, and PBS recovery commands.
+Use `../terraform/README.md` for provisioning and media management.
 
 ## Adding New Nodes
 
-1. **Update `inventory.yml`**: Add the new node with `ansible_host`, `proxmox_node_name`, and `vmid_range_start`/`end`.
-2. **Create `host_vars/<nodename>.yml`**: Copy `host_vars/node.yml.example` and populate `corosync_ring1_addr`; set `pbs_username` and `pbs_namespace` on the cluster master only.
+1. **Update `inventory.yml`**: Add the node address, name, and reviewed network-tuning settings. Legacy VMID ranges no longer allocate guests.
+2. **Create `host_vars/<nodename>.yml`**: Copy `host_vars/node.yml.example` and populate `corosync_ring1_addr`. Terraform owns PBS connection settings.
 3. **Run Playbook**: Run the playbook with `--limit <nodename>` to target the new node.
 
 ## Adding New Roles
@@ -273,8 +277,11 @@ management, LXC installation, system updates, and PBS restores.
 ### apt_cacher_ng
 
 * Manages Apt-Cacher NG with repository-owned Ansible tasks.
-* Configures existing an LXC by hostname on `apt_cacher_ng_node`.
-* Installs `apt-cacher-ng` and `avahi-daemon`, removes the legacy remote updater, configures HTTPS pass-through and the local APT proxy, and verifies the service.
+* Resolves an existing LXC by hostname, or configures an explicitly selected
+  guest through `apt-cacher-ng-guests.yml`.
+* Installs `apt-cacher-ng`, removes the legacy remote updater, configures HTTPS
+  pass-through and the local APT proxy, and verifies the service. Only the
+  node workflow installs `avahi-daemon`.
 * Skipped by default unless `install_apt_cacher_ng: true`.
 
 ### Managed application LXCs
@@ -284,36 +291,63 @@ management, LXC installation, system updates, and PBS restores.
   existing privilege modes and raw passthrough settings during adoption.
 * Existing HA-managed containers are located at run time through
   `tasks/resolve_lxc_node.yml`. A role's `<role>_node` value is therefore the
-  fresh-install fallback, not a reliable statement of its current location.
+  lookup fallback, not a reliable statement of its current location. It does
+  not authorize creation when the guest is absent.
   Names, VMIDs, and fallback nodes documented below describe tracked defaults,
   not verified live state; inspect cluster resources before operational work.
+* Preserve `tasks/service_directories.yml` and `files/service-directories.py`
+  when preparing service-owned paths. They reject unsafe ancestors. Do not
+  replace them with recursive root ownership or writes through application links.
+
+### nexdeck
+
+* The role installs `homelab.py` and a checked frontend patch after the pinned
+  release. Revalidate both against the upstream adapter and renderer during upgrades.
+* The combined map reads Proxmox, TrueNAS, and PBS. Dashboard links accept
+  explicit HTTP(S) URLs without credentials. Do not derive links from app secrets.
+* The editable Start board lives in the application database. The tracked
+  `files/nexdeck/start-board.yml.example` is an import template, not desired state.
+  Export the current board before edits. Preserve `/var/lib/nexdeck` and uploads.
+* See `files/nexdeck/README.md` for editing, recovery, and guest-based tests.
+
+### centralized_logging
+
+* Configure the existing logging guest and collectors. Loki queries stay on
+  loopback. Port 3100 permits only push/readiness routes from reviewed sources.
+* `centralized_logging_ingest_cidrs` requires explicit IPv4 `/32` sources.
+  Update this policy for changed collector addresses. Discovery must not widen it.
+* Preserve APT package pins/holds and isolated retention-test ports. See
+  `README.md` and `tests/README.md` for configuration and boundary checks.
 
 ### prowlarr
 
 * Manages Prowlarr with repository-owned Ansible tasks.
-* The tracked defaults identify `prowlarr-nash` as VMID 104 with `atlas` as the fresh-install fallback; existing application data is preserved.
+* The tracked defaults identify `prowlarr-nash` as VMID 104 with `atlas` as the lookup fallback; existing application data is preserved.
 * Pins the Prowlarr release and checksum, manages dependencies, data directory, service, and health checks, and removes the remote updater.
 * Skipped by default unless `install_prowlarr: true`.
 
 ### homebridge
 
 * Manages Homebridge with repository-owned Ansible tasks.
-* The tracked defaults identify `homebridge-nash` as VMID 105 with `prometheus` as the fresh-install fallback; existing data is preserved.
+* The tracked defaults identify `homebridge-nash` as VMID 105 with `prometheus` as the lookup fallback; existing data is preserved.
 * Pins the Homebridge Debian package and checksum-verifies its repository key, manages the APT source and package pin, and removes the remote updater.
 * Skipped by default unless `install_homebridge: true`.
+* `homebridge-discovery.yml` separately publishes paired bridge metadata through
+  the gateway's existing Avahi service. It is not part of `site.yml`.
+  Keep only public advertisement metadata in its ignored inventory. Never copy
+  pairing PINs or keys. Verify discovery from the client LAN and device control.
 
 ### spoolman
 
 * Manages Spoolman with repository-owned Ansible tasks.
-* The tracked defaults identify `spoolman-nash` as VMID 102 with `atlas` as the fresh-install fallback; its `.env` file and SQLite data directory are preserved.
+* The tracked defaults identify `spoolman-nash` as VMID 102 with `atlas` as the lookup fallback; its `.env` file and SQLite data directory are preserved.
 * Pins and checksum-verifies both Spoolman and uv releases, builds dependencies before atomically swapping the application, removes the remote updater, and verifies the reported application version.
 * Skipped by default unless `install_spoolman: true`.
 
 ### bambuddy
 
-* Configures existing the hostname configured by `bambuddy_hostname`; its VMID
-  defaults to automatic allocation and `bambuddy_node` is only the
-  fresh-install fallback.
+* Configures the existing guest selected by `bambuddy_hostname`. Terraform
+  allocates its VMID. `bambuddy_node` is only the lookup fallback.
 * Pins and checksum-verifies the Bambuddy source release, builds its Python and
   frontend dependencies inside the LXC, preserves an existing `.env`, manages
   the systemd service, and verifies the web service.
@@ -322,7 +356,7 @@ management, LXC installation, system updates, and PBS restores.
 ### gitea_mirror
 
 * Manages Gitea Mirror with repository-owned Ansible tasks.
-* The tracked defaults identify `git-mirror-nash` as VMID 119; its environment file and SQLite data directory are preserved, and `gitea_mirror_node` is only the fresh-install fallback.
+* The tracked defaults identify `git-mirror-nash` as VMID 119; its environment file and SQLite data directory are preserved, and `gitea_mirror_node` is only the lookup fallback.
 * Pins and checksum-verifies both Gitea Mirror and Bun releases, refuses destructive 2.x migrations, checks SQLite integrity before upgrades, builds the new release before stopping the service, keeps a pre-upgrade backup, rolls back automatically when the upgraded service fails its health check, removes the remote updater, and verifies the installed version.
 * Skipped by default unless `install_gitea_mirror: true`.
 
@@ -343,7 +377,7 @@ management, LXC installation, system updates, and PBS restores.
 ### vaultwarden
 
 * Manages Vaultwarden with repository-owned Ansible tasks based on the Community Scripts design; it never downloads or runs that installer.
-* The tracked defaults identify `vaultwarden-nash` as VMID 125 with `atlas` as the fresh-install fallback. Vaultwarden, Rust, rustup, and the matching web vault are version- or checksum-pinned.
+* The tracked defaults identify `vaultwarden-nash` as VMID 125 with `atlas` as the lookup fallback. Vaultwarden, Rust, rustup, and the matching web vault are version- or checksum-pinned.
 * Preserves and integrity-checks SQLite data, stages builds before stopping the service, keeps a pre-upgrade database/binary/web-vault backup, rolls back failed health checks, and runs under a hardened non-root systemd unit.
 * Skipped by default unless `install_vaultwarden: true`.
 
@@ -372,7 +406,7 @@ management, LXC installation, system updates, and PBS restores.
 ### radarr
 
 * Manages Radarr with repository-owned Ansible tasks.
-* The tracked defaults identify `radarr-nash` as VMID 111 with `prometheus` as the fresh-install fallback; `config.xml` and the SQLite database are preserved, and the service runs as the `media` user.
+* The tracked defaults identify `radarr-nash` as VMID 111 with `prometheus` as the lookup fallback; `config.xml` and the SQLite database are preserved, and the service runs as the `media` user.
 * Pins and checksum-verifies the release tarball, backs up config and database state before atomically swapping the install directory, rolls back automatically when the upgraded service fails its `/ping` check, removes the remote updater, and verifies the API-reported version.
 * Skipped by default unless `install_radarr: true`.
 
@@ -389,15 +423,15 @@ management, LXC installation, system updates, and PBS restores.
 
 * Updates both Proxmox hosts and all running LXC containers.
 * For each container: detects package manager (apt/apk) and updates OS packages.
-* Never executes application-specific updater hooks; managed applications upgrade only through pinned role version bumps.
+* Never executes application-specific updater hooks. Managed releases change through explicit role pins or the guarded `lxc_app_updates` workflow.
 
 ### update_apps
 
 * Installs a repository-owned replacement for the Community Scripts
   `update-apps.sh` orchestration script on each Proxmox node.
 * Backs up and updates only running, tagged, unmanaged LXCs with an existing
-  `/usr/bin/update`; dedicated Ansible roles remain the only update method for
-  managed applications.
+  `/usr/bin/update`. Managed applications use explicit role pins or the guarded
+  `lxc_app_updates` workflow.
 * Never downloads or sources the upstream orchestration script at runtime.
 
 ### lxc_auto_update
@@ -445,7 +479,7 @@ management, LXC installation, system updates, and PBS restores.
 
 * Installs a systemd timer on the cluster master node only; checks are
   cluster-wide via `pvesh get /cluster/resources`, so running it on every
-  node would triple-alert.
+  node would duplicate alerts.
 * Flags any Proxmox node not `online` and any LXC/VM not `running`; guests
   can be excluded with `healthcheck_reminder_skip_vmids`.
 * Re-notifies immediately if the set of down items changes, otherwise backs
@@ -475,11 +509,11 @@ management, LXC installation, system updates, and PBS restores.
 
 ### tailscale_router
 
-* Configures existing the unprivileged `tailscale-router-nash` LXC, installs a
+* Configures the existing unprivileged `tailscale-router-nash` LXC, installs a
   pinned Tailscale package from a checksum-verified-key APT repository, and
   advertises the configured LAN routes.
-* This role also reconciles `/dev/net/tun` passthrough in the Proxmox-side LXC
-  configuration and restarts the container when that configuration changes.
+* Requires existing `/dev/net/tun` passthrough. It fails when the expected
+  device entries are absent. Terraform owns guest hardware and lifecycle.
 * Keep `tailscale_router_auth_key` in Vault. At least one advertised CIDR is
   required, and new routes may still require approval in the Tailscale admin
   console unless the tailnet has matching `autoApprovers`.
@@ -515,8 +549,9 @@ management, LXC installation, system updates, and PBS restores.
 ### macos.yml
 
 * Retired creation entry point. It fails before any remote change.
-* Terraform owns the existing VM. Preserve OpenCore media, custom QEMU
-  arguments, SMBIOS identity, disks, and the existing backup schedule.
+* VM 108 was retired on 2026-10-29 through Terraform, together with its
+  dedicated backup job. Preserve retained backups and original ISO files.
+  A new macOS guest needs an explicit provisioning request.
 * Installation notes remain in `docs/macos.md` as historical reference.
 
 ### network_tuning
@@ -546,7 +581,7 @@ management, LXC installation, system updates, and PBS restores.
 
 * Deploys checksum-pinned Homelable source with Python and Caddy in an
   unprivileged Debian 13 LXC. Opt in with `install_homelable` and tag `homelable`.
-* Fresh-install defaults: Atlas, VMID 131, VLAN 40, port 3000. Confirm live state.
+* Tracked defaults: Atlas, VMID 131, VLAN 40, port 3000. Confirm live state.
 * Preserve `/var/lib/homelable`, the backend `.env`, and the root-only bootstrap
   password. Existing different releases require a reviewed migration.
 * Check mode skips container operations. Verify live API/login/database health
@@ -581,3 +616,6 @@ management, LXC installation, system updates, and PBS restores.
   DNS JSON outside Git. See `docs/local-services.md` for checks and recovery.
 * LibreSpeed uses direct DNS rather than the proxy. LANCache must forward to
   the local resolver for private names to work on its clients.
+* TrueNAS routes require `scheme: https` and `require_tls_upstream: true`.
+  Validate DNS and TLS from each calling application, not only the browser.
+  Keep proxy upstreams on infrastructure addresses to avoid a proxy loop.

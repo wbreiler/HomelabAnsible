@@ -1,6 +1,8 @@
 # Local tests
 
-These tests do not connect to Proxmox or download images. Run from `proxmox/`.
+The tests below run locally without Proxmox connections or image downloads.
+Run them from `proxmox/`. Guest integration tests have separate requirements
+at the end of this guide.
 
 ## Guest ownership guards
 
@@ -37,6 +39,8 @@ python3 tests/test_lxc_auto_update.py
 python3 tests/test_lxc_app_updates.py
 python3 tests/test_native_app_updates.py
 python3 tests/test_lxc_update_notifications.py
+python3 tests/test_local_dns.py
+python3 tests/test_homebridge_mdns_proxy.py
 ```
 
 These cover IP-tag parsing/filtering, the local upload client, and application
@@ -49,5 +53,18 @@ artifact integrity, backup gates, failed-retry blocking, saved pins, and
 native archive/release preservation. Run them with Ansible's Python environment.
 Notification tests cover stale reports, failure summaries, credential redaction,
 Discord message limits, disabled mentions, delivery confirmation, and rate limits.
+DNS tests verify additive records and conflict rejection. Homebridge tests
+validate public advertisement data without contacting Avahi or a gateway.
 Terraform mock tests and live adoption checks are documented in
 [`terraform/README.md`](../../terraform/README.md).
+
+## Tests that need a guest
+
+`tests/test_nexdeck_homelab.py` imports the installed NexDeck backend. Run it
+with the guest's venv as described in the [NexDeck guide](../files/nexdeck/README.md).
+It is not part of a dependency-free local discovery run.
+
+`tests/verify_local_services_ingress.py` requires root in the proxy guest for
+an isolated network namespace. See the [private services guide](../docs/local-services.md).
+The Gatus, Apt-Cacher NG, and LibreSpeed guest playbooks also require explicitly
+selected disposable guests. Static checks do not substitute for these live tests.

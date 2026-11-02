@@ -8,6 +8,9 @@ implementation notes are consolidated in [`AGENTS.md`](AGENTS.md).
 
 ## Current architecture
 
+- Terraform owns guest provisioning/hardware, backup jobs, HA policy, the PBS
+  connection, and cached media. Ansible configures existing running guests.
+  Legacy provisioning and platform-role entry points refuse execution.
 - Run Ansible from this directory so `ansible.cfg`, the ignored inventory,
   and the configured SSH-agent identity are used (`~/.ssh/cluster.pub` on the current controller).
 - `site.yml` first configures `proxmox_cluster`, then applies
@@ -16,6 +19,10 @@ implementation notes are consolidated in [`AGENTS.md`](AGENTS.md).
   `tailscale_router` LXC; it is not installed on cluster nodes.
 - Managed app roles are repository-owned, version-pinned, and
   checksum-verified. Gatus and Diun are the opt-in monitoring roles.
+  Guarded LXC update services preserve backup, version, age, and retry checks.
+- Private HTTPS/DNS and Homebridge discovery use separate playbooks.
+  NexDeck board edits remain in its database. Follow the guides linked in
+  `AGENTS.md` before changing these integrations.
 - Actual inventory, group variables, host variables, credentials, and
   gallery-dl cookies are ignored. Commit only their sanitized examples.
 - Shared Proxmox cluster mutations run through the designated cluster master.

@@ -2,7 +2,10 @@
 
 Historical findings from `/ponytail-audit`, biggest cut first. Checked items
 record prior work, not a fresh validation of every historical assertion.
-Current operational checks are in [LIVE_AUDIT.md](../LIVE_AUDIT.md).
+The separate 2026-10-02 checks are in [LIVE_AUDIT.md](../LIVE_AUDIT.md).
+Later Terraform adoption retired the Ansible guest and platform owners.
+Do not reactivate the historical `pbs_storage`, media, or VM deployment paths
+listed below. Follow [current ownership guidance](AGENTS.md#guest-provisioning-ownership).
 
 ## Bug review — priority order
 
