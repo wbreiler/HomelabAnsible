@@ -6,6 +6,12 @@ Configures an existing Proxmox Backup Server with a local ZFS datastore, PBS
 users, optional pull-style sync jobs, and Tailscale. It does not install the
 PBS product or create/reconfigure the underlying ZFS pool.
 
+Terraform owns the PVE-side PBS connection, guest backup jobs, and their
+selection/retention policy. This project owns PBS host configuration.
+Native IDrive e2 storage, encryption, and push sync have separate
+[configuration](CLOUD-BACKUP.md) and [recovery](RESTORE.md) guides. The local
+datastore role does not reconcile that cloud configuration.
+
 ## Features
 
 - ✅ Removes stale PBS/Proxmox enterprise and no-subscription source files
@@ -27,10 +33,15 @@ The running kernel is `7.0.14-15-pve`; `7.0.14-20-pve` is installed but is
 not active. This documentation check did not reboot the host.
 
 These values differ from the role's example defaults. Do not apply the example
-`backup/pbs`, `/mnt/datastore`, or `MainStore` settings to this host. The local
-`pbs/inventory.yml` is absent; the host is also listed in the Proxmox project's
-inventory. Create reviewed PBS inventory and variables before using this
+`backup/pbs`, `/mnt/datastore`, or `MainStore` settings to this host. At that
+audit, local `pbs/inventory.yml` was absent. The Proxmox inventory also listed
+the host. Create reviewed PBS inventory and variables before using this
 project's entry point.
+
+The later [2026-10-29 cloud backup record](CLOUD-BACKUP.md) reports PBS 4.2.8
+and the enabled nightly encrypted sync. It also records the macOS snapshot
+warning and subsequent retirement of VM 108 and its dedicated PVE backup job.
+Use fresh read-only checks before relying on either dated host snapshot.
 
 ## Prerequisites
 
