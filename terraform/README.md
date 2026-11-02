@@ -1,7 +1,12 @@
 # Proxmox guest lifecycle
 
 Terraform owns guest provisioning and hardware. Ansible owns host configuration
-and guest software. The local deployment now tracks 32 guests:
+and guest software. Use the [guest workflow](#create-a-guest-and-install-its-application)
+for a new Gatus, Apt-Cacher NG, or LibreSpeed guest.
+
+## Historical adoption baseline — 2026-10-26
+
+The adoption baseline tracked 32 guests:
 30 LXCs and two VMs, including the Debian pilot. The disposable ISO test passed
 and its VM was subsequently removed through Terraform.
 Adoption imported 31 existing
@@ -26,6 +31,13 @@ The workflow validation pair was also removed through Terraform, returning
 to 124 managed resources without removing any media.
 All destination SHA256 hashes
 matched the trusted NAS files, and the final Terraform plan had no changes.
+
+These counts describe adoption and validation, not current inventory. Later
+work deployed LibreSpeed and retired macOS VM 108 with its dedicated backup
+job. See the [LibreSpeed guide](../proxmox/README.md#librespeed-lan-bandwidth-test)
+and [macOS retirement record](../proxmox/docs/macos-follow-up.md).
+Inspect live resources and protected HCP state before allocating IDs or
+claiming a current count. Preserve retained installer reservations during reuse.
 
 ## Ownership
 
@@ -60,8 +72,8 @@ terraform validate
 terraform test
 ```
 
-These commands download the pinned provider and validate its schema without
-accessing Proxmox. With the cloud configuration present, initialization can
+Initialization downloads the pinned provider. Validation and mock-provider
+tests do not access Proxmox. With the cloud configuration present, initialization can
 require HCP authentication even with `-backend=false`. Commit
 `.terraform.lock.hcl`, including its verified provider checksums. Review
 provider upgrades deliberately.
@@ -114,9 +126,12 @@ unset PROXMOX_VE_API_TOKEN
 exit
 ```
 
-The plan should query node names and propose no resource changes. Partial node
-visibility can indicate insufficient permissions. The first local plan passed
-and returned both cluster nodes. Verify a new plan after connecting HCP.
+For the original discovery-only configuration, the plan queried node names
+without resource changes. An adopted deployment contains managed resources
+and requires its scoped infrastructure token. Do not substitute the read-only
+discovery token or treat this example as the full deployment plan procedure.
+Partial node visibility can indicate insufficient permissions. Review every
+plan against the intended operation after connecting HCP.
 
 ## State
 
