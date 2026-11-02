@@ -14,7 +14,7 @@ lancache_prefill_subnet: 172.30.0.0/24
 lancache_prefill_address: 172.30.0.2
 lancache_dashboard_prefill_address: 172.30.0.3
 lancache_root: /mnt/tank/appdata/lancache
-lancache_upstream_dns: 1.1.1.1
+lancache_upstream_dns: 192.0.2.1
 lancache_disk_size: 1000g
 lancache_timezone: America/Chicago
 ```
@@ -23,6 +23,13 @@ The existing parent dataset must exist. This playbook creates directories only.
 `1000g` sets the Nginx cache target to 1000 GiB (approximately 1 TB).
 This is an eviction target, not a dataset quota. Logs also consume disk space.
 The cache starts eviction below 100 GiB of filesystem free space.
+
+Use the local DNS resolver as `lancache_upstream_dns` when it owns private
+service names. A public resolver bypasses those records for LANCache clients.
+The local resolver must forward to independent upstream servers, not back to
+LANCache. Confirm both paths before changing this setting. The current
+deployment forwards ordinary queries to UniFi while retaining LANCache's game
+download overrides. The setting applies to both DNS and monolithic services.
 
 ## Deploy
 
