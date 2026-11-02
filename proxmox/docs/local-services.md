@@ -28,6 +28,12 @@ NPM's existing wildcard certificate and its existing renewal process. Its
 private key stays on the proxy. Never create conflicting NPM UI host entries
 for these names. Ansible owns `/etc/nginx/conf.d/homelab-local-services.conf`.
 
+TrueNAS API connections require HTTPS through to the appliance. Set both
+`scheme: https` and `require_tls_upstream: true` on its route, with the
+appliance's HTTPS port. TrueNAS can revoke an API key received over an HTTP
+upstream even when the client used HTTPS to reach the proxy. The explicit
+requirement makes the playbook reject an accidental HTTP downgrade.
+
 Keep the matching DNS records in ignored `local-services.dns.json`:
 
 ```json
@@ -110,6 +116,29 @@ remove arbitrary non-HTTP service ports; these proxy routes cover web services.
 
 The ignored `local-services.urls.md` contains links for the current deployment.
 The HTTP `graf-nash` compatibility route remains owned by `centralized_logging`.
+
+## Application links and integrations
+
+Use the canonical HTTPS name for dashboard links, Pocket ID launch URLs,
+OIDC callbacks, and application integration URLs. Update both sides of an
+OIDC callback together. Preserve its path, client ID, and client secret.
+For integrations with separate fields, set the hostname, port `443`, and TLS.
+Preserve API keys, indexer paths, library selections, and download categories.
+
+Test name resolution and certificate validation from the calling application.
+A working browser link does not prove that a container uses the local resolver.
+TrueNAS apps inherit the appliance resolver unless explicitly configured.
+Any appliance DNS change needs the approval and backup required by
+[`truenas/AGENTS.md`](../../truenas/AGENTS.md).
+
+Back up saved settings before migration. Use each application's connection test
+before saving, then read the settings again and test the live dashboard.
+Keep deployment backups and reports outside Git. A Pocket ID callback change
+also needs a browser login check by the user.
+
+Proxy upstreams, bind addresses, network inventory, and loopback health checks
+retain their infrastructure addresses. A proxy upstream must not use its own
+public-facing service name, because that name resolves back to the proxy.
 
 ## Recovery
 

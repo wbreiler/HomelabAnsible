@@ -21,6 +21,7 @@
           - item.port | int > 0
           - item.port | int <= 65535
           - item.scheme | default('http') in ['http', 'https']
+          - not (item.require_tls_upstream | default(false) | bool) or item.scheme | default('http') == 'https'
       loop: "{{ local_services_routes }}"
       loop_control:
         label: "{{ item.name }}"
