@@ -153,6 +153,28 @@ class Deployment(unittest.TestCase):
 
 
 class ArtifactResolution(unittest.TestCase):
+    def test_app_and_package_results_keep_guest_names_even_after_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'config.json').write_text(json.dumps({'roles': ['app'], 'exclude': [], 'packages': []}))
+            (root / 'catalog.yml').write_text('app: {}')
+            guest = {'vmid': 100, 'name': 'test-guest', 'status': 'running'}
+            for status in ['updated', 'current', 'failed']:
+                with self.subTest(status=status), patch.object(updates, 'ROOT', root), patch.object(updates, 'STATE', root), \
+                        patch.object(updates, 'api', return_value=[guest]), patch.object(updates.fcntl, 'flock'), \
+                        patch('builtins.open', mock_open()), patch('sys.argv', ['updater']), patch.object(updates.os, 'umask'), \
+                        patch.object(updates, 'app_variables', return_value={'app_hostname': 'test-guest'}), \
+                        patch.object(updates, 'update_one', return_value={'app': 'app', 'vmid': 100, 'status': status}) as app, \
+                        patch.object(updates, 'update_packages', return_value={'app': 'packages', 'vmid': 100, 'status': status}) as packages:
+                    if status == 'failed':
+                        app.side_effect = packages.side_effect = RuntimeError('update failed')
+                    self.assertEqual(updates.main(), int(status == 'failed'))
+                    results = json.loads((root / 'last-run.json').read_text())['results']
+                    self.assertEqual(len(results), 2)
+                    self.assertEqual([row['app'] for row in results], ['app', 'packages'])
+                    for row in results:
+                        self.assertEqual((row['vmid'], row['name'], row['status']), (100, 'test-guest', status))
+
     def test_service_reports_track_invocation_but_dry_run_plans_stay_lists(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

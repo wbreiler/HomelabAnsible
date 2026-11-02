@@ -49,10 +49,14 @@ class AutoUpdate(unittest.TestCase):
 
     @patch.object(updater, 'guest')
     def test_stopped_and_excluded_guests_are_not_started_or_updated(self, guest):
-        self.guests += [dict(vmid=101, status='stopped')]
+        self.guests += [dict(vmid=101, status='stopped', name='stopped-guest')]
         self.config['skip_vmids'] = [100]
         self.assertEqual(self.run_updates(), 0)
         guest.assert_not_called()
+        self.assertEqual(json.loads(updater.REPORT_FILE.read_text())['results'], [
+            {'vmid': 100, 'name': 'test', 'status': 'skipped'},
+            {'vmid': 101, 'name': 'stopped-guest', 'status': 'skipped'},
+        ])
 
     @patch.object(updater.subprocess, 'run')
     @patch.object(updater, 'guest', return_value='')
@@ -73,13 +77,16 @@ class AutoUpdate(unittest.TestCase):
     @patch.object(updater, 'guest', return_value='')
     @patch.object(updater.subprocess, 'run')
     def test_failed_update_does_not_hide_failure_or_block_other_guests(self, run, guest, failed):
-        self.guests += [dict(vmid=101, status='running')]
+        self.guests += [dict(vmid=101, status='running', name='other-guest')]
         self.backups += [dict(vmid=101, subtype='lxc', ctime=1000)]
         run.side_effect = [subprocess.CalledProcessError(100, 'apt-get'), None]
         self.assertEqual(self.run_updates(), 1)
         self.assertEqual(run.call_count, 2)
         results = json.loads(updater.REPORT_FILE.read_text())['results']
-        self.assertEqual(results, [{'vmid': 100, 'status': 'failed'}, {'vmid': 101, 'status': 'completed'}])
+        self.assertEqual(results, [
+            {'vmid': 100, 'name': 'test', 'status': 'failed'},
+            {'vmid': 101, 'name': 'other-guest', 'status': 'completed'},
+        ])
         for call in run.call_args_list:
             self.assertEqual(call.args[0][:2], ['pct', 'exec'])
 
@@ -91,6 +98,7 @@ class AutoUpdate(unittest.TestCase):
 
     def test_unknown_requested_guest_is_an_error(self):
         self.assertEqual(self.run_updates(requested=[999]), 1)
+        self.assertEqual(json.loads(updater.REPORT_FILE.read_text())['results'], [{'vmid': 999, 'status': 'failed'}])
 
     def test_upgrade_preserves_configuration_and_forbids_package_removal(self):
         self.assertIn('set -eu', updater.UPDATE)

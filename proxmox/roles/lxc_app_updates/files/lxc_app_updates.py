@@ -429,6 +429,7 @@ def main():
                 detail = str(error) if isinstance(error, (RuntimeError, ValueError)) else type(error).__name__
                 print(f'FAILED {row["vmid"]} {app}: {detail}', flush=True)
                 report.append({'app': app, 'vmid': row['vmid'], 'status': 'failed', 'reason': detail})
+            report[-1]['name'] = row['name']
         if not args.apps or 'packages' in args.apps:
             for row in guests.values():
                 try:
@@ -437,6 +438,7 @@ def main():
                     detail = str(error) if isinstance(error, (RuntimeError, ValueError)) else type(error).__name__
                     print(f'FAILED {row["vmid"]} packages: {detail}', flush=True)
                     report.append({'app': 'packages', 'vmid': row['vmid'], 'status': 'failed', 'reason': detail})
+                report[-1]['name'] = row['name']
         save_json(STATE / ('plan.json' if args.dry_run else 'last-run.json'),
                   report if args.dry_run else {'invocation_id': os.environ.get('INVOCATION_ID'), 'results': report})
         return int(any(row['status'] == 'failed' for row in report))

@@ -64,7 +64,7 @@ def update_guests(config, dry_run=False, requested=()):
         selected.add(vmid)
         if row['status'] != 'running' or vmid in config['skip_vmids']:
             print(f'SKIP {vmid}: stopped or explicitly excluded', flush=True)
-            report.append({'vmid': vmid, 'status': 'skipped'})
+            report.append({'vmid': vmid, 'name': row.get('name', ''), 'status': 'skipped'})
             continue
         try:
             if not recent_backup(backups, vmid, config['backup_max_age_hours'], time.time()):
@@ -85,10 +85,10 @@ def update_guests(config, dry_run=False, requested=()):
             if new_failures:
                 raise RuntimeError('new failed services: ' + ', '.join(sorted(new_failures)))
             print(f'OK {vmid}', flush=True)
-            report.append({'vmid': vmid, 'status': 'completed'})
+            report.append({'vmid': vmid, 'name': row.get('name', ''), 'status': 'completed'})
         except (RuntimeError, subprocess.CalledProcessError) as error:
             failures.append(vmid)
-            report.append({'vmid': vmid, 'status': 'failed'})
+            report.append({'vmid': vmid, 'name': row.get('name', ''), 'status': 'failed'})
             # Do not echo arbitrary command arguments or application configuration.
             detail = str(error) if isinstance(error, RuntimeError) else f'command exited {error.returncode}'
             print(f'FAILED {vmid}: {detail}', flush=True)

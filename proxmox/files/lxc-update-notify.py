@@ -36,6 +36,12 @@ def app_name(name):
     }.get(name, name.replace('_', ' ').title()))
 
 
+def container_label(row):
+    name = display(row.get('name') or '')
+    identifier = f'CT {display(row["vmid"])}'
+    return f'{name} ({identifier})' if name else identifier
+
+
 def detail_field(name, lines):
     shown = []
     for line in lines:
@@ -90,10 +96,10 @@ def summary(kind, result, report, invocation, node):
         embed['description'] = 'No report from this run. Check the service log below.'
 
     # Allowlist fields only. Exceptions and logs can contain private details.
-    failures = [f'**{app_name(row.get("app", "OS packages"))}** · `CT {display(row["vmid"])}`' for row in failed]
+    failures = [f'**{app_name(row.get("app", "OS packages"))}** · `{container_label(row)}`' for row in failed]
     changes = []
     for row in updated:
-        heading = f'**{app_name(row["app"])}** · `CT {display(row["vmid"])}`'
+        heading = f'**{app_name(row["app"])}** · `{container_label(row)}`'
         if row['app'] == 'packages':
             versions = '\n'.join(f'{app_name(name)} `{display(version)}`' for name, version in sorted(row.get('targets', {}).items()))
         else:
@@ -152,10 +158,11 @@ def main():
             return 0
         node = socket.gethostname().split('.')[0]
         if args.test:
-            rows = ([{'vmid': 100, 'status': 'completed'}, {'vmid': 101, 'status': 'skipped'}] if args.kind == 'os' else [
-                {'vmid': 100, 'app': 'pocket_id', 'status': 'updated', 'current': '2.19.1'},
-                {'vmid': 127, 'app': 'packages', 'status': 'updated', 'targets': {'grafana': '13.3.0', 'loki': '3.7.9'}},
-                {'vmid': 103, 'app': 'forgejo', 'status': 'failed'},
+            rows = ([{'vmid': 100, 'name': 'pocketid-nash', 'status': 'completed'},
+                     {'vmid': 101, 'name': 'npm-nash', 'status': 'skipped'}] if args.kind == 'os' else [
+                {'vmid': 100, 'name': 'pocketid-nash', 'app': 'pocket_id', 'status': 'updated', 'current': '2.19.1'},
+                {'vmid': 127, 'name': 'loki-nash', 'app': 'packages', 'status': 'updated', 'targets': {'grafana': '13.3.0', 'loki': '3.7.9'}},
+                {'vmid': 103, 'name': 'forgejo-nash', 'app': 'forgejo', 'status': 'failed'},
             ])
             result = 'exit-code' if any(row['status'] == 'failed' for row in rows) else 'success'
             message = summary(args.kind, result, {'invocation_id': 'preview', 'results': rows}, 'preview', node)
