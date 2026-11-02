@@ -479,9 +479,21 @@ imports describe adoption, not a blank-system restore procedure.
 
 Ansible ownership tests reject absent and stopped guests before software work.
 No application playbooks were applied to production during this migration.
-Disaster recovery, guest restoration, and resizing production guests remain
-untested. Read the generated definitions and the provider-specific limitations
-before authorizing a production hardware change.
+Disaster recovery and guest restoration remain untested. Read the generated
+definitions and the provider-specific limitations before a hardware change.
+
+A production ZFS LXC root disk passed an online 6-to-10 GiB expansion on
+2026-11-01. The guest remained running and the final scoped plan converged.
+Protected plans and raw configuration snapshots are under
+`artifacts/first-auto-update-2026-11-01/`.
+
+Before changing an imported LXC disk, verify its effective ACL and replication
+settings. Provider 0.118.0 can serialize imported `false` values into `rootfs`
+even when the saved plan only changes disk size. Proxmox defaults an omitted
+`replicate` flag to enabled. An omitted ACL flag preserves the ZFS dataset's
+ACL setting; explicit `acl=0` can disable it on a later mount. Set the desired
+values to preserve the existing behavior, compare raw configuration after
+apply, and verify the dataset's `acltype` and the final Terraform plan.
 
 ## Platform policy and media
 
