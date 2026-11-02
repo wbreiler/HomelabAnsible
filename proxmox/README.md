@@ -734,6 +734,37 @@ artifact caches require occasional disk-space review.
 Disable the schedule with `lxc_app_updates_enabled: false` and redeploy the
 role. Use `lxc_app_updates_exclude` for individual catalog applications.
 
+#### Discord maintenance notifications
+
+Set `lxc_update_discord_webhook_url` in ignored group variables or Vault.
+It can reference an existing webhook, such as `"{{ diun_discord_webhook_url }}"`.
+An empty value disables notifications. Deploy the `lxc_auto_update` and
+`lxc_app_updates` tags after changing this setting.
+
+Both services send one result summary per node after each actual run,
+including successful runs with no eligible updates. Summaries identify failed
+guests, updated app versions, and updated signed packages. OS summaries count
+completed guests rather than claiming a package changed on every guest.
+Startup failures and missing reports also produce a failure notification.
+Dry runs and direct updater CLI commands do not send messages.
+
+The systemd completion hook checks the current invocation ID so an old report
+cannot hide a new failure. It sends only selected status fields, never logs,
+exception details, or credentials. The webhook remains in a root-only file
+and outside command arguments. Mentions are disabled, and Discord must confirm
+message creation. Bounded delivery retries never repeat application updates.
+Notification delivery failures fail the service and remain visible in its journal.
+The webhook behavior follows the [Discord API documentation](https://docs.discord.com/developers/resources/webhook#execute-webhook).
+
+```bash
+# On each node: a labeled delivery test, without guest updates.
+/usr/local/sbin/lxc-update-notify os --test
+```
+
+Reports live at `/var/lib/lxc-auto-update/last-run.json` and
+`/var/lib/homelab-app-updates/last-run.json`. Each contains an `invocation_id`
+and a `results` list. Application dry-run plans remain plain lists.
+
 #### Manual system and application updates
 
 Install the repository-owned Community Scripts application updater with:

@@ -1,0 +1,26 @@
+---
+- name: Validate optional maintenance notification destination
+  ansible.builtin.assert:
+    that:
+      - >-
+        lxc_update_discord_webhook_url | default('') | length == 0 or
+        lxc_update_discord_webhook_url is match('^https://(canary\.|ptb\.)?discord(app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$')
+  no_log: true
+
+- name: Install maintenance notification helper
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/files/lxc-update-notify.py"
+    dest: /usr/local/sbin/lxc-update-notify
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Store maintenance notification credentials
+  ansible.builtin.copy:
+    content: "{{ {'webhook_url': lxc_update_discord_webhook_url | default('')} | to_nice_json }}"
+    dest: /etc/lxc-update-notifications.json
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false

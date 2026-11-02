@@ -102,6 +102,9 @@
   no_log: true
   diff: false
 
+- name: Configure LXC maintenance notifications
+  ansible.builtin.include_tasks: ../../../tasks/lxc_update_notifications.yml
+
 - name: Install application update timer units
   ansible.builtin.template:
     src: "lxc-app-updates.{{ item }}.j2"

@@ -3,10 +3,13 @@
 import argparse
 import fcntl
 import json
+import os
 from pathlib import Path
 import socket
 import subprocess
 import time
+
+REPORT_FILE = Path('/var/lib/lxc-auto-update/last-run.json')
 
 
 UPDATE = r"""set -eu
@@ -52,6 +55,7 @@ def update_guests(config, dry_run=False, requested=()):
     guests = api(f'/nodes/{node}/lxc')
     backups = api(f'/nodes/{node}/storage/{config["backup_storage"]}/content', '--content', 'backup')
     failures = []
+    report = []
     selected = set()
     for row in guests:
         vmid = int(row['vmid'])
@@ -60,6 +64,7 @@ def update_guests(config, dry_run=False, requested=()):
         selected.add(vmid)
         if row['status'] != 'running' or vmid in config['skip_vmids']:
             print(f'SKIP {vmid}: stopped or explicitly excluded', flush=True)
+            report.append({'vmid': vmid, 'status': 'skipped'})
             continue
         try:
             if not recent_backup(backups, vmid, config['backup_max_age_hours'], time.time()):
@@ -80,14 +85,22 @@ def update_guests(config, dry_run=False, requested=()):
             if new_failures:
                 raise RuntimeError('new failed services: ' + ', '.join(sorted(new_failures)))
             print(f'OK {vmid}', flush=True)
+            report.append({'vmid': vmid, 'status': 'completed'})
         except (RuntimeError, subprocess.CalledProcessError) as error:
             failures.append(vmid)
+            report.append({'vmid': vmid, 'status': 'failed'})
             # Do not echo arbitrary command arguments or application configuration.
             detail = str(error) if isinstance(error, RuntimeError) else f'command exited {error.returncode}'
             print(f'FAILED {vmid}: {detail}', flush=True)
     missing = set(requested) - selected
     if missing:
         print(f'FAILED: requested LXCs are not local: {sorted(missing)}', flush=True)
+        report.extend({'vmid': vmid, 'status': 'failed'} for vmid in sorted(missing))
+    if not dry_run:
+        temporary = REPORT_FILE.with_suffix('.tmp')
+        temporary.write_text(json.dumps({'invocation_id': os.environ.get('INVOCATION_ID'), 'results': report}) + '\n')
+        temporary.chmod(0o600)
+        temporary.replace(REPORT_FILE)
     print(f'Completed: {len(failures)} failed, {len(missing)} missing', flush=True)
     return 1 if failures or missing else 0
 

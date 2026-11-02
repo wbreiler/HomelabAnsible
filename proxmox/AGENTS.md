@@ -419,6 +419,10 @@ management, LXC installation, system updates, and PBS restores.
   `--dry-run` on both nodes before enabling `lxc-app-updates.timer`.
 * SearXNG has no stable releases. Manual Minecraft packs, major upgrades,
   auxiliary database images, and build-tool upgrades remain separate work.
+* Both update services share `files/lxc-update-notify.py` through systemd
+  `ExecStopPost`. Preserve invocation-ID checks, credential redaction, and
+  disabled mentions. The optional `lxc_update_discord_webhook_url` belongs in
+  ignored variables or Vault. Test delivery without running guest updates.
 
 ### update_reminder
 

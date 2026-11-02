@@ -437,7 +437,8 @@ def main():
                     detail = str(error) if isinstance(error, (RuntimeError, ValueError)) else type(error).__name__
                     print(f'FAILED {row["vmid"]} packages: {detail}', flush=True)
                     report.append({'app': 'packages', 'vmid': row['vmid'], 'status': 'failed', 'reason': detail})
-        save_json(STATE / ('plan.json' if args.dry_run else 'last-run.json'), report)
+        save_json(STATE / ('plan.json' if args.dry_run else 'last-run.json'),
+                  report if args.dry_run else {'invocation_id': os.environ.get('INVOCATION_ID'), 'results': report})
         return int(any(row['status'] == 'failed' for row in report))
 
 

@@ -6,6 +6,7 @@ After=network-online.target pve-cluster.service
 [Service]
 Type=oneshot
 ExecStart={{ lxc_app_updates_root }}/lxc_app_updates.py
+ExecStopPost=/usr/local/sbin/lxc-update-notify apps
 WorkingDirectory={{ lxc_app_updates_root }}
 TimeoutStartSec=infinity
 UMask=0077

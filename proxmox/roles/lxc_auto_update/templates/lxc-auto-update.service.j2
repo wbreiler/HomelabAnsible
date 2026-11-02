@@ -6,6 +6,7 @@ After=network-online.target pve-cluster.service
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/lxc-auto-update
+ExecStopPost=/usr/local/sbin/lxc-update-notify os
 TimeoutStartSec=infinity
 User=root
 Group=root

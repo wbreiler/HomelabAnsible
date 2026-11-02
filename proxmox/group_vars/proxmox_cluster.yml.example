@@ -265,6 +265,9 @@ lxc_app_updates_randomized_delay: 15m
 lxc_app_updates_backup_storage: "{{ pbs_storage_id }}"
 lxc_app_updates_minimum_age_hours: 72
 lxc_app_updates_exclude: []  # Catalog application names.
+# Optional shared destination for OS/app completion and failure notifications.
+# Keep the webhook in ignored variables or Vault. Empty disables notifications.
+# lxc_update_discord_webhook_url: "{{ diun_discord_webhook_url }}"
 lxc_app_updates_native_guests: {}  # Optional existing guest hostnames, for example:
 #  nginx_proxy_manager: npm-example
 #  sabnzbd: sabnzbd-example

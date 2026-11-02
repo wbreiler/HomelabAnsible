@@ -36,6 +36,7 @@ python3 tests/test_logging_ingress.py
 python3 tests/test_lxc_auto_update.py
 python3 tests/test_lxc_app_updates.py
 python3 tests/test_native_app_updates.py
+python3 tests/test_lxc_update_notifications.py
 ```
 
 These cover IP-tag parsing/filtering, the local upload client, and application
@@ -46,5 +47,7 @@ listener addresses, permitted ingress routes, and isolated retention ports.
 Application updater tests cover stable release selection, package aging,
 artifact integrity, backup gates, failed-retry blocking, saved pins, and
 native archive/release preservation. Run them with Ansible's Python environment.
+Notification tests cover stale reports, failure summaries, credential redaction,
+Discord message limits, disabled mentions, delivery confirmation, and rate limits.
 Terraform mock tests and live adoption checks are documented in
 [`terraform/README.md`](../../terraform/README.md).

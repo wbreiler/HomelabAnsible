@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'roles/lxc_app_updates/files/lxc_app_updates.py'
@@ -153,6 +153,20 @@ class Deployment(unittest.TestCase):
 
 
 class ArtifactResolution(unittest.TestCase):
+    def test_service_reports_track_invocation_but_dry_run_plans_stay_lists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'config.json').write_text(json.dumps({'roles': [], 'packages': []}))
+            (root / 'catalog.yml').write_text('{}')
+            for flags, filename in [([], 'last-run.json'), (['--dry-run'], 'plan.json')]:
+                with patch.object(updates, 'ROOT', root), patch.object(updates, 'STATE', root), \
+                        patch.object(updates, 'api', return_value=[]), patch.object(updates.fcntl, 'flock'), \
+                        patch('builtins.open', mock_open()), patch('sys.argv', ['updater', *flags]), \
+                        patch.dict(updates.os.environ, {'INVOCATION_ID': 'current-run'}), patch.object(updates.os, 'umask'):
+                    self.assertEqual(updates.main(), 0)
+                report = json.loads((root / filename).read_text())
+                self.assertEqual(report, [] if flags else {'invocation_id': 'current-run', 'results': []})
+
     def test_backup_rechecks_guest_state_and_uses_proxmox_file_mask(self):
         with patch.object(updates, 'api', side_effect=[{'status': 'running'}, {}]), patch.object(updates.subprocess, 'run') as run:
             updates.backup(100, {'backup_storage': 'pbs'}, 'node')

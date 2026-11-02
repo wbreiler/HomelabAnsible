@@ -1,7 +1,9 @@
 """Exercise update safety without contacting a guest or changing packages."""
 import importlib.util
+import json
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -14,6 +16,11 @@ SPEC.loader.exec_module(updater)
 
 class AutoUpdate(unittest.TestCase):
     def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        report = patch.object(updater, 'REPORT_FILE', Path(directory.name) / 'last-run.json')
+        report.start()
+        self.addCleanup(report.stop)
         self.config = dict(backup_storage='pbs', backup_max_age_hours=8, skip_vmids=[])
         self.guests = [dict(vmid=100, status='running', name='test')]
         self.backups = [dict(vmid=100, subtype='lxc', ctime=1000)]
@@ -53,6 +60,7 @@ class AutoUpdate(unittest.TestCase):
         self.assertEqual(self.run_updates(dry_run=True), 0)
         self.assertIn('--simulate', guest.call_args.args)
         run.assert_not_called()
+        self.assertFalse(updater.REPORT_FILE.exists())
 
     @patch.object(updater, 'guest')
     def test_locked_guest_is_not_updated(self, guest):
@@ -70,6 +78,8 @@ class AutoUpdate(unittest.TestCase):
         run.side_effect = [subprocess.CalledProcessError(100, 'apt-get'), None]
         self.assertEqual(self.run_updates(), 1)
         self.assertEqual(run.call_count, 2)
+        results = json.loads(updater.REPORT_FILE.read_text())['results']
+        self.assertEqual(results, [{'vmid': 100, 'status': 'failed'}, {'vmid': 101, 'status': 'completed'}])
         for call in run.call_args_list:
             self.assertEqual(call.args[0][:2], ['pct', 'exec'])
 

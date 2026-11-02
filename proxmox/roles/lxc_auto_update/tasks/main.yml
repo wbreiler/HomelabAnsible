@@ -25,6 +25,9 @@
     group: root
     mode: '0600'
 
+- name: Configure LXC maintenance notifications
+  ansible.builtin.include_tasks: ../../../tasks/lxc_update_notifications.yml
+
 - name: Install automatic LXC update units
   ansible.builtin.template:
     src: "lxc-auto-update.{{ item }}.j2"
@@ -34,6 +37,14 @@
     mode: '0644'
   loop: [service, timer]
   notify: Restart automatic LXC update timer
+
+- name: Create private LXC update report directory
+  ansible.builtin.file:
+    path: /var/lib/lxc-auto-update
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
 
 - name: Enable automatic LXC update timer
   ansible.builtin.systemd_service:
