@@ -6,9 +6,11 @@ monitoring, and workstation provisioning.
 
 ## Documentation verification
 
-See [LIVE_AUDIT.md](LIVE_AUDIT.md) for the 2026-10-02 live check, documentation
-corrections, and checks blocked by access. Historical audit and handoff files
-remain historical records. Role defaults and examples are not live inventory.
+The 2026-11-02 documentation review uses Git history through `1baea75` and
+the tracked implementation. It does not recheck live hosts. See
+[LIVE_AUDIT.md](LIVE_AUDIT.md) for the separate 2026-10-02 live check.
+Historical audits, handoffs, and deployment counts remain dated records.
+Role defaults and examples are not live inventory.
 
 ## Projects
 
@@ -22,12 +24,21 @@ remain historical records. Role defaults and examples are not live inventory.
 | [`arista/`](arista/) | Core switch (Arista DCS-7050SX-64): incremental, explicitly scoped desired-state management | [README](arista/README.md) |
 | [`kuma/`](kuma/) | Retired deployment; retained reference automation for Uptime Kuma: Docker deployment, Tailscale, optional API reconciliation/quorum relay, and apt auto-update | [README](kuma/README.md) |
 | [`desktop/`](desktop/) | Windows 11 gaming PC (`gaming-pc`) over WinRM: apps, updates, SMB mapping | [README](desktop/README.md) |
-| [`mac/`](mac/) | macOS fresh-install provisioning: Homebrew, Mac App Store apps, dotfiles, system defaults | [README](mac/README.md) |
+| [`mac/`](mac/) | Local main/dev profiles and separate remote Intel bootstrap/full-dev playbooks | [README](mac/README.md) |
 
-Each project is self-contained and is run from inside its own directory so its
-local configuration is used. Inventories and vaults exist where the target
-requires them; `mac/` runs only on localhost. There is no shared root playbook
+Run Terraform from `terraform/proxmox/` and Ansible from each project's
+documented directory. Minecraft uses `minecraft/ansible/`. Mac `main.yml`
+targets localhost, while `dev-host.yml` and `dev-vm.yml` require an explicit
+remote inventory. There is no shared root playbook
 because the projects target different machines with different credentials.
+
+## Current workflow guides
+
+- [Guest deployment](terraform/README.md#create-a-guest-and-install-its-application): Terraform provisioning followed by Gatus, Apt-Cacher NG, or LibreSpeed configuration.
+- [LXC maintenance](proxmox/README.md#system-updates): guarded OS/application updates, backups, and Discord results.
+- [Private HTTPS and DNS](proxmox/docs/local-services.md), [Homebridge discovery](proxmox/README.md#homebridge-discovery), and [NexDeck](proxmox/files/nexdeck/README.md).
+- [TrueNAS cloud backups](truenas/files/cloud-backup/SETUP.md): encrypted data, consistent SQLite copies, and a media catalog. Media contents remain excluded.
+- [Mac provisioning](mac/README.md): 1Password SSH, separate profiles, and reusable Intel support. [VM 108 is retired](proxmox/docs/macos-follow-up.md).
 
 ## Quick start
 
@@ -45,9 +56,6 @@ cd minecraft/ansible && \
 # TrueNAS (audit first; convergence is site.yml)
 cd truenas && ansible-playbook playbooks/audit.yml
 
-# Uptime Kuma Mini PC(s)
-cd kuma && ansible-playbook site.yml
-
 # Gaming PC
 cd desktop && ansible-playbook site.yml --ask-vault-pass
 
@@ -57,6 +65,8 @@ cd mac && make run
 
 See each project's README for setup (copying `*.yml.example` files, vault
 encryption, collections to install).
+Run each example from the repository root. Review the project's safety rules
+and check-mode output before a live application. Kuma remains retired.
 
 ## Secrets policy
 
@@ -66,6 +76,8 @@ Real inventories, vaults, and machine-specific configuration files are
 tracked as ordinary `.yml` because they are implementation code:
 
 - `minecraft/ansible/vault.yml` — vault-encrypted, gitignored
+- `terraform/proxmox/*.local.tf`, `.env`, private profiles, state, plans, and
+  `artifacts/` — ignored deployment files, never documentation sources for secrets
 - `proxmox/inventory.yml`, `proxmox/group_vars/proxmox_cluster.yml`,
   `proxmox/host_vars/*.yml`, `proxmox/files/gallery-dl-cookies.txt` —
   gitignored
@@ -86,7 +98,7 @@ tracked as ordinary `.yml` because they are implementation code:
 - `desktop/inventory/hosts.yml` and `desktop/group_vars/gaming_pc/vault.yml` —
   gitignored; copy their tracked `*.yml.example` files first, then
   `ansible-vault encrypt` the vault file
-- `mac/` has no vault: it manages only a local macOS user account, and
+- `mac/` has no vault: local and remote playbooks use the selected user's account, and
   `mac/.claude/` (local Claude Code settings) is gitignored
 
 Before committing, run `git status` and confirm none of the above appear.

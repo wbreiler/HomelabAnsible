@@ -1,10 +1,15 @@
 # Homelab hardening task list
 
-Status: inventory complete. Atlas reboot and Minecraft container migrations completed on October 4, 2026.
+Recorded status on October 4, 2026: inventory complete. Atlas reboot and Minecraft container migrations completed on that date.
 All five Minecraft servers passed service startup and LAN game status checks. H1/P0 and H2/P1 are complete with the validation limits documented below. H3/P1 is in progress. Other hardening tasks have not started.
 
 Inventory date: October 4, 2026, approximately 11:27–11:34 AM America/Chicago.
 These observations are a snapshot. Recheck live state before each operation.
+Later commits changed provisioning ownership, service permissions, logging
+ingress, backups, and maintenance. This ledger does not certify their current
+security status. Follow the [current project guides](README.md#current-workflow-guides)
+and review Git history before resuming an unchecked task. Terraform now owns
+guest hardware, backup jobs, HA policy, the PBS connection, and cached media.
 
 ## Execution rules
 

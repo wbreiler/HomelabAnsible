@@ -1,8 +1,8 @@
 # AGENTS.md
 
-Guidance for AI agents working in this monorepo. It merges several formerly
-separate repos; each subdirectory is a self-contained Ansible project run from
-inside its own directory.
+Guidance for AI agents working in this monorepo. Each project has its own
+entry points. Run Terraform from `terraform/proxmox/` and Ansible from the
+documented project directory.
 
 ## Layout
 
@@ -12,7 +12,8 @@ inside its own directory.
   Real guest definitions and credentials remain ignored local deployment files.
   Ansible configures existing guest software. Never restore guest creation,
   startup, resizing, or boot-setting writes to application playbooks.
-- `proxmox/` — Proxmox VE cluster automation. Deep agent docs: `proxmox/AGENTS.md`.
+- `proxmox/` — Host and guest software, guarded LXC updates, logging, and
+  private web services. Deep agent docs: `proxmox/AGENTS.md`.
 - `pbs/` — Proxmox Backup Server setup (`pbs/README.md`).
 - `minecraft/` — Existing Minecraft guest configuration + modpack update script. Agent docs:
   `minecraft/AGENTS.md`. If a modpack misbehaves in a way that isn't an
@@ -36,8 +37,11 @@ inside its own directory.
   admin account without a confirmed out-of-band path.
 - `desktop/` — Windows 11 gaming PC (`gaming-pc`) over WinRM
   (`desktop/README.md`).
+- `kuma/` — Retired deployment, retained as reference code. Its legacy LXC
+  bootstrap and PBS writes must not manage the Terraform-owned cluster.
 - `mac/` — Local macOS fresh-install provisioning plus the separate remote
-  Intel development-host playbook (`mac/AGENTS.md`).
+  Intel development-host playbooks (`mac/AGENTS.md`). VM 108 was retired on
+  2026-10-29. Remote Intel support remains reusable for an explicitly selected host.
 
 Always `cd` into the documented project directory before running Ansible so its
 local configuration and relative paths apply. Most projects have their own
@@ -68,7 +72,7 @@ exact action.
    before every commit. `kuma/` stores its vault password outside the repository
    at `~/.config/ansible/vault-passwords/kuma`.
 2. **Always commit completed changes, but never push.** Create a separate,
-   scoped commit for each top-level project directory changed (`proxmox/`,
+   scoped commit for each top-level project directory changed (`terraform/`, `proxmox/`,
    `pbs/`, `minecraft/`, `truenas/`, `arista/`, `kuma/`, `desktop/`, or
    `mac/`). Keep root-level policy or documentation changes in their own
    commit. The user pushes.
@@ -76,9 +80,12 @@ exact action.
    both live cluster state and the ignored `minecraft/ansible/servers.yml`, then
    use the next unused sequential VMID. Do not reserve or skip IDs without a
    current, documented conflict.
-4. **LXCs are unprivileged** unless they NFS-mount. The `gallery_dl` LXC is privileged.
+4. **LXCs are unprivileged** unless they NFS-mount. Preserve existing privilege
+   modes during adoption. The retired `gallery_dl` role used a privileged LXC.
 5. **Pinned versions**: third-party artifacts in `proxmox/` roles are
    version-pinned and checksum-verified. Bump version + checksum together.
+   `lxc_app_updates` can select compatible stable releases and save exact pins
+   after backup and health checks. Preserve its age, version, and retry guards.
 6. **Secrets stay out of logs and argv**: use `no_log: true` and interactive
    prompts (`expect`) for passwords, as existing roles do.
 
@@ -92,14 +99,30 @@ ansible-playbook ... --check --diff            # dry-run
 
 Commit style: `role_name: brief description` (see `proxmox/AGENTS.md`).
 
-## Environment facts
+## Documentation maintenance
+
+Use Git history to find changed behavior, then inspect the owning playbook,
+role, script, and tracked example. Update affected README and agent guidance
+together. Dated audits and validation reports remain historical evidence.
+Do not present their versions, counts, addresses, or successful checks as a
+fresh live assessment. Never copy ignored inventories or credentials into docs.
+
+Recent workflows have dedicated guides: `terraform/README.md`,
+`proxmox/docs/local-services.md`, `proxmox/files/nexdeck/README.md`, and
+`truenas/files/cloud-backup/SETUP.md`. Prefer links over duplicate procedures.
+
+## Recorded environment
+
+Verify live state before infrastructure changes. These addresses are references.
 
 - Cluster `cluster-nash`: prometheus (10.10.30.3) and atlas (10.10.30.9) —
   PVE 9 / Debian trixie.
 - PBS: mnemosyne (10.10.20.2), local-ZFS-backed `mneme` datastore (`MainStore` is a role default).
-- TrueNAS: erebus (10.10.10.7, SSH port 2747), key auth via the configured SSH agent (Bitwarden on the current controller).
+- TrueNAS: erebus (10.10.10.7, SSH port 2747), key auth via the configured SSH agent.
 - SSH public-key selectors: `~/.ssh/cluster.pub` (PVE/PBS),
   `~/.ssh/lxc.pub` (LXCs). Private keys remain in the configured SSH agent.
+- The Mac profiles configure 1Password when its socket exists. Otherwise they
+  preserve the default or forwarded agent. Never start an empty replacement agent.
 - Proxmox, PBS, Minecraft, and Kuma explicitly use
   `StrictHostKeyChecking=accept-new` (trust on first use); Arista, desktop, and
   TrueNAS keep host-key checking enabled. If a host is legitimately
