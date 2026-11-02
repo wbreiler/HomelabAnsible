@@ -1,0 +1,157 @@
+# Import through NexDeck after replacing the example service URLs.
+nexdeck: 1
+board:
+  name: Start
+  slug: start
+  icon: house
+  background:
+    kind: bundled
+    value: none
+  settings:
+    columns: 24
+    width: wide
+    fit_height: false
+pages:
+  - name: Bookmarks
+    slug: bookmarks
+    widgets:
+      - kind: core.bookmarks
+        title: Everyday
+        icon: lucide:globe
+        options:
+          layout: list
+          links: |-
+            YouTube | https://www.youtube.com/ | lucide:play
+            Reddit | https://www.reddit.com/ | lucide:message-circle
+            X / Twitter | https://x.com/ | lucide:at-sign
+            Twitch | https://www.twitch.tv/ | lucide:video
+            Discord | https://discord.com/channels/@me | lucide:messages-square
+            GitHub | https://github.com/ | lucide:code
+            Wikipedia | https://www.wikipedia.org/ | lucide:book-open
+        layout:
+          lg:
+            x: 0
+            y: 0
+            w: 6
+            h: 4
+      - kind: core.bookmarks
+        title: Watch & listen
+        icon: lucide:tv
+        options:
+          layout: list
+          links: |-
+            Plex | https://plex.example.com/web/index.html | lucide:play
+            Sonarr | https://tv.example.com/ | lucide:tv
+            Radarr | https://movies.example.com/ | lucide:film
+            Seerr requests | https://requests.example.com/ | lucide:ticket
+            Threadfin | https://threadfin.example.com/web/ | lucide:radio
+            FastChannels | https://fastchannels.example.com/ | lucide:tv
+            Lidarr | https://lidarr.example.com/ | lucide:music
+        layout:
+          lg:
+            x: 6
+            y: 0
+            w: 6
+            h: 4
+      - kind: core.bookmarks
+        title: Downloads & archive
+        icon: lucide:download
+        options:
+          layout: list
+          links: |-
+            SABnzbd (primary) | https://sabnzbd.example.com/ | lucide:download
+            SABnzbd (NAS) | https://sabnzbd-nas.example.com/ | lucide:download
+            Deluge | https://deluge.example.com/ | lucide:waves
+            Prowlarr | https://prowlarr.example.com/ | lucide:search
+            Pinchflat | https://pinchflat.example.com/ | lucide:archive
+            spotDL | https://spotdl.example.com/ | lucide:music
+            Tdarr | https://tdarr.example.com/ | lucide:clapperboard
+        layout:
+          lg:
+            x: 12
+            y: 0
+            w: 6
+            h: 4
+      - kind: core.bookmarks
+        title: Home & making
+        icon: lucide:house
+        options:
+          layout: list
+          links: |-
+            Spoolman | https://spoolman.example.com/ | lucide:layers
+            Bambuddy | https://bambuddy.example.com/ | lucide:printer
+            Homebridge | https://homebridge.example.com/ | lucide:house
+        layout:
+          lg:
+            x: 18
+            y: 0
+            w: 6
+            h: 4
+      - kind: core.bookmarks
+        title: Search & AI
+        icon: lucide:search
+        options:
+          layout: list
+          links: |-
+            SearXNG | https://searxng.example.com/ | lucide:search
+            Open WebUI | https://openwebui.example.com/ | lucide:bot
+            ChatGPT | https://chatgpt.com/ | lucide:message-square
+        layout:
+          lg:
+            x: 0
+            y: 4
+            w: 6
+            h: 4
+      - kind: core.bookmarks
+        title: Code & tools
+        icon: lucide:code
+        options:
+          layout: list
+          links: |-
+            Forgejo | https://git.example.com/ | lucide:git-branch
+            Git mirror | https://git-mirror.example.com/ | lucide:git-pull-request
+            Zipline screenshots | https://i.example.com/ | lucide:image
+            Cobalt | https://cobalt.example.com/ | lucide:download
+            Homelable | https://homelable.example.com/ | lucide:network
+        layout:
+          lg:
+            x: 6
+            y: 4
+            w: 6
+            h: 4
+      - kind: core.bookmarks
+        title: Infrastructure
+        icon: lucide:server
+        options:
+          layout: list
+          links: |-
+            Proxmox | https://pve.example.com/ | lucide:server
+            Backup server | https://pbs.example.com/ | lucide:database-backup
+            TrueNAS | https://truenas.example.com/ | lucide:hard-drive
+            Nginx Proxy Manager | https://npm.example.com/ | lucide:route
+            Grafana | https://grafana.example.com/ | lucide:chart-no-axes-combined
+            Vaultwarden | https://vault.example.com/ | lucide:key-round
+            Pocket ID | https://id.example.com/ | lucide:fingerprint
+        layout:
+          lg:
+            x: 12
+            y: 4
+            w: 6
+            h: 4
+      - kind: core.bookmarks
+        title: Network & files
+        icon: lucide:network
+        options:
+          layout: list
+          links: |-
+            LANCache | https://lancache.example.com/ | lucide:database
+            LibreSpeed (LAN) | http://librespeed.home.arpa/ | lucide:gauge
+            Speedtest Tracker | https://speedtest.example.com/ | lucide:activity
+            ISO library | https://iso.example.com/ | lucide:disc
+            Live dashboard | https://nexdeck.example.com/b/home | lucide:layout-dashboard
+        layout:
+          lg:
+            x: 18
+            y: 4
+            w: 6
+            h: 4

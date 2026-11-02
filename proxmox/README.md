@@ -399,6 +399,12 @@ application startup. Native timers retry failed starts. Both LXCs passed
 separate reboot, mount-order, HTTP, and media-user read/write tests on 2026-10-02.
 Application roles preserve these systemd drop-ins but do not deploy them.
 
+### Homepage dashboard
+
+The [NexDeck homepage](files/nexdeck/README.md) provides categorized service
+links and everyday bookmarks. Its editable Start board is separate from the
+existing live monitoring board.
+
 ### Centralized logging
 
 The role pins logging packages to exact versions and holds them with APT.
