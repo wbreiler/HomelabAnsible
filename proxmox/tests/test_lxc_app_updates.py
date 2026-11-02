@@ -129,12 +129,48 @@ class Deployment(unittest.TestCase):
     @patch.object(updates.subprocess, 'run')
     def test_success_persists_exact_pins_and_removes_secret_tempfile(self, run, backup):
         self.current_version.side_effect = ['1.1.0', '1.2.0']
-        self.assertEqual(self.update(dry_run=False)['status'], 'updated')
+        self.assertEqual(self.update(dry_run=False), {
+            'app': 'app', 'vmid': 100, 'previous': '1.1.0', 'current': '1.2.0', 'status': 'updated',
+        })
         self.assertEqual(json.loads((self.state / 'app.json').read_text()), self.pins)
         self.assertEqual([p.name for p in self.state.iterdir()], ['app.json'])
         argv = run.call_args.args[0]
         self.assertEqual(argv[:3], ['ansible-playbook', '-i', 'node,'])
         self.assertNotIn('do-not-log-this', ' '.join(argv))
+
+    @patch.object(updates, 'backup')
+    @patch.object(updates, 'install_native')
+    def test_native_update_reports_before_and_verified_installed_versions(self, install, backup):
+        self.spec['native'] = True
+        self.current_version.side_effect = ['1.1.0', 'v1.2.0']
+        result = self.update(dry_run=False)
+        self.assertEqual((result['previous'], result['current'], result['status']), ('1.1.0', 'v1.2.0', 'updated'))
+        install.assert_called_once()
+
+    def test_package_reports_keep_each_previous_version_and_only_changed_packages(self):
+        previous = {'grafana': '13.2.4-1', 'loki': '3.7.8', 'alloy': '1.14.0'}
+        targets = {'grafana': '13.3.0-1', 'loki': '3.7.9'}
+        self.config['packages'] = list(previous)
+
+        def guest(vmid, *args):
+            if args[0] == 'apt-cache':
+                return f'{args[-1]} | {targets.get(args[-1], previous[args[-1]])} | repository'
+            if args[0] == 'dpkg-query':
+                return targets[args[-1]]
+            return ''
+
+        for dry_run in [True, False]:
+            with self.subTest(dry_run=dry_run), patch.object(updates, 'run', side_effect=lambda args, **kw: previous[args[-1]]), \
+                    patch.object(updates, 'guest', side_effect=guest), patch.object(updates, 'backup') as backup, \
+                    patch.object(updates, 'apt_candidate', side_effect=[*targets.values(), None]), \
+                    patch.object(updates, 'package_ready', return_value=True), patch.object(updates.subprocess, 'run') as run:
+                result = updates.update_packages({'vmid': 100}, self.config, 'node', dry_run, False)
+                self.assertEqual(result, {
+                    'app': 'packages', 'vmid': 100, 'status': 'planned' if dry_run else 'updated',
+                    'previous': {'grafana': '13.2.4-1', 'loki': '3.7.8'}, 'targets': targets,
+                })
+                self.assertEqual(backup.call_count, 0 if dry_run else 1)
+                self.assertEqual(run.call_count, 0 if dry_run else 1)
 
     @patch.object(updates, 'backup')
     @patch.object(updates.subprocess, 'run')

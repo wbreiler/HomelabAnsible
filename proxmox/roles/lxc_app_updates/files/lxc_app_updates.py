@@ -298,6 +298,7 @@ def update_packages(row, config, node, dry_run, retry_failed):
     if failure.exists() and not retry_failed:
         raise RuntimeError('previous package update failed; inspect before --retry-failed')
     changes = {}
+    previous = {}
     for package in config.get('packages', []):
         try:
             current = run(['pct', 'exec', str(vmid), '--', 'dpkg-query', '-W', '-f=${Version}', package], stderr=subprocess.DEVNULL)
@@ -309,9 +310,10 @@ def update_packages(row, config, node, dry_run, retry_failed):
         target = apt_candidate(current, candidates)
         if target and package_ready(vmid, package, target, config):
             changes[package] = target
+            previous[package] = current
             print(f'{"PLAN" if dry_run else "UPDATE"} {vmid} {package}: {current} -> {target}', flush=True)
     if not changes or dry_run:
-        return {'app': 'packages', 'vmid': vmid, 'status': 'planned' if changes else 'current', 'targets': changes}
+        return {'app': 'packages', 'vmid': vmid, 'status': 'planned' if changes else 'current', 'previous': previous, 'targets': changes}
     backup(vmid, config, node)
     try:
         before = guest(vmid, 'systemctl', '--failed', '--plain', '--no-legend', '--no-pager')
@@ -333,7 +335,7 @@ def update_packages(row, config, node, dry_run, retry_failed):
         role, key = ('tailscale_router', 'tailscale_router_version') if package == 'tailscale' else ('centralized_logging', 'centralized_logging_' + package + '_version')
         save_json(PINS / f'{role}-{package}.json', {key: target})
     failure.unlink(missing_ok=True)
-    return {'app': 'packages', 'vmid': vmid, 'status': 'updated', 'targets': changes}
+    return {'app': 'packages', 'vmid': vmid, 'status': 'updated', 'previous': previous, 'targets': changes}
 
 
 def update_one(app, spec, row, config, node, dry_run, retry_failed=False):
@@ -394,7 +396,7 @@ def update_one(app, spec, row, config, node, dry_run, retry_failed=False):
         raise
     failure.unlink(missing_ok=True)
     print(f'OK {vmid} {app} {target}', flush=True)
-    return {'app': app, 'vmid': vmid, 'current': target, 'status': 'updated'}
+    return {'app': app, 'vmid': vmid, 'previous': current, 'current': installed, 'status': 'updated'}
 
 
 def main():

@@ -42,6 +42,10 @@ def container_label(row):
     return f'{name} ({identifier})' if name else identifier
 
 
+def version_change(previous, current):
+    return f'`{display(previous or "unknown")}` → `{display(current or "unknown")}`'
+
+
 def detail_field(name, lines):
     shown = []
     for line in lines:
@@ -101,9 +105,10 @@ def summary(kind, result, report, invocation, node):
     for row in updated:
         heading = f'**{app_name(row["app"])}** · `{container_label(row)}`'
         if row['app'] == 'packages':
-            versions = '\n'.join(f'{app_name(name)} `{display(version)}`' for name, version in sorted(row.get('targets', {}).items()))
+            versions = '\n'.join(f'{app_name(name)} {version_change(row.get("previous", {}).get(name), version)}'
+                                 for name, version in sorted(row.get('targets', {}).items()))
         else:
-            versions = f'Version `{display(row.get("current", "unknown"))}`'
+            versions = f'Version {version_change(row.get("previous"), row.get("current"))}'
         changes.append(f'{heading}\n{versions}')
     truncated = False
     for name, lines in [('Needs attention', failures), ('Updated', changes)]:
@@ -160,8 +165,9 @@ def main():
         if args.test:
             rows = ([{'vmid': 100, 'name': 'pocketid-nash', 'status': 'completed'},
                      {'vmid': 101, 'name': 'npm-nash', 'status': 'skipped'}] if args.kind == 'os' else [
-                {'vmid': 100, 'name': 'pocketid-nash', 'app': 'pocket_id', 'status': 'updated', 'current': '2.19.1'},
-                {'vmid': 127, 'name': 'loki-nash', 'app': 'packages', 'status': 'updated', 'targets': {'grafana': '13.3.0', 'loki': '3.7.9'}},
+                {'vmid': 100, 'name': 'pocketid-nash', 'app': 'pocket_id', 'status': 'updated', 'previous': '2.19.0', 'current': '2.19.1'},
+                {'vmid': 127, 'name': 'loki-nash', 'app': 'packages', 'status': 'updated',
+                 'previous': {'grafana': '13.2.4', 'loki': '3.7.8'}, 'targets': {'grafana': '13.3.0', 'loki': '3.7.9'}},
                 {'vmid': 103, 'name': 'forgejo-nash', 'app': 'forgejo', 'status': 'failed'},
             ])
             result = 'exit-code' if any(row['status'] == 'failed' for row in rows) else 'success'

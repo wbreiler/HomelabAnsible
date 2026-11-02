@@ -750,9 +750,12 @@ Dry runs and direct updater CLI commands do not send messages.
 
 Messages lead with the outcome, with the node and job above it. A single
 summary line shows nonzero counts instead of separate metric columns.
-App names, LXC names, and container IDs head each update entry, with versions
-below; managed packages share one entry per container. Both update jobs save
-the LXC name from Proxmox with each result. Entries show `name (CT ID)`, or
+App names, LXC names, and container IDs head each update entry, with
+`old version → new version` below. Managed packages share one entry per
+container, with both versions listed for each package. Reports save the
+version read before the update and the verified installed version. Older
+reports show `unknown` when the previous version was not recorded. Both update
+jobs save the LXC name from Proxmox with each result. Entries show `name (CT ID)`, or
 only `CT ID` for older reports and unknown guests. Failures appear first, with
 a copyable journal command labeled for the correct node. Quiet runs stay
 short. Long lists retain totals and show an overflow count with the log
