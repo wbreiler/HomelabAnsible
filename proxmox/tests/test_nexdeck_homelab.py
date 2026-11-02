@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 try:
     from app.adapters.base import AdapterError, WidgetData
     from app.adapters.homelab import ADAPTER
+    from app.adapters.truenas import _NoCurrentApi
 except ModuleNotFoundError as error:
     if error.name != "app":
         raise
@@ -25,7 +26,7 @@ class HomelabMap(unittest.IsolatedAsyncioTestCase):
         self.nas = SimpleNamespace(kind="truenas", fetch=AsyncMock(side_effect=[
             WidgetData(status="bad", metrics={"cpu": 2, "memory": 8}, secondary=[{"label": "Alerts", "value": 3}]),
             WidgetData(items=[{"title": "pool", "subtitle": "ONLINE", "status": "ok"}]),
-        ]))
+        ]), _rpc=AsyncMock(return_value={"app.query": [{"id": "plex", "name": "Plex", "state": "RUNNING"}]}))
         self.pbs = SimpleNamespace(kind="pbs", fetch=AsyncMock(side_effect=[
             WidgetData(metrics={"cpu": 1}),
             WidgetData(items=[{"title": "backup", "status": "ok"}]),
@@ -41,6 +42,8 @@ class HomelabMap(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(places["system/1/node/a"]["parent"], "homelab")
         self.assertEqual(places["system/1/a/101"]["parent"], "system/1/node/a")
         self.assertEqual(places["system/2/storage/0"]["parent"], "system/2")
+        self.assertEqual(places["system/2/app/plex"]["parent"], "system/2")
+        self.assertEqual(places["system/2/app/plex"]["detail"], "App · Running")
         self.assertEqual(places["system/3/storage/0"]["parent"], "system/3")
         self.assertIn("3 alerts", places["system/2"]["detail"])
         self.assertEqual(result.status, "bad")
@@ -72,6 +75,39 @@ class HomelabMap(unittest.IsolatedAsyncioTestCase):
     async def test_missing_resolver_is_explicit(self):
         with self.assertRaises(AdapterError):
             await ADAPTER.fetch("map", {}, {"sources": [1]}, SimpleNamespace(resolve_integration=None))
+
+    async def test_app_states_and_stopped_filter_exclude_configuration(self):
+        self.nas._rpc.return_value = {"app.query": [
+            {"id": state.lower(), "state": state, "config": {"secret": "DO_NOT_LEAK"}}
+            for state in ("RUNNING", "STOPPED", "DEPLOYING", "CRASHED", "UNKNOWN")
+        ]}
+        apps, status = await ADAPTER._apps(self.nas, {}, "nas", {})
+        self.assertEqual(status, "bad")
+        by_id = {app["id"]: app for app in apps}
+        self.assertEqual(by_id["nas/app/running"]["status"], "ok")
+        self.assertEqual(by_id["nas/app/stopped"]["status"], "unknown")
+        self.assertEqual(by_id["nas/app/deploying"]["status"], "warn")
+        self.assertEqual(by_id["nas/app/crashed"]["status"], "bad")
+        self.assertEqual(by_id["nas/app/unknown"]["status"], "unknown")
+        self.assertNotIn("DO_NOT_LEAK", str(apps))
+        apps, _ = await ADAPTER._apps(self.nas, {}, "nas", {"show_stopped": False})
+        self.assertNotIn("nas/app/stopped", [app["id"] for app in apps])
+
+    async def test_app_query_failure_keeps_host_pool_and_other_systems(self):
+        self.nas._rpc.side_effect = _NoCurrentApi(404)
+        result = await ADAPTER.fetch("map", {}, {"sources": [1, 2, 3]}, self.ctx)
+        places = {p["id"]: p for p in result.meta["topology"]["places"]}
+        self.assertEqual(places["system/2/apps"]["detail"], "Unavailable")
+        self.assertIn("CPU", places["system/2"]["detail"])
+        self.assertIn("system/2/storage/0", places)
+        self.assertIn("system/1/a/101", places)
+        self.assertIn("system/3/storage/0", places)
+
+    async def test_bad_app_inventory_is_not_treated_as_an_empty_list(self):
+        self.nas._rpc.return_value = {"app.query": None}
+        apps, status = await ADAPTER._apps(self.nas, {}, "nas", {})
+        self.assertEqual(status, "warn")
+        self.assertEqual(apps[0]["detail"], "Unavailable")
 
 
 if __name__ == "__main__":

@@ -19,11 +19,19 @@ The Live page uses NexDeck widgets and existing integrations:
 - **In motion** tabs for SABnzbd, Sonarr, and Radarr queues.
 - A combined homelab map, TrueNAS pool capacity, backup activity, and Tdarr workers.
 
-**Your homelab, alive** shows Proxmox hosts and guests alongside TrueNAS pools
-and PBS datastores. Hover over a node for its full name and details. Status
+**Your homelab, alive** shows Proxmox hosts and guests alongside TrueNAS apps
+and pools, plus PBS datastores. TrueNAS apps appear below the TrueNAS host
+with their live state. Running apps are green, deployment is amber, crashed
+apps are red, and stopped or unknown apps are gray. **Show stopped guests and
+apps** controls whether stopped apps appear. PBS remains a datastore view.
+
+Hover over a node for its full name and details. Status
 colors come from the existing adapters, including system alerts. A red TrueNAS
 node can indicate an open alert while the system remains reachable. An
 unreachable system shows **Unavailable** without hiding the other systems.
+If only the app query fails, an **Apps · Unavailable** node appears while
+the host and pool remain visible. App discovery uses the current TrueNAS
+WebSocket API and publishes only app names and states, never app configuration.
 
 The small `homelab.map` adapter lives in `roles/nexdeck/files/homelab.py`.
 The NexDeck role installs it after the pinned release and checks that it loads.
@@ -121,5 +129,6 @@ PYTHONPATH=/opt/nexdeck/app/backend /opt/nexdeck/venv/bin/python /tmp/test_nexde
 ```
 
 Copy `tests/test_nexdeck_homelab.py` into the guest first. The tests cover the
-combined tree, source isolation, alert propagation, duplicate sources, and
-invalid settings. Recheck the extension when upgrading NexDeck's adapter API.
+combined tree, source isolation, alert propagation, duplicate sources, invalid
+settings, and app states and failures. Recheck the extension when upgrading
+NexDeck's adapter API.

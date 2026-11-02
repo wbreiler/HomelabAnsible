@@ -3,6 +3,7 @@
 import asyncio
 
 from .base import Adapter, AdapterError, Context, Field, WidgetData, WidgetType
+from .truenas import _NoCurrentApi
 
 
 LABELS = {"proxmox": "Proxmox", "truenas": "TrueNAS", "pbs": "PBS"}
@@ -21,7 +22,7 @@ class HomelabAdapter(Adapter):
         WidgetType(
             kind="map",
             label="Homelab map",
-            description="Proxmox hosts and guests, TrueNAS pools, and PBS datastores.",
+            description="Proxmox hosts and guests, TrueNAS apps and pools, and PBS datastores.",
             renderer="topology",
             default_size=(12, 6),
             refresh_seconds=30,
@@ -29,7 +30,7 @@ class HomelabAdapter(Adapter):
                 Field("sources", "Systems", type="integrations", default=[],
                       options=tuple(LABELS.items()),
                       help="Select the Proxmox, TrueNAS and PBS connections."),
-                Field("show_stopped", "Show stopped guests", type="bool", default=True),
+                Field("show_stopped", "Show stopped guests and apps", type="bool", default=True),
             ),
         ),
     )
@@ -88,10 +89,38 @@ class HomelabAdapter(Adapter):
                 places.append({"id": f"{root}/storage/{index}", "name": str(item.get("title") or "Storage"),
                                "kind": "storage", "parent": root, "status": item.get("status") or "unknown",
                                "detail": str(item.get("subtitle") or item.get("value") or "")})
+            if adapter.kind == "truenas":
+                apps, app_status = await self._apps(adapter, config, root, options)
+                places.extend(apps)
+                status = max((status, app_status), key=lambda state: SEVERITY.get(state, 1))
+                places[0]["status"] = status
             return places, status
         except (AdapterError, TimeoutError):
             return [{"id": root, "name": label, "kind": "host", "parent": "homelab",
                      "status": "bad", "detail": "Unavailable"}], "bad"
+
+    async def _apps(self, adapter: Adapter, config: dict, root: str, options: dict) -> tuple[list[dict], str]:
+        try:
+            # App discovery uses the current WebSocket API without a legacy REST fallback.
+            apps = (await adapter._rpc(config, ["app.query"]))["app.query"]
+            if not isinstance(apps, list) or any(not isinstance(app, dict) or not app.get("id") for app in apps):
+                raise AdapterError("App inventory is unavailable.", code="bad_apps")
+        except (AdapterError, TimeoutError, _NoCurrentApi):
+            return [{"id": f"{root}/apps", "name": "Apps", "kind": "container", "parent": root,
+                     "status": "warn", "detail": "Unavailable"}], "warn"
+        places = []
+        status = "ok"
+        for app in sorted(apps, key=lambda item: str(item.get("name") or item["id"]).lower()):
+            state = str(app.get("state") or "UNKNOWN").upper()
+            if state == "STOPPED" and not options.get("show_stopped", True):
+                continue
+            health = {"RUNNING": "ok", "STOPPED": "unknown", "DEPLOYING": "warn", "CRASHED": "bad"}.get(state, "unknown")
+            if health in ("warn", "bad"):
+                status = max((status, health), key=SEVERITY.get)
+            places.append({"id": f"{root}/app/{app['id']}", "name": str(app.get("name") or app["id"]),
+                           "kind": "container", "parent": root, "status": health,
+                           "detail": f"App · {state.replace('_', ' ').title()}"})
+        return places, status
 
 
 ADAPTER = HomelabAdapter()
