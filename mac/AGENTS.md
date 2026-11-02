@@ -6,6 +6,9 @@ drifted.
 
 ## Scope and entry point
 
+- VM 108 and its dedicated backup job were retired on 2026-10-29. The old
+  `atlas-dev` alias and `10.10.40.9` address are historical. Verify a selected
+  remote host before reuse. See `../proxmox/docs/macos-follow-up.md`.
 - Run commands from `mac/`; this project has no inventory file.
 - `dev-host.yml` is a separate, explicitly selected remote Intel development
   host entry point. Supply an inline `dev_host` inventory and SSH parameters.
@@ -28,7 +31,8 @@ drifted.
 - `main.yml` remains Apple-silicon-specific with `/opt/homebrew`. Shared
   Homebrew bootstrap and `mac_dev` tasks use `homebrew_prefix`, supplied by
   each entry point. Preserve the local platform guard. Platform-dependent
-  shell, editor, startup, and readiness files are in `templates/`.
+  shell, startup, and readiness files are in `templates/`. Editor settings
+  are no longer managed.
 - Several tasks overwrite user configuration files from `files/` or
   `templates/`, using Ansible backups where configured. Review both the task and
   source file before changing such behavior.
@@ -45,6 +49,7 @@ make run-tags TAGS=defaults,dock   # Apply multiple tags
 make check PROFILE=dev             # Development check mode; prompts for sudo
 ansible-lint main.yml              # Lint from this directory
 ansible-playbook main.yml --syntax-check
+make validate                     # Local syntax, lint, and role-contract checks
 ```
 
 Check mode is not runtime verification. Some command, shell, Homebrew, MAS,
@@ -95,6 +100,13 @@ SSH keys must remain outside this project.
 The SSH tasks preserve `~/.config/1Password`. No agent TOML file is deployed.
 Local `main.yml` defaults to outbound-only SSH. Set `mac_dev_remote_access: true`
 for a dedicated host. `dev-vm.yml` retains incoming SSH and Screen Sharing.
+The `mac_dev` role default still enables remote access. A new entry point
+must explicitly select the intended policy, as `main.yml` does.
+
+The October 28 package cleanup removed Claude, Claude Code, VS Code, OrbStack,
+rar, MarkEdit, TimeMachineStatus, and Docker completion from managed lists.
+It did not uninstall existing copies. Do not restore removed packages or
+VS Code configuration without a new request.
 
 ## Dependencies and ordering
 

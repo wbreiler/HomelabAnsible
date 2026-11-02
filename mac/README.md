@@ -60,18 +60,23 @@ Tags retain their previous names. Main tags are `xcode`, `homebrew`, `mas`,
 
 ## Intel development VM
 
+VM 108 (`macos-tahoe`) and its dedicated backup job were retired on 2026-10-29.
+The remote playbooks remain reusable. The old `atlas-dev` alias and address
+are historical, not an available target. See the
+[retirement record](../proxmox/docs/macos-follow-up.md).
+
 Run the full role from this directory on the controller. The SSH alias must
-identify the VM and its normal development user. For the existing Atlas VM:
+identify the selected VM and its normal development user. Replace the placeholders:
 
 ```bash
-ansible-playbook -i 'dev_host,' dev-vm.yml -e ansible_host=atlas-dev -u pve --ask-become-pass --check --diff
+ansible-playbook -i 'dev_host,' dev-vm.yml -e ansible_host=HOST_ALIAS -u USER --ask-become-pass --check --diff
 # Apply only after reviewing the changes and approving the live run:
-ansible-playbook -i 'dev_host,' dev-vm.yml -e ansible_host=atlas-dev -u pve --ask-become-pass
+ansible-playbook -i 'dev_host,' dev-vm.yml -e ansible_host=HOST_ALIAS -u USER --ask-become-pass
 ```
 
 This entry point rejects localhost, local connections, root, and non-Intel
 targets. It imports only `mac_dev`. Its apps use `~/Applications`, matching
-the existing VM installation. Shell, Homebrew, readiness checks, and
+the original VM installation. Shell, Homebrew, readiness checks, and
 desktop startup use native Intel paths. The local `main.yml` retains its
 Apple silicon guard and `/Applications` default.
 

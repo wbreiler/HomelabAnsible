@@ -1,15 +1,21 @@
 # Dedicated macOS development host
 
+VM 108 was retired through Terraform on 2026-10-29, together with its dedicated
+backup job. Existing backups and original ISO files were retained. See the
+[retirement record](../proxmox/docs/macos-follow-up.md). The old `atlas-dev`
+alias, address, migration results, and installed versions below describe that
+historical host. They do not establish a current remote target.
+
 `dev-host.yml` prepares an existing remote Intel Mac without running the
 Apple-silicon localhost reset playbook. It preserves the existing shell files
 and adds a managed PATH block. It does not migrate repositories or credentials.
 
-From `mac/`, after authorizing the target:
+From `mac/`, after authorizing the target, replace `USER` and `HOST_ADDRESS`:
 
 ```bash
 ANSIBLE_LOCAL_TEMP=/private/tmp/ansible-dev-host ansible-playbook \
-  -i 'dev_host,' dev-host.yml -u pve --private-key ~/.ssh/lxc.pub \
-  -e ansible_host=10.10.40.9 -e ansible_python_interpreter=/usr/bin/python3
+  -i 'dev_host,' dev-host.yml -u USER --private-key ~/.ssh/lxc.pub \
+  -e ansible_host=HOST_ADDRESS -e ansible_python_interpreter=/usr/bin/python3
 ```
 
 Supply optional `dev_git_name` and `dev_git_email` variables through an untracked
@@ -35,7 +41,7 @@ executes Node and Python, and compiles C with both clang and CMake/Ninja.
 It removes only its temporary directory. It does not test actual project builds.
 The setup guide is installed as `~/Developer/START-HERE.md` only when absent.
 
-## Client workflow
+## Historical client workflow — 2026-10-24
 
 Use `ssh atlas-dev` from a client with this SSH alias:
 
@@ -70,11 +76,12 @@ build and its architecture overrides are documented below.
 
 ## Independent Codex host
 
-The full development role now supports this Intel VM through `dev-vm.yml`.
+The full development role supports Intel VMs through `dev-vm.yml`.
 See [the VM role instructions](README.md#intel-development-vm) before applying
 it. The original `dev-host.yml` remains a smaller, separate bootstrap that
-preserves shell files. The full role replaces shell and editor files with
-backups and manages SSH access, hosts, remote services, and power settings.
+preserves shell files. The full role replaces shell files with backups and
+manages SSH access, hosts, remote services, and power settings. It no longer
+manages VS Code settings. The observations below predate retirement.
 
 The remote playbook installs the current `chatgpt` Homebrew cask into
 `~/Applications/ChatGPT.app`. This desktop app includes Codex. The former
@@ -132,17 +139,18 @@ Historical message text is unchanged, so old absolute file links can still
 refer to laptop paths. The laptop's `~/Documents/Codex` task files were also
 copied without overwriting existing VM files.
 
-## Protection and migration
+## Historical protection and migration — 2026-10-24
 
-VM 108 starts with Atlas. `proxmox/macos.yml` creates new VMs with 8 vCPUs,
-32 GiB RAM, and a 512 GiB system disk. It preserves existing VM settings.
+Before retirement, VM 108 used automatic startup, 8 vCPUs, 32 GiB RAM, and a
+512 GiB system disk. `proxmox/macos.yml` now refuses provisioning. Terraform
+owns new guest hardware and backup policy.
 GPT repair and APFS growth completed on 2026-10-24. The APFS container now
 uses 549546057728 bytes, with about 485 GiB initially available.
 The offline repair preserved both partition entries and verified the complete
 EFI payload and APFS prefix. Guest sleep and disk sleep are disabled.
-The `macos-dev-hourly` job backs up only VM 108 to Mnemosyne at :15 each hour.
-It does not prune. The existing all-guests job also runs every six hours at
-:30 and retains 12 hourly, 14 daily, 8 weekly, 12 monthly, and 2 yearly points,
+The former `macos-dev-hourly` job backed up only VM 108 to Mnemosyne at :15 each hour.
+It did not prune. The all-guests job also ran every six hours at
+:30 and retained 12 hourly, 14 daily, 8 weekly, 12 monthly, and 2 yearly points,
 plus its keep-last rule. Missed or failed backups can leave older recovery
 points. The migrated-code backup passed PBS chunk verification with zero errors.
 Its attached OpenCore and recovery images are included as disks in the backup.
