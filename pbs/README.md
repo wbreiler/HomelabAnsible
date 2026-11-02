@@ -1,5 +1,7 @@
 # Proxmox Backup Server Ansible Configuration
 
+[Agent guidance](AGENTS.md) covers host scope, backup boundaries, and validation.
+
 [Cloud backup restore guide](RESTORE.md)
 
 Configures an existing Proxmox Backup Server with a local ZFS datastore, PBS
