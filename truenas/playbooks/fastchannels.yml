@@ -7,7 +7,9 @@
   tasks:
     - name: Require explicit deployment opt-in
       ansible.builtin.assert:
-        that: ansible_check_mode or truenas_allow_changes | bool
+        that:
+          - ansible_check_mode or truenas_allow_changes | bool
+          - fastchannels_public_base_url is match('^https://[a-z0-9][a-z0-9.-]+[a-z0-9]$')
       tags: apps
 
     - name: Create dedicated FastChannels appdata directories
@@ -51,7 +53,7 @@
                 image: ghcr.io/kineticman/fastchannels:v5.6.0@sha256:36c5dd764d2d3bb9a3af092ff292d72dcd4c2d26e996727a2d62389135bde1e3
                 restart: unless-stopped
                 environment:
-                  PUBLIC_BASE_URL: http://10.10.20.3:5523
+                  PUBLIC_BASE_URL: "{{ fastchannels_public_base_url }}"
                 ports:
                   - 10.10.20.3:5523:5523
                 volumes:
