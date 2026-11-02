@@ -1,5 +1,7 @@
 # Proxmox guest lifecycle
 
+[Agent guidance](AGENTS.md) covers ownership, deployment guards, and validation.
+
 Terraform owns guest provisioning and hardware. Ansible owns host configuration
 and guest software. Use the [guest workflow](#create-a-guest-and-install-its-application)
 for a new Gatus, Apt-Cacher NG, or LibreSpeed guest.
