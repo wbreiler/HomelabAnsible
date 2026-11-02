@@ -406,10 +406,10 @@ Normal OS upgrades therefore skip Alloy. Update the version defaults for a
 controlled upgrade. The role permits that explicit upgrade and retains the hold.
 
 Grafana is available at `http://10.10.40.193:3000` over the LAN/Tailscale
-subnet route. The internal NPM name is `http://graf-nash`. No internal DNS
-exists, so clients need `10.10.40.86 graf-nash` in their hosts file to use
-that name. The direct IP works without a hosts-file change. No public DNS
-record or port forward is required or created.
+subnet route. Local DNS now resolves the internal NPM name `http://graf-nash`.
+The [local services configuration](docs/local-services.md) also provides its
+private HTTPS route. Clients must use the UniFi resolver for these names.
+No public DNS record or port forward is required or created.
 
 The role manages `/etc/nginx/conf.d/homelab-grafana.conf` inside NPM. This
 route permits only private/Tailscale source addresses, using the actual

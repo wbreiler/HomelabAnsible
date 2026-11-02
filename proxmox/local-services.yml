@@ -1,0 +1,66 @@
+---
+- name: Configure private HTTPS routes on the existing proxy
+  hosts: "{{ local_services_proxy_node | default('prometheus') }}"
+  gather_facts: false
+  tasks:
+    - name: Validate local service configuration
+      ansible.builtin.assert:
+        that:
+          - local_services_proxy_vmid | int > 0
+          - local_services_routes | length > 0
+          - local_services_routes | map(attribute='name') | unique | length == local_services_routes | length
+          - local_services_certificate is match('^/[a-zA-Z0-9/_.-]+$')
+          - local_services_certificate_key is match('^/[a-zA-Z0-9/_.-]+$')
+
+    - name: Validate each proxy route
+      ansible.builtin.assert:
+        that:
+          - item.name is match('^[a-z0-9][a-z0-9.-]+[a-z0-9]$')
+          - item.address is match('^([0-9]{1,3}\.){3}[0-9]{1,3}$')
+          - item.address.split('.') | map('int') | max <= 255
+          - item.port | int > 0
+          - item.port | int <= 65535
+          - item.scheme | default('http') in ['http', 'https']
+      loop: "{{ local_services_routes }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Install validated private service routes
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ local_services_proxy_vmid | string }}"
+          - --
+          - bash
+          - -ceu
+          - |
+            path=/etc/nginx/conf.d/homelab-local-services.conf
+            tmp=$(mktemp)
+            trap 'rm -f "$tmp"' EXIT
+            cat > "$tmp"
+            if test -f "$path" && cmp -s "$tmp" "$path"; then
+              echo unchanged
+              exit 0
+            fi
+            if {{ ansible_check_mode | ternary('true', 'false') }}; then
+              echo changed
+              exit 0
+            fi
+            existed=false
+            if test -f "$path"; then
+              cp -a "$path" "$path.previous"
+              existed=true
+            fi
+            install -m 0644 "$tmp" "$path"
+            if ! nginx -t || ! nginx -s reload; then
+              if "$existed"; then mv "$path.previous" "$path"; else rm "$path"; fi
+              nginx -t && nginx -s reload
+              exit 1
+            fi
+            echo changed
+        stdin: "{{ lookup('template', 'templates/local-services.conf.j2') }}"
+        stdin_add_newline: false
+      check_mode: false
+      register: local_services_install
+      changed_when: local_services_install.stdout | trim == 'changed'

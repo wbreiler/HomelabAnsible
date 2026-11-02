@@ -1,0 +1,45 @@
+# Managed by local-services.yml. Check the connection peer, never forwarded headers.
+geo $realip_remote_addr $homelab_local_services_allowed {
+    default 0;
+    127.0.0.0/8 1;
+    10.0.0.0/8 1;
+    172.16.0.0/12 1;
+    192.168.0.0/16 1;
+    100.64.0.0/10 1;
+    ::1 1;
+}
+
+{% for service in local_services_routes %}
+server {
+    listen 80;
+    listen [::]:80;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name {{ service.name }};
+    ssl_certificate {{ local_services_certificate }};
+    ssl_certificate_key {{ local_services_certificate_key }};
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    if ($homelab_local_services_allowed = 0) { return 403; }
+    if ($scheme = http) { return 301 https://$host$request_uri; }
+
+    access_log /data/logs/local-services_access.log;
+    error_log /data/logs/local-services_error.log warn;
+    client_max_body_size 100m;
+
+    location / {
+        proxy_pass {{ service.scheme | default('http') }}://{{ service.address }}:{{ service.port }};
+        proxy_redirect default;
+        proxy_redirect http://$host/ https://$host/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $realip_remote_addr;
+        proxy_set_header X-Forwarded-For $realip_remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_buffering off;
+    }
+}
+{% endfor %}

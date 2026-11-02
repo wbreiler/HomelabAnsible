@@ -570,3 +570,14 @@ management, LXC installation, system updates, and PBS restores.
 * Pins and checksum-verifies LibreSpeed, with native nginx and PHP FPM.
 * Local tests disable telemetry, ISP lookup, compression, buffering, and
   bandwidth overhead compensation. Use the direct guest HTTP address.
+
+### Local DNS and private web services
+
+* `local-services.yml` manages a separate NPM configuration with private-peer
+  admission checks. Keep route data in ignored cluster variables. Never add
+  duplicate UI-managed NPM hosts for these names.
+* `files/local_dns.py` adds records through UniFi's integration API over SSH.
+  It rejects conflicts and never deletes records. Keep API keys and the real
+  DNS JSON outside Git. See `docs/local-services.md` for checks and recovery.
+* LibreSpeed uses direct DNS rather than the proxy. LANCache must forward to
+  the local resolver for private names to work on its clients.

@@ -38,3 +38,5 @@ Thumbs.db
 # Claude files
 .claude/
 /HANDOFF.md
+/local-services.dns.json
+/local-services.urls.md
