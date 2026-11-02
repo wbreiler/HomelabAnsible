@@ -162,6 +162,12 @@ pages:
         sources: []  # Select Proxmox, TrueNAS and PBS in the card settings after import.
         show_stopped: true
         app_links: |-
+          host/pve1 | https://pve.example.com/#v1:0:=node%2Fpve1:4:5::::::
+          host/pve2 | https://pve.example.com/#v1:0:=node%2Fpve2:4:5::::::
+          host/truenas | https://truenas.example.com/
+          host/pbs | https://pbs.example.com/
+          guest/101 | https://service.example.com/
+          guest/102 | https://pve.example.com/#v1:0:=lxc%2F102:4::::::5:
           cobalt | https://cobalt.example.com/
           deluge | https://deluge.example.com/
           fastchannels | https://fastchannels.example.com/

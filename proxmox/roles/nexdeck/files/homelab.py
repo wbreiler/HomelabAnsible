@@ -47,8 +47,8 @@ class HomelabAdapter(Adapter):
                       options=tuple(LABELS.items()),
                       help="Select the Proxmox, TrueNAS and PBS connections."),
                 Field("show_stopped", "Show stopped guests and apps", type="bool", default=True),
-                Field("app_links", "App web UIs", type="textarea", default="",
-                      help="One app ID | http(s) URL per line. Linked apps open in a new tab.",
+                Field("app_links", "Dashboard links", type="textarea", default="",
+                      help="One key | http(s) URL per line. Use host/name, guest/VMID, or a TrueNAS app ID. Opens in a new tab.",
                       placeholder="plex | https://plex.example.com/web/index.html"),
             ),
         ),
@@ -69,6 +69,17 @@ class HomelabAdapter(Adapter):
                    "kind": "cluster", "status": status, "detail": "Compute · storage · backup"}]
         for branch, _state in branches:
             places.extend(branch)
+        links = app_links(options.get("app_links", ""))
+        for place in places:
+            if place.get("kind") == "host":
+                key = f"host/{place['name'].lower()}"
+            elif "/lxc/" in place["id"] or "/qemu/" in place["id"]:
+                # VMIDs stay stable when Proxmox moves a guest between hosts.
+                key = f"guest/{place['id'].rsplit('/', 1)[1]}"
+            else:
+                continue
+            if url := links.get(key):
+                place["url"] = url
         return WidgetData(status=status, meta={"topology": {"places": places}})
 
     async def _branch(self, source: int, options: dict, ctx: Context) -> tuple[list[dict], str]:

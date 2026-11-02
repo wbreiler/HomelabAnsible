@@ -25,9 +25,12 @@ with their live state. Running apps are green, deployment is amber, crashed
 apps are red, and stopped or unknown apps are gray. **Show stopped guests and
 apps** controls whether stopped apps appear. PBS remains a datastore view.
 
-Click a linked app node to open its web UI in a new tab. Keyboard users can
-focus the node with Tab and open it with Enter. Both LANCache nodes open the
-LANCache dashboard. Nodes without a configured web UI remain status displays.
+Click a host to open its management dashboard. Atlas and Prometheus open
+their respective Proxmox summaries. Click an app to open its web UI in a new
+tab. Guests without a web dashboard have explicit links to their Proxmox
+guest summaries. Keyboard users can focus a node with Tab and open it with
+Enter. Both LANCache nodes open the LANCache dashboard. Unconfigured nodes
+and storage nodes remain status displays.
 
 Hover over a node for its full name and details. Status
 colors come from the existing adapters, including system alerts. A red TrueNAS
@@ -87,15 +90,24 @@ The categories are Everyday, Watch & listen, Downloads & archive, Home &
 making, Search & AI, Code & tools, Infrastructure, and Network & files.
 LibreSpeed keeps its direct HTTP URL, so a proxy cannot distort its results.
 
-For map links, open the map card's settings and edit **App web UIs**. Use
-the TrueNAS app ID and its friendly URL, one pair per line:
+For map links, open the map card's settings and edit **Dashboard links**.
+Use one key and URL per line:
 
 ```text
+host/pve1 | https://pve.example.com/#v1:0:=node%2Fpve1:4:5::::::
+host/truenas | https://truenas.example.com/
+host/pbs | https://pbs.example.com/
+guest/101 | https://service.example.com/
 plex | https://plex.example.com/web/index.html
 tdarr | https://tdarr.example.com/
 ```
 
-Add a line when a new app needs a link. Only absolute HTTP or HTTPS URLs
+Host keys use the lowercase displayed host name. Proxmox guest keys use the
+VM ID, so their links survive migration between hosts and guest renaming.
+TrueNAS app keys retain their existing app IDs. For a guest without a web
+UI, select its Summary page in Proxmox and copy that page's URL. Add a line
+when a new guest or app needs a link. Update the mapping when its VM ID changes.
+Only absolute HTTP or HTTPS URLs
 without embedded credentials are accepted. Links come from these explicit
 settings, not from potentially sensitive portal data in app configuration.
 
@@ -150,7 +162,8 @@ PYTHONPATH=/opt/nexdeck/app/backend /opt/nexdeck/venv/bin/python /tmp/test_nexde
 
 Copy `tests/test_nexdeck_homelab.py` into the guest first. The tests cover the
 combined tree, source isolation, alert propagation, duplicate sources, invalid
-settings, and app states and failures. Recheck the extension when upgrading
+settings, host and app destinations, guest migration, and app states and failures.
+Recheck the extension when upgrading
 NexDeck's adapter API.
 
 The renderer patch adds link safety and keyboard-focus tests to the upstream

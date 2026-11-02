@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 try:
     from app.adapters.base import AdapterError, WidgetData
     from app.adapters.homelab import ADAPTER, app_links
+    from app.adapters.proxmox import map_of
     from app.adapters.truenas import _NoCurrentApi
 except ModuleNotFoundError as error:
     if error.name != "app":
@@ -19,7 +20,7 @@ class HomelabMap(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.cluster = WidgetData(meta={"topology": {"places": [
             {"id": "cluster", "name": "Cluster", "parent": None, "status": "ok"},
-            {"id": "node/a", "name": "a", "parent": "cluster", "status": "ok"},
+            {"id": "node/a", "name": "a", "kind": "host", "parent": "cluster", "status": "ok"},
             {"id": "a/101", "name": "guest", "parent": "node/a", "status": "ok"},
         ]}})
         self.pve = SimpleNamespace(kind="proxmox", fetch=AsyncMock(return_value=self.cluster))
@@ -53,10 +54,12 @@ class HomelabMap(unittest.IsolatedAsyncioTestCase):
 
     async def test_unavailable_source_does_not_hide_other_systems(self):
         self.nas.fetch.side_effect = AdapterError("Private failure detail", code="http_error")
-        result = await ADAPTER.fetch("map", {}, {"sources": [1, 2, 3]}, self.ctx)
+        result = await ADAPTER.fetch("map", {}, {"sources": [1, 2, 3],
+            "app_links": "host/truenas | https://nas.example.com/"}, self.ctx)
         places = {p["id"]: p for p in result.meta["topology"]["places"]}
         self.assertEqual(places["system/2"]["detail"], "Unavailable")
         self.assertEqual(places["system/2"]["status"], "bad")
+        self.assertEqual(places["system/2"]["url"], "https://nas.example.com/")
         self.assertIn("system/1/a/101", places)
         self.assertIn("system/3/storage/0", places)
 
@@ -119,6 +122,44 @@ class HomelabMap(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(by_id["nas/app/plex"]["url"], "https://plex.example.com/web/index.html")
         self.assertNotIn("url", by_id["nas/app/other"])
         self.assertNotIn("DO_NOT_LEAK", str(apps))
+
+    async def test_host_links_are_distinct_from_apps_and_storage(self):
+        self.cluster.meta["topology"]["places"].append(
+            {"id": "node/b", "name": "b", "kind": "host", "parent": "cluster", "status": "ok"})
+        result = await ADAPTER.fetch("map", {}, {"sources": [1, 2, 3], "app_links": "\n".join([
+            "host/a | https://pve.example.com/#node-a",
+            "host/b | https://pve.example.com/#node-b",
+            "host/truenas | https://nas.example.com/",
+            "host/pbs | https://pbs.example.com/",
+            "plex | https://plex.example.com/",
+        ])}, self.ctx)
+        links = {p["id"]: p["url"] for p in result.meta["topology"]["places"] if "url" in p}
+        self.assertEqual(links, {
+            "system/1/node/a": "https://pve.example.com/#node-a",
+            "system/1/node/b": "https://pve.example.com/#node-b",
+            "system/2": "https://nas.example.com/",
+            "system/3": "https://pbs.example.com/",
+            "system/2/app/plex": "https://plex.example.com/",
+        })
+
+    async def test_guest_link_survives_migration_and_does_not_link_other_guests(self):
+        for node in ("a", "b"):
+            with self.subTest(node=node):
+                self.pve.fetch.return_value = map_of(
+                    [{"node": name, "status": "online"} for name in ("a", "b")],
+                    [{"node": node, "type": kind, "vmid": vmid, "status": "running", "name": "same-name"}
+                     for kind, vmid in (("lxc", 101), ("qemu", 102), ("lxc", 103))], True)
+                original = deepcopy(self.pve.fetch.return_value.meta)
+                result = await ADAPTER.fetch("map", {}, {"sources": [1], "app_links": "\n".join([
+                    "guest/101 | https://app.example.com/",
+                    "guest/102 | https://vm.example.com/",
+                ])}, self.ctx)
+                links = {p["id"]: p["url"] for p in result.meta["topology"]["places"] if "url" in p}
+                self.assertEqual(links, {
+                    f"system/1/{node}/lxc/101": "https://app.example.com/",
+                    f"system/1/{node}/qemu/102": "https://vm.example.com/",
+                })
+                self.assertEqual(self.pve.fetch.return_value.meta, original)
 
     def test_app_links_reject_unsafe_or_credential_bearing_urls(self):
         links = app_links("\n".join([
