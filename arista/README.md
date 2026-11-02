@@ -1,5 +1,7 @@
 # arista
 
+[Agent guidance](AGENTS.md) covers protected interfaces, approval, and validation.
+
 Ansible-managed config for the homelab core switch — it carries the storage,
 IPMI, and Proxmox VLANs and is the L3 gateway for all of them.
 
