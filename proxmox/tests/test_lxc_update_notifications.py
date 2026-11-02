@@ -22,12 +22,13 @@ class Notifications(unittest.TestCase):
             {'vmid': 101, 'app': 'forgejo', 'status': 'failed', 'reason': 'private-credential'},
         ]}
         message = notify.summary('apps', 'exit-code', report, 'new', 'node')
-        self.assertIn('Needs attention', message['description'])
+        self.assertIn('Review required', message['title'])
         self.assertEqual(message['color'], 0xE74C3C)
         fields = {field['name']: field['value'] for field in message['fields']}
-        self.assertIn('**Diun** `4.33.1` · CT 100', fields['Installed versions'])
-        self.assertIn('**Forgejo** · CT 101', fields['Failed updates'])
-        self.assertIn('journalctl -u lxc-app-updates.service', fields['Next step'])
+        self.assertIn('**Diun** · `CT 100`\nVersion `4.33.1`', fields['Updated'])
+        self.assertIn('**Forgejo** · `CT 101`', fields['Needs attention'])
+        self.assertLess(list(fields).index('Needs attention'), list(fields).index('Updated'))
+        self.assertIn('journalctl -u lxc-app-updates.service', fields['Review on node'])
         self.assertNotIn('private-credential', json.dumps(message))
 
     def test_old_report_cannot_claim_current_run_success(self):
@@ -35,15 +36,19 @@ class Notifications(unittest.TestCase):
         message = notify.summary('apps', 'exit-code', report, 'new', 'node')
         self.assertIn('No report from this run', message['description'])
         self.assertNotIn('old-app', json.dumps(message))
-        self.assertNotIn('Installed versions', json.dumps(message))
+        self.assertNotIn('Updated', json.dumps(message))
 
     def test_os_completion_counts_and_failed_service_result(self):
         report = {'invocation_id': 'new', 'results': [{'vmid': 100, 'status': 'completed'}, {'vmid': 101, 'status': 'skipped'}]}
         message = notify.summary('os', 'success', report, 'new', 'node')
-        self.assertEqual({f['name']: f['value'] for f in message['fields']}, {'Completed': '1', 'Failed': '0', 'Skipped': '1'})
+        self.assertIn('1 container checked', message['title'])
+        self.assertEqual(message['description'], '**1** completed  ·  **1** skipped')
+        self.assertEqual(message['fields'], [])
         self.assertEqual(message['color'], 0x2ECC71)
         self.assertNotIn('journalctl', json.dumps(message))
-        self.assertIn('Needs attention', notify.summary('os', 'timeout', report, 'new', 'node')['description'])
+        timed_out = notify.summary('os', 'timeout', report, 'new', 'node')
+        self.assertIn('Review required', timed_out['title'])
+        self.assertIn('timeout', json.dumps(timed_out))
 
     def test_package_counts_and_readable_versions(self):
         report = {'invocation_id': 'new', 'results': [
@@ -52,16 +57,18 @@ class Notifications(unittest.TestCase):
         ]}
         message = notify.summary('apps', 'success', report, 'new', 'node')
         fields = {f['name']: f['value'] for f in message['fields']}
-        self.assertEqual(fields['Apps updated'], '1')
-        self.assertEqual(fields['Packages updated'], '2')
-        self.assertIn('**Pocket ID** `2.19.1`', fields['Installed versions'])
-        self.assertIn('**Grafana** `13.3.0`', fields['Installed versions'])
-        self.assertNotIn('Next step', fields)
+        self.assertIn('3 updates installed', message['title'])
+        self.assertEqual(message['description'], '**1** app  ·  **2** packages')
+        self.assertTrue(all(not f.get('inline') for f in message['fields']))
+        self.assertIn('**Pocket ID** · `CT 100`\nVersion `2.19.1`', fields['Updated'])
+        self.assertIn('**Managed packages** · `CT 127`\nGrafana `13.3.0`\nLoki `3.7.9`', fields['Updated'])
+        self.assertEqual(fields['Updated'].count('CT 127'), 1)
+        self.assertNotIn('Review on node', fields)
 
     def test_no_updates_is_compact_and_does_not_claim_latest_versions(self):
         report = {'invocation_id': 'new', 'results': [{'vmid': 100, 'app': 'homebridge', 'status': 'current'}]}
         message = notify.summary('apps', 'success', report, 'new', 'node')
-        self.assertIn('No eligible updates', message['description'])
+        self.assertIn('No eligible updates', message['title'])
         self.assertEqual(message['fields'], [])
         self.assertNotIn('journalctl', json.dumps(message))
 
@@ -71,9 +78,9 @@ class Notifications(unittest.TestCase):
                 rows = [{'vmid': i, 'app': 'long_app_' * 40, 'status': status, 'current': '1' * 200} for i in range(500)]
                 message = notify.summary('apps', result, {'invocation_id': 'new', 'results': rows}, 'new', 'node')
                 fields = {f['name']: f['value'] for f in message['fields']}
-                self.assertEqual(fields['Failed' if status == 'failed' else 'Apps updated'], '500')
+                self.assertIn('**500** ' + ('failed' if status == 'failed' else 'apps'), message['description'])
                 self.assertIn('more. See the service log.', json.dumps(fields))
-                self.assertIn('journalctl', fields['Next step' if status == 'failed' else 'Full details'])
+                self.assertIn('journalctl', fields['Review on node' if status == 'failed' else 'Full log on node'])
                 self.assertLessEqual(len(message['title']), 256)
                 self.assertLessEqual(len(message['description']), 4096)
                 self.assertLessEqual(len(message['fields']), 25)
@@ -89,8 +96,8 @@ class Notifications(unittest.TestCase):
             {'vmid': 100, 'app': 'odd`name\n**heading**', 'status': 'updated', 'current': '1.2`\n```'},
         ]}
         message = notify.summary('apps', 'success', report, 'new', 'node')
-        field = next(f['value'] for f in message['fields'] if f['name'] == 'Installed versions')
-        self.assertNotIn('\n', field)
+        field = next(f['value'] for f in message['fields'] if f['name'] == 'Updated')
+        self.assertEqual(field.count('\n'), 1)
         self.assertNotIn('```', field)
 
     def test_preview_uses_real_layout_and_clearly_labels_sample_data(self):
@@ -102,7 +109,25 @@ class Notifications(unittest.TestCase):
                 message = send.call_args.args[1]
                 self.assertTrue(message['title'].startswith('TEST PREVIEW'))
                 self.assertIn('Sample data only. No updates ran.', message['description'])
-                self.assertTrue(message['fields'])
+                self.assertIn('**1**', message['description'])
+                self.assertEqual(message['color'], 0xE74C3C if kind == 'apps' else 0x2ECC71)
+
+    def test_service_hook_formats_the_matching_saved_report(self):
+        files = {
+            '/etc/lxc-update-notifications.json': {'webhook_url': URL},
+            '/var/lib/homelab-app-updates/last-run.json': {'invocation_id': 'new', 'results': [
+                {'vmid': 100, 'app': 'pocket_id', 'status': 'updated', 'current': '2.19.1'},
+            ]},
+        }
+        with patch('sys.argv', ['notify', 'apps']), \
+                patch.object(Path, 'read_text', lambda path: json.dumps(files[str(path)])), \
+                patch.dict(notify.os.environ, {'INVOCATION_ID': 'new', 'SERVICE_RESULT': 'success'}), \
+                patch.object(notify, 'send') as send, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(notify.main(), 0)
+        message = send.call_args.args[1]
+        self.assertIn('1 update installed', message['title'])
+        self.assertNotIn('TEST PREVIEW', message['title'])
+        self.assertIn('Pocket ID', json.dumps(message))
 
     def test_discord_confirms_delivery_and_mentions_are_disabled(self):
         response = io.BytesIO(b'{"id":"123"}')

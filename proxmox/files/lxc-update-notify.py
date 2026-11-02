@@ -13,8 +13,8 @@ import urllib.request
 
 
 JOBS = {
-    'os': ('LXC package updates', 'lxc-auto-update.service', '/var/lib/lxc-auto-update/last-run.json'),
-    'apps': ('LXC application updates', 'lxc-app-updates.service', '/var/lib/homelab-app-updates/last-run.json'),
+    'os': ('lxc-auto-update.service', '/var/lib/lxc-auto-update/last-run.json'),
+    'apps': ('lxc-app-updates.service', '/var/lib/homelab-app-updates/last-run.json'),
 }
 WEBHOOK = re.compile(r'https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+')
 
@@ -39,26 +39,26 @@ def app_name(name):
 def detail_field(name, lines):
     shown = []
     for line in lines:
-        if len('\n'.join(shown + [line])) > 900:
+        if len('\n\n'.join(shown + [line])) > 900:
             break
         shown.append(line)
     omitted = len(lines) - len(shown)
     if omitted:
         shown.append(f'… and {omitted} more. See the service log.')
-    return {'name': name, 'value': '\n'.join(shown)}, bool(omitted)
+    return {'name': name, 'value': '\n\n'.join(shown)}, bool(omitted)
 
 
 def summary(kind, result, report, invocation, node):
-    title, service, _ = JOBS[kind]
+    service, _ = JOBS[kind]
     current = bool(invocation) and report.get('invocation_id') == invocation
     rows = report.get('results', []) if current else []
     failed = [row for row in rows if row['status'] == 'failed']
     updated = [row for row in rows if row['status'] == 'updated']
     success = result == 'success' and not failed and current
     embed = {
-        'author': {'name': display(node)},
-        'title': title,
-        'description': '✅ Completed' if success else '❌ Needs attention',
+        'author': {'name': f'{display(node)} · {"Applications" if kind == "apps" else "OS packages"}'},
+        'title': '✅ Maintenance complete' if success else '⚠️ Review required',
+        'description': '',
         'color': 0x2ECC71 if success else 0xE74C3C,
         'fields': [],
         'footer': {'text': 'Homelab maintenance'},
@@ -69,37 +69,47 @@ def summary(kind, result, report, invocation, node):
         done = sum(row['status'] == 'completed' for row in rows)
         skipped = sum(row['status'] == 'skipped' for row in rows)
         if kind == 'os':
-            counts = [('Completed', done), ('Failed', len(failed)), ('Skipped', skipped)]
+            counts = [('completed', done), ('failed', len(failed)), ('skipped', skipped)]
+            if success:
+                embed['title'] = f'✅ {done} container{"s" if done != 1 else ""} checked'
         else:
             apps = sum(row['app'] != 'packages' for row in updated)
             packages = sum(len(row.get('targets', {})) for row in updated if row['app'] == 'packages')
-            counts = [('Apps updated', apps), ('Packages updated', packages), ('Failed', len(failed))]
-            if success and not updated:
-                embed['description'] = '✅ No eligible updates'
-                embed['color'] = 0x5865F2
-                counts = []
-        fields.extend({'name': name, 'value': str(count), 'inline': True} for name, count in counts)
+            counts = [('app' if apps == 1 else 'apps', apps),
+                      ('package' if packages == 1 else 'packages', packages), ('failed', len(failed))]
+            if success:
+                total = apps + packages
+                embed['title'] = f'✅ {total} update{"s" if total != 1 else ""} installed'
+                if not updated:
+                    embed['title'] = '✓ No eligible updates'
+                    embed['color'] = 0x5865F2
+        embed['description'] = '  ·  '.join(f'**{count}** {label}' for label, count in counts if count)
+        if not embed['description']:
+            embed['description'] = 'No eligible changes in this run.' if kind == 'apps' else 'No containers selected.'
     else:
-        embed['description'] += '\nNo report from this run.'
+        embed['description'] = 'No report from this run. Check the service log below.'
 
     # Allowlist fields only. Exceptions and logs can contain private details.
-    failures = [f'• **{app_name(row.get("app", "OS packages"))}** · CT {display(row["vmid"])}' for row in failed]
+    failures = [f'**{app_name(row.get("app", "OS packages"))}** · `CT {display(row["vmid"])}`' for row in failed]
     changes = []
     for row in updated:
-        targets = row.get('targets', {}) if row['app'] == 'packages' else {row['app']: row.get('current', 'unknown')}
-        for name, version in sorted(targets.items()):
-            changes.append(f'• **{app_name(name)}** `{display(version)}` · CT {display(row["vmid"])}')
+        heading = f'**{app_name(row["app"])}** · `CT {display(row["vmid"])}`'
+        if row['app'] == 'packages':
+            versions = '\n'.join(f'{app_name(name)} `{display(version)}`' for name, version in sorted(row.get('targets', {}).items()))
+        else:
+            versions = f'Version `{display(row.get("current", "unknown"))}`'
+        changes.append(f'{heading}\n{versions}')
     truncated = False
-    for name, lines in [('Failed updates', failures), ('Installed versions', changes)]:
+    for name, lines in [('Needs attention', failures), ('Updated', changes)]:
         if lines:
             field, omitted = detail_field(name, lines)
             fields.append(field)
             truncated |= omitted
     if not success or truncated:
-        action = f'On **{display(node)}**:\n```sh\njournalctl -u {service} -n 80\n```'
-        if not success:
-            action = f'Service result: `{display(result)}`. Review the log before retrying.\n' + action
-        fields.append({'name': 'Next step' if not success else 'Full details', 'value': action})
+        action = f'```sh\njournalctl -u {service} -n 80\n```'
+        if not success and not failed:
+            action = f'Service result: `{display(result)}`\n' + action
+        fields.append({'name': f'{"Review" if not success else "Full log"} on {display(node)}', 'value': action})
     return embed
 
 
@@ -150,11 +160,10 @@ def main():
             result = 'exit-code' if any(row['status'] == 'failed' for row in rows) else 'success'
             message = summary(args.kind, result, {'invocation_id': 'preview', 'results': rows}, 'preview', node)
             message['title'] = 'TEST PREVIEW · ' + message['title']
-            message['description'] = '**Sample data only. No updates ran.**'
-            message['color'] = 0x5865F2
+            message['description'] = '**Sample data only. No updates ran.**\n\n' + message['description']
         else:
             try:
-                report = json.loads(Path(JOBS[args.kind][2]).read_text())
+                report = json.loads(Path(JOBS[args.kind][1]).read_text())
                 if not isinstance(report, dict):
                     report = {}
             except (OSError, ValueError):
