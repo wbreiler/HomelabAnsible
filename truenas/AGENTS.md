@@ -28,6 +28,9 @@ edits to the appliance filesystem or database.
   Deletion requires an explicit `state: absent` entry and user approval.
 - Keep secrets in Ansible Vault or environment variables. Commit only examples
   and variable names.
+- Send secret-bearing API payloads through stdin with `no_log: true`. Keep
+  application configuration queries and mutation results out of logs and argv.
+  Preserve the protected-input pattern in the entity and configuration roles.
 - Back up the TrueNAS configuration before the first mutating run and before
   high-risk changes. `playbooks/backup.yml` exports secret material and root
   authorized keys to an ignored mode-`0600` artifact; treat that archive as a
@@ -64,6 +67,24 @@ edits to the appliance filesystem or database.
 - Network reconciliation stages interface changes with automatic rollback,
   confirms connectivity, and checks them in. Do not bypass that sequence.
 
+## Application and backup workflows
+
+- Use the scoped playbooks under `playbooks/` for custom apps. Inspect their
+  own gates before invocation. A `site.yml` tag does not deploy every custom app.
+- `playbooks/cloud-backup.yml` configures native encrypted backup tasks and
+  preparation scripts. The sequential runner owns the nightly cron schedule.
+  Preserve exclusions, 30-version retention, and the initial-success gate.
+  See `files/cloud-backup/SETUP.md` and `RESTORE.md` in that directory.
+- Appdata preparation now generates a metadata-only media catalog before
+  SQLite copies. Keep atomic publication and failure propagation. Media contents
+  remain excluded. Catalog restoration does not restore movies or music.
+- LANCache uses a dedicated macvlan address, manager worker routing, and a
+  fixed private dashboard address. Preserve the local DNS forwarding path and
+  network reservations. See `files/lancache/SETUP.md` before any network change.
+- FastChannels requires `fastchannels_public_base_url` with an HTTPS origin.
+  Threadfin uses the canonical playlist/XMLTV links. Proxy/DNS ownership remains
+  in `../proxmox/docs/local-services.md`. TrueNAS API proxy upstreams require TLS.
+
 ## Validation
 
 Run, at minimum:
@@ -79,6 +100,11 @@ ansible-playbook --syntax-check site.yml
 
 git diff --check
 ```
+
+For credential transport or configuration backup changes, run
+`python3 tests/test_secret_transport.py`. For backup preparation changes, run
+`python3 roles/truenas_cloud_backup/files/test_prepare.py`.
+These checks use fixtures, not live appliance state.
 
 For any live change, first use `--check` where the underlying TrueNAS API
 operation supports a meaningful check mode. Then apply only the selected tags,

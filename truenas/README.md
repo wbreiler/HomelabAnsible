@@ -104,10 +104,10 @@ access—remain explicitly gated.
 
 ## Authentication
 
-The public key is available locally as `~/.ssh/erebus.pub`; the corresponding
-private key is provided by the configured local SSH agent. The controller
-uses Bitwarden as of 2026-10-02. Do not copy the private key or any API
-credential into this repository.
+The public key selector is `~/.ssh/erebus.pub`. Its private key stays in the
+configured SSH agent. The Mac profiles select 1Password when its socket exists
+and otherwise preserve the default or forwarded agent. Do not copy private
+keys or API credentials into this repository.
 
 Ansible will use the agent:
 
@@ -192,8 +192,15 @@ paths must be new files in protected directories. The playbook refuses to
 replace an existing file or symlink.
 
 ```sh
-ansible-playbook playbooks/backup.yml
+ansible-playbook playbooks/backup.yml \
+  -e truenas_backup_remote_path=/tmp/erebus-config-YYYYMMDD-HHMMSS.tar \
+  -e truenas_backup_local_path="$PWD/artifacts/erebus-config-YYYYMMDD-HHMMSS.tar"
 ```
+
+Replace `YYYYMMDD-HHMMSS` with a fresh timestamp. The playbook retains a dated
+default path, so do not rely on that default for a new backup. Its helper
+keeps the temporary download URL out of process arguments, publishes mode-`0600`
+files without overwrite, and removes temporary transfer files.
 
 Mutation through `site.yml` is blocked by default. It requires
 `truenas_allow_changes=true` and a reviewed backup:
@@ -245,7 +252,8 @@ to make it pass.
 ## Application guides
 
 - [IDrive e2 cloud backups](files/cloud-backup/SETUP.md) — encrypted native backups,
-  exclusions, database preparation, and restore validation.
+  exclusions, consistent SQLite copies, a metadata-only media catalog, and
+  restore validation. Media contents remain excluded.
 
 - [YouTube archive](files/pinchflat/SETUP.md) — Pinchflat, a video dataset under
   Archive, and a dedicated Tdarr AV1 library.
@@ -253,9 +261,11 @@ to make it pass.
 - [Deluge with ProtonVPN](files/deluge/SETUP.md) — local torrent storage,
   isolated VPN networking, NAT-PMP synchronization, and arr access.
 
-- [LANCache](files/lancache/SETUP.md) — scoped game-download cache and DNS service.
+- [LANCache](files/lancache/SETUP.md) — dedicated macvlan cache/DNS, manager
+  prefill routing, and a dashboard with a reserved private address.
 
-- [FastChannels](files/fastchannels/SETUP.md) — LAN channel aggregator with dedicated appdata bind mounts.
+- [FastChannels](files/fastchannels/SETUP.md) — channel aggregator with dedicated
+  appdata and a required HTTPS public origin in local variables.
 
 - [Threadfin](files/threadfin/SETUP.md) — FastChannels tuner bridge for Plex.
 
