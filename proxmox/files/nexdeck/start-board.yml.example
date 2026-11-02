@@ -168,6 +168,8 @@ pages:
           host/pbs | https://pbs.example.com/
           guest/101 | https://service.example.com/
           guest/102 | https://pve.example.com/#v1:0:=lxc%2F102:4::::::5:
+          storage/truenas/pool | https://truenas.example.com/ui/storage/1/vdevs
+          storage/pbs/backup | https://pbs.example.com/#DataStore-backup:summary
           cobalt | https://cobalt.example.com/
           deluge | https://deluge.example.com/
           fastchannels | https://fastchannels.example.com/

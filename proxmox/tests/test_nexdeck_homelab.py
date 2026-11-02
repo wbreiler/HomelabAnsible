@@ -161,6 +161,27 @@ class HomelabMap(unittest.IsolatedAsyncioTestCase):
                 })
                 self.assertEqual(self.pve.fetch.return_value.meta, original)
 
+    async def test_storage_links_follow_names_and_keep_systems_separate(self):
+        for reverse in (False, True):
+            with self.subTest(reverse=reverse):
+                items = [{"title": name, "status": "ok"} for name in ("shared", "unlinked")]
+                if reverse:
+                    items.reverse()
+                original = deepcopy(items)
+                for adapter in (self.nas, self.pbs):
+                    adapter.fetch.side_effect = [WidgetData(), WidgetData(items=items)]
+                result = await ADAPTER.fetch("map", {}, {"sources": [2, 3], "app_links": "\n".join([
+                    "storage/truenas/shared | https://nas.example.com/ui/storage/1/vdevs",
+                    "storage/pbs/shared | https://pbs.example.com/#DataStore-shared:summary",
+                ])}, self.ctx)
+                links = {(p["parent"], p["name"]): p["url"]
+                         for p in result.meta["topology"]["places"] if "url" in p}
+                self.assertEqual(links, {
+                    ("system/2", "shared"): "https://nas.example.com/ui/storage/1/vdevs",
+                    ("system/3", "shared"): "https://pbs.example.com/#DataStore-shared:summary",
+                })
+                self.assertEqual(items, original)
+
     def test_app_links_reject_unsafe_or_credential_bearing_urls(self):
         links = app_links("\n".join([
             "good | https://app.example.com/ui?view=home",

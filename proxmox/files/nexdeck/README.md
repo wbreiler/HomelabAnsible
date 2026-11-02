@@ -29,8 +29,9 @@ Click a host to open its management dashboard. Atlas and Prometheus open
 their respective Proxmox summaries. Click an app to open its web UI in a new
 tab. Guests without a web dashboard have explicit links to their Proxmox
 guest summaries. Keyboard users can focus a node with Tab and open it with
-Enter. Both LANCache nodes open the LANCache dashboard. Unconfigured nodes
-and storage nodes remain status displays.
+Enter. Both LANCache nodes open the LANCache dashboard. Storage nodes open
+their TrueNAS pool device page or PBS datastore Summary tab. Unconfigured
+nodes remain status displays.
 
 Hover over a node for its full name and details. Status
 colors come from the existing adapters, including system alerts. A red TrueNAS
@@ -98,6 +99,8 @@ host/pve1 | https://pve.example.com/#v1:0:=node%2Fpve1:4:5::::::
 host/truenas | https://truenas.example.com/
 host/pbs | https://pbs.example.com/
 guest/101 | https://service.example.com/
+storage/truenas/pool | https://truenas.example.com/ui/storage/1/vdevs
+storage/pbs/backup | https://pbs.example.com/#DataStore-backup:summary
 plex | https://plex.example.com/web/index.html
 tdarr | https://tdarr.example.com/
 ```
@@ -107,9 +110,14 @@ VM ID, so their links survive migration between hosts and guest renaming.
 TrueNAS app keys retain their existing app IDs. For a guest without a web
 UI, select its Summary page in Proxmox and copy that page's URL. Add a line
 when a new guest or app needs a link. Update the mapping when its VM ID changes.
-Only absolute HTTP or HTTPS URLs
-without embedded credentials are accepted. Links come from these explicit
-settings, not from potentially sensitive portal data in app configuration.
+Storage keys use `storage/truenas/<pool name>` or `storage/pbs/<datastore name>`.
+The exact storage name keeps the destination stable when the list order changes.
+Use the pool's actual ID in its TrueNAS device URL. Update the key and URL
+after a pool or datastore rename or recreation.
+
+Only absolute HTTP or HTTPS URLs without embedded credentials are accepted.
+Links come from these explicit settings, not from potentially sensitive portal
+data in app configuration.
 
 ## Export, import, and recovery
 
@@ -162,8 +170,8 @@ PYTHONPATH=/opt/nexdeck/app/backend /opt/nexdeck/venv/bin/python /tmp/test_nexde
 
 Copy `tests/test_nexdeck_homelab.py` into the guest first. The tests cover the
 combined tree, source isolation, alert propagation, duplicate sources, invalid
-settings, host and app destinations, guest migration, and app states and failures.
-Recheck the extension when upgrading
+settings, host and app destinations, guest migration, storage ordering and system
+isolation, and app states and failures. Recheck the extension when upgrading
 NexDeck's adapter API.
 
 The renderer patch adds link safety and keyboard-focus tests to the upstream
