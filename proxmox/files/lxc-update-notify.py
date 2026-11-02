@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Send bounded maintenance summaries without forwarding logs or credentials."""
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -23,39 +24,89 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError('notification redirects are forbidden')
 
 
+def display(value):
+    return re.sub(r'[\\`*_~|<>\[\]]', '', ' '.join(str(value).split()))[:80]
+
+
+def app_name(name):
+    return display({
+        'pocket_id': 'Pocket ID', 'open_webui': 'Open WebUI',
+        'netboot_xyz': 'netboot.xyz', 'sabnzbd': 'SABnzbd',
+        'packages': 'Managed packages', 'OS packages': 'OS packages',
+    }.get(name, name.replace('_', ' ').title()))
+
+
+def detail_field(name, lines):
+    shown = []
+    for line in lines:
+        if len('\n'.join(shown + [line])) > 900:
+            break
+        shown.append(line)
+    omitted = len(lines) - len(shown)
+    if omitted:
+        shown.append(f'… and {omitted} more. See the service log.')
+    return {'name': name, 'value': '\n'.join(shown)}, bool(omitted)
+
+
 def summary(kind, result, report, invocation, node):
     title, service, _ = JOBS[kind]
     current = bool(invocation) and report.get('invocation_id') == invocation
     rows = report.get('results', []) if current else []
     failed = [row for row in rows if row['status'] == 'failed']
+    updated = [row for row in rows if row['status'] == 'updated']
     success = result == 'success' and not failed and current
-    lines = [f'{node}: {title} — {"completed" if success else "FAILED"}']
+    embed = {
+        'author': {'name': display(node)},
+        'title': title,
+        'description': '✅ Completed' if success else '❌ Needs attention',
+        'color': 0x2ECC71 if success else 0xE74C3C,
+        'fields': [],
+        'footer': {'text': 'Homelab maintenance'},
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+    }
+    fields = embed['fields']
     if current:
         done = sum(row['status'] == 'completed' for row in rows)
-        updated = [row for row in rows if row['status'] == 'updated']
         skipped = sum(row['status'] == 'skipped' for row in rows)
         if kind == 'os':
-            lines.append(f'{done} guests completed; {len(failed)} failed; {skipped} skipped.')
+            counts = [('Completed', done), ('Failed', len(failed)), ('Skipped', skipped)]
         else:
-            lines.append(f'{len(updated)} app/package updates; {len(failed)} failures.')
-        # Allowlist fields only. Exceptions and logs can contain private details.
-        for row in failed:
-            lines.append(f'FAILED: CT {row["vmid"]} {row.get("app", "OS packages")}')
-        for row in updated:
-            target = row.get('current') or ', '.join(f'{k}={v}' for k, v in row.get('targets', {}).items())
-            lines.append(f'Updated: CT {row["vmid"]} {row["app"]} {target}')
+            apps = sum(row['app'] != 'packages' for row in updated)
+            packages = sum(len(row.get('targets', {})) for row in updated if row['app'] == 'packages')
+            counts = [('Apps updated', apps), ('Packages updated', packages), ('Failed', len(failed))]
+            if success and not updated:
+                embed['description'] = '✅ No eligible updates'
+                embed['color'] = 0x5865F2
+                counts = []
+        fields.extend({'name': name, 'value': str(count), 'inline': True} for name, count in counts)
     else:
-        lines.append('No report from this run. Inspect the service journal.')
-    if not success:
-        lines.append(f'Service result: {result}. Manual review required.')
-    lines.append(f'Logs: journalctl -u {service}')
-    return '\n'.join(lines)[:1900]
+        embed['description'] += '\nNo report from this run.'
+
+    # Allowlist fields only. Exceptions and logs can contain private details.
+    failures = [f'• **{app_name(row.get("app", "OS packages"))}** · CT {display(row["vmid"])}' for row in failed]
+    changes = []
+    for row in updated:
+        targets = row.get('targets', {}) if row['app'] == 'packages' else {row['app']: row.get('current', 'unknown')}
+        for name, version in sorted(targets.items()):
+            changes.append(f'• **{app_name(name)}** `{display(version)}` · CT {display(row["vmid"])}')
+    truncated = False
+    for name, lines in [('Failed updates', failures), ('Installed versions', changes)]:
+        if lines:
+            field, omitted = detail_field(name, lines)
+            fields.append(field)
+            truncated |= omitted
+    if not success or truncated:
+        action = f'On **{display(node)}**:\n```sh\njournalctl -u {service} -n 80\n```'
+        if not success:
+            action = f'Service result: `{display(result)}`. Review the log before retrying.\n' + action
+        fields.append({'name': 'Next step' if not success else 'Full details', 'value': action})
+    return embed
 
 
 def send(url, message):
     if not WEBHOOK.fullmatch(url):
         raise ValueError('invalid Discord webhook destination')
-    payload = json.dumps({'content': message, 'allowed_mentions': {'parse': []}}).encode()
+    payload = json.dumps({'embeds': [message], 'allowed_mentions': {'parse': []}}).encode()
     request = urllib.request.Request(url + '?wait=true', data=payload, headers={
         'Content-Type': 'application/json', 'User-Agent': 'HomelabAnsible-maintenance',
     })
@@ -91,7 +142,16 @@ def main():
             return 0
         node = socket.gethostname().split('.')[0]
         if args.test:
-            message = f'TEST — {node}: Discord notifications enabled for LXC package and application update results. No updates ran for this test.'
+            rows = ([{'vmid': 100, 'status': 'completed'}, {'vmid': 101, 'status': 'skipped'}] if args.kind == 'os' else [
+                {'vmid': 100, 'app': 'pocket_id', 'status': 'updated', 'current': '2.19.1'},
+                {'vmid': 127, 'app': 'packages', 'status': 'updated', 'targets': {'grafana': '13.3.0', 'loki': '3.7.9'}},
+                {'vmid': 103, 'app': 'forgejo', 'status': 'failed'},
+            ])
+            result = 'exit-code' if any(row['status'] == 'failed' for row in rows) else 'success'
+            message = summary(args.kind, result, {'invocation_id': 'preview', 'results': rows}, 'preview', node)
+            message['title'] = 'TEST PREVIEW · ' + message['title']
+            message['description'] = '**Sample data only. No updates ran.**'
+            message['color'] = 0x5865F2
         else:
             try:
                 report = json.loads(Path(JOBS[args.kind][2]).read_text())

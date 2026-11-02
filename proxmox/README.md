@@ -748,6 +748,15 @@ completed guests rather than claiming a package changed on every guest.
 Startup failures and missing reports also produce a failure notification.
 Dry runs and direct updater CLI commands do not send messages.
 
+Messages use compact Discord cards with the node name, status color, and
+timestamp. Completed package runs show completed, failed, and skipped counts.
+App runs separate application and package counts and list installed versions.
+Failures appear before successful changes, with a journal command for review.
+Runs without eligible app updates use a short status card. Long lists retain
+their totals and show an overflow count with the log command instead of
+cutting off the message. `--test` sends a clearly labeled card with sample
+data, including a simulated app failure, without running maintenance.
+
 The systemd completion hook checks the current invocation ID so an old report
 cannot hide a new failure. It sends only selected status fields, never logs,
 exception details, or credentials. The webhook remains in a root-only file
