@@ -180,6 +180,24 @@ If `run.sh` already exists, reconciliation
 does not verify its loader version, so replace or verify loader files when the
 version changes.
 
+Existing Fabric `server.jar` files are also preserved. The updater does not
+upgrade that launcher when a pack starts requiring a newer Fabric loader.
+For a loader repair, take a fresh guest backup, select an exact compatible
+release from Fabric's official server launcher endpoint, and record its
+checksum. Preserve the old launcher and atomically replace the `server.jar`
+symlink while the Minecraft service is stopped. Keep the Minecraft version,
+world, and pack unchanged. Verify the startup completion message and a real
+Minecraft status response before recording `.running_version` or declaring
+the repair successful; an active systemd process alone is insufficient.
+
+CurseForge client mods can declare a universal Fabric environment and still
+crash a dedicated server. Colorwheel (`1254143`) and Colorwheel Patcher
+(`1285475`) are known examples. Keep their project IDs in the affected
+server's `exclude_cf_projects`, and verify the deployed `EXCLUDE_CF_PROJECTS`
+matches that inventory. Quarantine existing client jars outside `mods/`.
+Only reconcile `.current_excludes` after applying those exclusions to the
+installed pack, then verify the scheduled updater completes successfully.
+
 ## Runtime features
 
 The role manages `minecraft@.service` and per-instance environment files.
