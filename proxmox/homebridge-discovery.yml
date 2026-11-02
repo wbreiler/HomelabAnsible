@@ -1,0 +1,64 @@
+---
+- name: Publish Homebridge discovery on the gateway LAN
+  hosts: homebridge_discovery_gateways
+  gather_facts: false
+  tasks:
+    - name: Verify existing Avahi Python bindings
+      ansible.builtin.command: python3 -c 'import dbus'
+      changed_when: false
+      check_mode: false
+
+    - name: Create protected Homebridge discovery directory
+      ansible.builtin.file:
+        path: /data/homelab-homebridge-mdns
+        state: directory
+        mode: '0700'
+
+    - name: Install Homebridge discovery publisher
+      ansible.builtin.copy:
+        src: files/homebridge-mdns-proxy.py
+        dest: /data/homelab-homebridge-mdns/proxy.py
+        mode: '0755'
+      notify: Restart Homebridge discovery publisher
+
+    - name: Install public bridge advertisement metadata
+      ansible.builtin.copy:
+        content: "{{ homebridge_discovery | to_nice_json }}\n"
+        dest: /data/homelab-homebridge-mdns/config.json
+        mode: '0600'
+        backup: true
+        validate: /usr/bin/python3 /data/homelab-homebridge-mdns/proxy.py %s --check
+      notify: Restart Homebridge discovery publisher
+
+    - name: Install Homebridge discovery service
+      ansible.builtin.copy:
+        src: files/homebridge-mdns-proxy.service
+        dest: /etc/systemd/system/homebridge-mdns-proxy.service
+        mode: '0644'
+      notify: Restart Homebridge discovery publisher
+
+    - name: Enable Homebridge discovery service
+      ansible.builtin.systemd_service:
+        name: homebridge-mdns-proxy.service
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: not ansible_check_mode
+
+    - name: Apply changed advertisements
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Homebridge discovery service
+      ansible.builtin.systemd_service:
+        name: homebridge-mdns-proxy.service
+      register: homebridge_discovery_service
+      failed_when: homebridge_discovery_service.status.ActiveState != 'active'
+      when: not ansible_check_mode
+
+  handlers:
+    - name: Restart Homebridge discovery publisher
+      ansible.builtin.systemd_service:
+        name: homebridge-mdns-proxy.service
+        state: restarted
+        daemon_reload: true
+      when: not ansible_check_mode

@@ -368,7 +368,7 @@ Repository-owned roles in this section manage single-purpose LXCs; the Tailscale
 
 - **`apt_cacher_ng`** — Apt-Cacher NG package cache with HTTPS pass-through and self-proxy configuration. Its defaults identify `apt-nash`, VMID 106, `atlas` as the fresh-install fallback, and a 2 CPU/512 MB/25 GB container. It removes the legacy remote update hook.
 - **`prowlarr`** — Prowlarr indexer manager. Its defaults identify `prowlarr-nash`, VMID 104, and `atlas` as the fresh-install fallback. It pins version 2.6.5.5623 and its release checksum, removes the remote update hook, and verifies the web interface.
-- **`homebridge`** — HomeKit bridge. Its defaults identify `homebridge-nash`, VMID 105, and `prometheus` as the fresh-install fallback. It pins package version 2.0.20, checksum-verifies the Homebridge repository key, removes the remote update hook, and verifies Homebridge and Avahi.
+- **`homebridge`** — HomeKit bridge. Its defaults identify `homebridge-nash`, VMID 105, and `prometheus` as the fresh-install fallback. It pins package version 2.0.20, checksum-verifies the Homebridge repository key, removes the remote update hook, and verifies Homebridge and Avahi. For discovery across an externally routed VLAN, see [Homebridge discovery](#homebridge-discovery).
 - **`spoolman`** — 3D-printer spool inventory. Its defaults identify `spoolman-nash`, VMID 102, and `atlas` as the fresh-install fallback. It pins and verifies Spoolman 0.27.0 and uv 0.11.29, preserves the existing environment and SQLite data, removes the remote update hook, and verifies the API-reported version.
 - **`bambuddy`** — Bambu Lab printer management. It configures an existing unprivileged Debian LXC, installs a pinned and checksum-verified Bambuddy release using the sizing recommended by the Community Scripts installer, preserves local environment and data files, and verifies the web interface on port 8000. The pinned `nils_ost.bambuddy` collection is also installed for future API-driven printer and settings management; its Docker installer is not used.
 - **`nexdeck`** — Infrastructure dashboard. The tracked release is 0.41.4; the
@@ -1379,3 +1379,69 @@ The Ansible entry point can also use the private inventory in
 `terraform/proxmox/artifacts/deploy/<name>/inventory.yml`. The role verifies the
 web interface, worker scripts, and ping/download endpoints after installation.
 It starts nginx and PHP FPM automatically after a guest reboot.
+
+## Homebridge discovery
+
+`homebridge-discovery.yml` publishes existing, paired HomeKit bridges on one
+gateway interface through its existing Avahi D-Bus service. Use this when
+unicast access to Homebridge works but its mDNS advertisements do not cross
+an externally routed VLAN. UniFi does not accept its network mDNS forwarding
+flag on an `UNMANAGED` network. The publisher does not change routing,
+firewalls, switch ports, Homebridge configuration, or HomeKit pairing data.
+
+The gateway must already provide Python 3, `python3-dbus`, Avahi, and systemd.
+Create an ignored inventory with a `homebridge_discovery_gateways` group and
+the following host variable, populated from the actual paired child bridges:
+
+```yaml
+homebridge_discovery:
+  interface: br0
+  hostname: homebridge-example.local
+  address: 192.0.2.10
+  services:
+    - name: Example paired bridge
+      port: 12345
+      txt:
+        c#: "7"
+        ff: "0"
+        id: "02:00:00:00:00:01"
+        md: homebridge
+        pv: "1.1"
+        s#: "1"
+        sf: "0"
+        ci: "2"
+```
+
+Copy each bridge's public name, port, identity, and TXT records from its live
+advertisement. Alternatively, read `_bridge.username` and `_bridge.port` from
+Homebridge's config, and `displayName` and `configVersion` from the matching
+`persist/AccessoryInfo.<username-without-colons>.json`. Publish only bridges
+with existing paired clients. Never copy the pairing PIN, signing keys, or
+paired-client keys into this inventory. The optional `sh` TXT value is the
+Base64 encoding of the first four SHA-512 bytes of `setupID + username`.
+
+Run from `proxmox/` with the private inventory:
+
+```sh
+ansible-playbook -i PATH_TO_PRIVATE_INVENTORY homebridge-discovery.yml --check --diff
+ansible-playbook -i PATH_TO_PRIVATE_INVENTORY homebridge-discovery.yml
+ansible-playbook -i PATH_TO_PRIVATE_INVENTORY homebridge-discovery.yml
+```
+
+The service and manifest live under `/data/homelab-homebridge-mdns`, with the
+unit at `/etc/systemd/system/homebridge-mdns-proxy.service`. It re-registers
+after an Avahi failure through systemd restart. It advertises only `_hap._tcp`
+on the selected interface, pointing to Homebridge's existing IPv4 address.
+Control traffic continues directly to Homebridge. Disable this one service
+to withdraw its advertisements without changing the gateway's own relay.
+
+The manifest is a snapshot. Refresh it after bridge identity, port, pairing,
+or accessory-list changes, including the `c#` configuration version. Reapply
+the playbook if a gateway firmware upgrade removes the custom service unit.
+Verify discovery and service resolution with `dns-sd` from the client LAN,
+then verify device control in Apple Home. Unit tests run with
+`python3 tests/test_homebridge_mdns_proxy.py`.
+
+The protected inventory and operational records for the 2026-11-02 repair
+are under `terraform/proxmox/artifacts/homebridge-discovery/` at the repository
+root. The guest's original VLAN interface and routes remain unchanged.
