@@ -3,6 +3,10 @@
 **Retired:** the user confirmed on 2026-10-02 that Kuma no longer exists.
 This project is retained as reference automation, not an active deployment.
 Ignored inventory entries are stale and must not be treated as live hosts.
+The procedures below describe retained reference behavior. They do not
+authorize a new deployment. Terraform owns guests, backup jobs, and the PBS
+connection on `cluster-nash`. Never run the legacy `bootstrap-lxc.yml` workflow
+against that cluster or reconnect its roles to active playbooks.
 
 Configures a Debian/Ubuntu host — a Mini PC or a Raspberry Pi, whatever's on
 hand when a new site gets deployed — to run
@@ -100,6 +104,10 @@ subsequently confirmed the deployment is retired; this is not an active outage.
 
 ## Proxmox-hosted sites
 
+This section documents the former standalone-site design. Its direct LXC and
+PBS configuration writes predate the central cluster's Terraform ownership.
+Any new site requires an explicit deployment request and an ownership review.
+
 An x86 Mini PC site can run everything above inside a Proxmox LXC rather
 than directly on the host OS — see the repo history/commit messages for why
 (recovery unit becomes "recreate the LXC," not "re-image the machine"; PBS
@@ -146,14 +154,20 @@ two phases:
    `ansible-playbook` runs happen over Tailscale instead of requiring local
    network access.
 
-`roles/bootstrap_lxc` reuses the exact `/dev/net/tun` passthrough technique
-already proven in `proxmox/roles/tailscale_router/tasks/main.yml` for the
-same "Tailscale needs TUN inside an LXC" problem. `roles/pve_backup` reuses
+`roles/bootstrap_lxc` retains its own `/dev/net/tun` passthrough writes.
+The active Proxmox Tailscale role now only validates existing passthrough.
+`roles/pve_backup` reuses
 `roles/tailscale` unmodified against the Proxmox host itself (it's just
 another Debian host over SSH), then adds mnemosyne as a PBS storage target
 and a daily backup job for the LXC, routed over Tailscale through the
 already-deployed `tailscale_router` subnet router (`proxmox/`) — no new
 subnet-router infrastructure needed.
+
+The retained `pve_backup` role now supplies its PBS password through an
+`expect` prompt with echo disabled and `no_log: true`. It installs
+`python3-pexpect` only when adding a missing PBS target. Keep the password out
+of argv. Its local regression check is
+`python3 roles/pve_backup/test_secret_transport.py`.
 
 **Unverified without real hardware:** Docker-in-unprivileged-LXC
 occasionally needs `fuse-overlayfs` instead of the default `overlay2`
@@ -240,7 +254,8 @@ sites currently agree the target is down, and only once per down/up
 transition (not once per site's report). One flaky path on one site can no
 longer page alone, and it can no longer stay silently wrong either — the
 other sites outvote it. The relay does not elect a replacement primary when
-the configured primary fails. See `HANDOFF.md` for historical design notes and
+the configured primary fails. An ignored local `HANDOFF.md`, when available,
+contains historical design notes. See
 `roles/quorum_relay/test_quorum_relay.py` for the vote-tallying logic's
 tests (run it directly: `python3 roles/quorum_relay/test_quorum_relay.py`).
 
