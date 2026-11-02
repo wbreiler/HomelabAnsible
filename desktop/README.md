@@ -1,5 +1,7 @@
 # Gaming PC Ansible setup
 
+[Agent guidance](AGENTS.md) covers ISO ownership, driver safeguards, and validation.
+
 Configures the Windows 11 gaming PC `ORION` over WinRM.
 
 The configuration below describes intended behavior and recorded hardware.
