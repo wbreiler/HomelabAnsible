@@ -288,6 +288,7 @@
                 previous_version="$5"
                 backup_root="$6"
                 port="$7"
+                export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
                 new_dir="${install_dir}.ansible-new"
                 old_dir="${install_dir}.ansible-old"
                 backup_dir="${backup_root}/pre-${previous_version}-to-${version}"
