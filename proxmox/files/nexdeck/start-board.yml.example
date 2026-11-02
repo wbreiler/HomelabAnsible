@@ -1,17 +1,216 @@
-# Import through NexDeck after replacing the example service URLs.
+# Connect the named integrations first, then replace example URLs and import.
 nexdeck: 1
 board:
   name: Start
   slug: start
-  icon: house
+  icon: home
   background:
     kind: bundled
-    value: none
+    value: stars
   settings:
     columns: 24
     width: wide
     fit_height: false
 pages:
+  - name: Live
+    slug: live
+    icon: activity
+    widgets:
+    - kind: core.clock
+      title: Home time
+      icon: lucide:clock
+      options:
+        face: digits
+        format: 12h
+        seconds: true
+        date: true
+        label: Make yourself at home
+        colour: '#7dd3fc'
+      layout:
+        lg:
+          x: 0
+          y: 0
+          w: 4
+          h: 3
+    - kind: core.search
+      title: Find something good
+      icon: lucide:search
+      options:
+        placeholder: Search Google, YouTube, Wikipedia or GitHub
+        target: g
+        show_targets: true
+        show_shortcuts: true
+        new_tab: true
+        autofocus: false
+      layout:
+        lg:
+          x: 4
+          y: 0
+          w: 12
+          h: 3
+    - kind: core.bookmarks
+      title: Everyday favorites
+      link: https://nexdeck.example.com/b/start/bookmarks
+      icon: lucide:globe
+      options:
+        layout: grid
+        links: |-
+          YouTube | https://www.youtube.com/ | https://www.youtube.com/s/desktop/92ead095/img/favicon.ico
+          Reddit | https://www.reddit.com/ | https://www.reddit.com/favicon.ico
+          X / Twitter | https://x.com/ | https://x.com/apple-touch-icon.png
+          Twitch | https://www.twitch.tv/ | https://assets.twitch.tv/assets/favicon-32-5c61aa63605bca4f740d.png
+          GitHub | https://github.com/ | https://github.com/fluidicon.png
+          Wikipedia | https://www.wikipedia.org/ | https://www.wikipedia.org/static/apple-touch/wikipedia.png
+      layout:
+        lg:
+          x: 16
+          y: 0
+          w: 8
+          h: 3
+    - kind: plex.nowplaying
+      title: On air
+      icon: lucide:play
+      options:
+        limit: 3
+        backdrop: true
+      layout:
+        lg:
+          x: 0
+          y: 3
+          w: 8
+          h: 4
+      integration: Plex
+      link: https://plex.example.com/web/index.html
+      refresh_seconds: 15
+    - kind: plex.recent
+      title: Fresh in your library
+      icon: lucide:film
+      options:
+        kind: all
+        limit: 12
+        view: band
+      layout:
+        lg:
+          x: 8
+          y: 3
+          w: 16
+          h: 4
+      integration: Plex
+      link: https://plex.example.com/web/index.html
+      refresh_seconds: 300
+    - kind: core.tabs
+      title: In motion
+      icon: lucide:activity
+      options:
+        cards:
+        - '#6'
+        - '#7'
+        - '#8'
+        turn: '0'
+      layout:
+        lg:
+          x: 0
+          y: 7
+          w: 8
+          h: 5
+    - kind: sabnzbd.queue
+      title: Downloads
+      icon: lucide:download
+      options:
+        limit: 5
+      layout:
+        lg:
+          x: 0
+          y: 15
+          w: 8
+          h: 5
+      integration: SABnzbd (TrueNAS)
+      link: https://sabnzbd-nas.example.com/
+      refresh_seconds: 10
+    - kind: sonarr.queue
+      title: TV queue
+      icon: lucide:tv
+      options:
+        limit: 5
+      layout:
+        lg:
+          x: 8
+          y: 15
+          w: 8
+          h: 5
+      integration: Sonarr
+      link: https://tv.example.com/
+      refresh_seconds: 30
+    - kind: radarr.queue
+      title: Movie queue
+      icon: lucide:clapperboard
+      options:
+        limit: 5
+      layout:
+        lg:
+          x: 16
+          y: 15
+          w: 8
+          h: 5
+      integration: Radarr
+      link: https://movies.example.com/
+      refresh_seconds: 30
+    - kind: proxmox.map
+      title: Your homelab, alive
+      icon: lucide:network
+      options:
+        show_stopped: true
+      layout:
+        lg:
+          x: 8
+          y: 7
+          w: 16
+          h: 5
+      integration: Proxmox VE
+      link: https://pve.example.com/
+      refresh_seconds: 30
+    - kind: truenas.pools
+      title: Room to grow
+      icon: lucide:hard-drive
+      options: {}
+      layout:
+        lg:
+          x: 0
+          y: 12
+          w: 8
+          h: 3
+      integration: TrueNAS
+      link: https://truenas.example.com/
+      refresh_seconds: 120
+    - kind: pbs.tasks
+      title: Backup activity
+      icon: lucide:shield-check
+      options:
+        limit: 4
+        only_errors: false
+      layout:
+        lg:
+          x: 8
+          y: 12
+          w: 8
+          h: 3
+      integration: Proxmox Backup Server
+      link: https://pbs.example.com/
+      refresh_seconds: 60
+    - kind: tdarr.nodes
+      title: Media workers
+      icon: lucide:cpu
+      options:
+        view: bars
+      layout:
+        lg:
+          x: 16
+          y: 12
+          w: 8
+          h: 3
+      integration: Tdarr
+      link: https://tdarr.example.com/
+      refresh_seconds: 60
   - name: Bookmarks
     slug: bookmarks
     widgets:
@@ -21,13 +220,12 @@ pages:
         options:
           layout: list
           links: |-
-            YouTube | https://www.youtube.com/ | lucide:play
-            Reddit | https://www.reddit.com/ | lucide:message-circle
-            X / Twitter | https://x.com/ | lucide:at-sign
-            Twitch | https://www.twitch.tv/ | lucide:video
-            Discord | https://discord.com/channels/@me | lucide:messages-square
-            GitHub | https://github.com/ | lucide:code
-            Wikipedia | https://www.wikipedia.org/ | lucide:book-open
+            YouTube | https://www.youtube.com/ | https://www.youtube.com/s/desktop/92ead095/img/favicon.ico
+            Reddit | https://www.reddit.com/ | https://www.reddit.com/favicon.ico
+            X / Twitter | https://x.com/ | https://x.com/apple-touch-icon.png
+            Twitch | https://www.twitch.tv/ | https://assets.twitch.tv/assets/favicon-32-5c61aa63605bca4f740d.png
+            GitHub | https://github.com/ | https://github.com/fluidicon.png
+            Wikipedia | https://www.wikipedia.org/ | https://www.wikipedia.org/static/apple-touch/wikipedia.png
         layout:
           lg:
             x: 0
@@ -40,13 +238,13 @@ pages:
         options:
           layout: list
           links: |-
-            Plex | https://plex.example.com/web/index.html | lucide:play
-            Sonarr | https://tv.example.com/ | lucide:tv
-            Radarr | https://movies.example.com/ | lucide:film
-            Seerr requests | https://requests.example.com/ | lucide:ticket
-            Threadfin | https://threadfin.example.com/web/ | lucide:radio
-            FastChannels | https://fastchannels.example.com/ | lucide:tv
-            Lidarr | https://lidarr.example.com/ | lucide:music
+            Plex | https://plex.example.com/web/index.html | https://plex.example.com/web/favicon-mask.svg
+            Sonarr | https://tv.example.com/ | https://tv.example.com/Content/Images/Icons/apple-touch-icon.png?h=d+iS4xWxn2A2bjUwrERmSg
+            Radarr | https://movies.example.com/ | https://movies.example.com/Content/Images/Icons/apple-touch-icon.png?h=EPy9wv+r9neeI/wGbwTeLQ
+            Seerr requests | https://requests.example.com/ | https://requests.example.com/apple-touch-icon.png
+            Threadfin | https://threadfin.example.com/web/ | https://threadfin.example.com/web/img/threadfin.ico
+            FastChannels | https://fastchannels.example.com/ | https://fastchannels.example.com/static/favicon.ico
+            Lidarr | https://lidarr.example.com/ | https://lidarr.example.com/Content/Images/Icons/apple-touch-icon.png?h=2zTH0oj90pRp7h1h0tgC0g
         layout:
           lg:
             x: 6
@@ -59,13 +257,13 @@ pages:
         options:
           layout: list
           links: |-
-            SABnzbd (primary) | https://sabnzbd.example.com/ | lucide:download
-            SABnzbd (NAS) | https://sabnzbd-nas.example.com/ | lucide:download
-            Deluge | https://deluge.example.com/ | lucide:waves
-            Prowlarr | https://prowlarr.example.com/ | lucide:search
-            Pinchflat | https://pinchflat.example.com/ | lucide:archive
-            spotDL | https://spotdl.example.com/ | lucide:music
-            Tdarr | https://tdarr.example.com/ | lucide:clapperboard
+            SABnzbd (primary) | https://sabnzbd.example.com/ | https://sabnzbd.example.com/sabnzbd/staticcfg/ico/apple-touch-icon-76x76-precomposed.png
+            SABnzbd (NAS) | https://sabnzbd-nas.example.com/ | https://sabnzbd-nas.example.com/sabnzbd/staticcfg/ico/apple-touch-icon-76x76-precomposed.png
+            Deluge | https://deluge.example.com/ | https://deluge.example.com/icons/deluge.png
+            Prowlarr | https://prowlarr.example.com/ | https://prowlarr.example.com/Content/Images/Icons/apple-touch-icon.png?h=6OFTjFECz9UsB7H/TlShUg
+            Pinchflat | https://pinchflat.example.com/ | https://pinchflat.example.com/favicon.ico?cachebust=2024-03-20
+            spotDL | https://spotdl.example.com/ | https://spotdl.example.com/assets/favicon.ico
+            Tdarr | https://tdarr.example.com/ | https://tdarr.example.com/favicon.ico
         layout:
           lg:
             x: 12
@@ -74,13 +272,13 @@ pages:
             h: 4
       - kind: core.bookmarks
         title: Home & making
-        icon: lucide:house
+        icon: lucide:home
         options:
           layout: list
           links: |-
-            Spoolman | https://spoolman.example.com/ | lucide:layers
-            Bambuddy | https://bambuddy.example.com/ | lucide:printer
-            Homebridge | https://homebridge.example.com/ | lucide:house
+            Spoolman | https://spoolman.example.com/ | https://spoolman.example.com/favicon.svg
+            Bambuddy | https://bambuddy.example.com/ | https://bambuddy.example.com/img/favicon-32x32.png
+            Homebridge | https://homebridge.example.com/ | https://homebridge.example.com/assets/apple-touch-icon.png
         layout:
           lg:
             x: 18
@@ -93,9 +291,9 @@ pages:
         options:
           layout: list
           links: |-
-            SearXNG | https://searxng.example.com/ | lucide:search
-            Open WebUI | https://openwebui.example.com/ | lucide:bot
-            ChatGPT | https://chatgpt.com/ | lucide:message-square
+            SearXNG | https://searxng.example.com/ | https://searxng.example.com/static/themes/simple/img/favicon.png
+            Open WebUI | https://openwebui.example.com/ | https://openwebui.example.com/static/favicon.png
+            ChatGPT | https://chatgpt.com/ | https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://chatgpt.com&size=64
         layout:
           lg:
             x: 0
@@ -104,15 +302,15 @@ pages:
             h: 4
       - kind: core.bookmarks
         title: Code & tools
-        icon: lucide:code
+        icon: lucide:wrench
         options:
           layout: list
           links: |-
-            Forgejo | https://git.example.com/ | lucide:git-branch
-            Git mirror | https://git-mirror.example.com/ | lucide:git-pull-request
-            Zipline screenshots | https://i.example.com/ | lucide:image
-            Cobalt | https://cobalt.example.com/ | lucide:download
-            Homelable | https://homelable.example.com/ | lucide:network
+            Forgejo | https://git.example.com/ | https://git.example.com/assets/img/favicon.svg
+            Git mirror | https://git-mirror.example.com/ | https://git-mirror.example.com/favicon.ico
+            Zipline screenshots | https://i.example.com/ | https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/zipline.png
+            Cobalt | https://cobalt.example.com/ | https://cobalt.example.com/favicon.png
+            Homelable | https://homelable.example.com/ | https://homelable.example.com/favicon.svg
         layout:
           lg:
             x: 6
@@ -125,13 +323,13 @@ pages:
         options:
           layout: list
           links: |-
-            Proxmox | https://pve.example.com/ | lucide:server
-            Backup server | https://pbs.example.com/ | lucide:database-backup
-            TrueNAS | https://truenas.example.com/ | lucide:hard-drive
-            Nginx Proxy Manager | https://npm.example.com/ | lucide:route
-            Grafana | https://grafana.example.com/ | lucide:chart-no-axes-combined
-            Vaultwarden | https://vault.example.com/ | lucide:key-round
-            Pocket ID | https://id.example.com/ | lucide:fingerprint
+            Proxmox | https://pve.example.com/ | https://pve.example.com/pve2/images/logo-128.png
+            Backup server | https://pbs.example.com/ | https://pbs.example.com/images/logo-128.png
+            TrueNAS | https://truenas.example.com/ | https://truenas.example.com/ui/assets/favicons/apple-touch-icon.png
+            Nginx Proxy Manager | https://npm.example.com/ | https://npm.example.com/images/favicon/apple-touch-icon.png
+            Grafana | https://grafana.example.com/ | https://grafana.example.com/public/build/img/fav32.png
+            Vaultwarden | https://vault.example.com/ | https://vault.example.com/images/apple-touch-icon.png
+            Pocket ID | https://id.example.com/ | https://id.example.com/api/application-images/favicon
         layout:
           lg:
             x: 12
@@ -144,14 +342,32 @@ pages:
         options:
           layout: list
           links: |-
-            LANCache | https://lancache.example.com/ | lucide:database
-            LibreSpeed (LAN) | http://librespeed.home.arpa/ | lucide:gauge
-            Speedtest Tracker | https://speedtest.example.com/ | lucide:activity
-            ISO library | https://iso.example.com/ | lucide:disc
-            Live dashboard | https://nexdeck.example.com/b/home | lucide:layout-dashboard
+            LANCache | https://lancache.example.com/ | https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://lancache.net&size=64
+            LibreSpeed (LAN) | http://librespeed.home.arpa/ | https://librespeed.example.com/favicon.ico
+            Speedtest Tracker | https://speedtest.example.com/ | https://speedtest.example.com/img/speedtest-tracker-icon.png
+            ISO library | https://iso.example.com/ | lucide:archive
+            Live dashboard | https://nexdeck.example.com/b/home | https://nexdeck.example.com/icon.svg
         layout:
           lg:
             x: 18
             y: 4
             w: 6
             h: 4
+
+integrations:
+- name: Plex
+  kind: plex
+- name: SABnzbd (TrueNAS)
+  kind: sabnzbd
+- name: Sonarr
+  kind: sonarr
+- name: Radarr
+  kind: radarr
+- name: Proxmox VE
+  kind: proxmox
+- name: TrueNAS
+  kind: truenas
+- name: Proxmox Backup Server
+  kind: pbs
+- name: Tdarr
+  kind: tdarr

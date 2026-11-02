@@ -401,9 +401,10 @@ Application roles preserve these systemd drop-ins but do not deploy them.
 
 ### Homepage dashboard
 
-The [NexDeck homepage](files/nexdeck/README.md) provides categorized service
-links and everyday bookmarks. Its editable Start board is separate from the
-existing live monitoring board.
+The [NexDeck homepage](files/nexdeck/README.md) provides a Live page with media
+artwork, activity tabs, and homelab status. Its Bookmarks page keeps categorized
+service links and everyday favorites. The editable Start board preserves the
+separate Home monitoring board.
 
 ### Centralized logging
 
