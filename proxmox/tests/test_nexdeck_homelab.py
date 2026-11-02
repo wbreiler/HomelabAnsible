@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 try:
     from app.adapters.base import AdapterError, WidgetData
-    from app.adapters.homelab import ADAPTER
+    from app.adapters.homelab import ADAPTER, app_links
     from app.adapters.truenas import _NoCurrentApi
 except ModuleNotFoundError as error:
     if error.name != "app":
@@ -108,6 +108,30 @@ class HomelabMap(unittest.IsolatedAsyncioTestCase):
         apps, status = await ADAPTER._apps(self.nas, {}, "nas", {})
         self.assertEqual(status, "warn")
         self.assertEqual(apps[0]["detail"], "Unavailable")
+
+    async def test_configured_web_link_reaches_only_the_matching_app(self):
+        self.nas._rpc.return_value = {"app.query": [
+            {"id": "plex", "state": "RUNNING", "portals": {"Web UI": "http://internal.invalid:1234/?token=DO_NOT_LEAK"}},
+            {"id": "other", "state": "RUNNING"},
+        ]}
+        apps, _ = await ADAPTER._apps(self.nas, {}, "nas", {"app_links": "plex | https://plex.example.com/web/index.html"})
+        by_id = {app["id"]: app for app in apps}
+        self.assertEqual(by_id["nas/app/plex"]["url"], "https://plex.example.com/web/index.html")
+        self.assertNotIn("url", by_id["nas/app/other"])
+        self.assertNotIn("DO_NOT_LEAK", str(apps))
+
+    def test_app_links_reject_unsafe_or_credential_bearing_urls(self):
+        links = app_links("\n".join([
+            "good | https://app.example.com/ui?view=home",
+            "lan | http://app.home.arpa/",
+            "script | javascript:alert(1)",
+            "data | data:text/html,hello",
+            "relative | //example.com/",
+            "secret | https://user:password@example.com/",
+            "broken | https://[invalid/",
+            "space | https://exa mple.com/",
+        ]))
+        self.assertEqual(links, {"good": "https://app.example.com/ui?view=home", "lan": "http://app.home.arpa/"})
 
 
 if __name__ == "__main__":

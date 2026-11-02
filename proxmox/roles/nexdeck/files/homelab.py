@@ -1,13 +1,29 @@
 """Combine the existing Proxmox, TrueNAS and PBS adapters in one native map."""
 
 import asyncio
+from urllib.parse import urlsplit
 
 from .base import Adapter, AdapterError, Context, Field, WidgetData, WidgetType
+from .core import parse_links
 from .truenas import _NoCurrentApi
 
 
 LABELS = {"proxmox": "Proxmox", "truenas": "TrueNAS", "pbs": "PBS"}
 SEVERITY = {"ok": 0, "unknown": 1, "warn": 2, "bad": 3}
+
+
+def app_links(value: str) -> dict[str, str]:
+    links = {}
+    for item in parse_links(value if isinstance(value, str) else ""):
+        try:
+            url = urlsplit(item["url"])
+            if (url.scheme in ("http", "https") and url.hostname
+                    and url.username is None and url.password is None
+                    and not any(char.isspace() for char in item["url"])):
+                links[item["title"]] = item["url"]
+        except ValueError:
+            continue
+    return links
 
 
 class HomelabAdapter(Adapter):
@@ -31,6 +47,9 @@ class HomelabAdapter(Adapter):
                       options=tuple(LABELS.items()),
                       help="Select the Proxmox, TrueNAS and PBS connections."),
                 Field("show_stopped", "Show stopped guests and apps", type="bool", default=True),
+                Field("app_links", "App web UIs", type="textarea", default="",
+                      help="One app ID | http(s) URL per line. Linked apps open in a new tab.",
+                      placeholder="plex | https://plex.example.com/web/index.html"),
             ),
         ),
     )
@@ -110,6 +129,7 @@ class HomelabAdapter(Adapter):
                      "status": "warn", "detail": "Unavailable"}], "warn"
         places = []
         status = "ok"
+        links = app_links(options.get("app_links", ""))
         for app in sorted(apps, key=lambda item: str(item.get("name") or item["id"]).lower()):
             state = str(app.get("state") or "UNKNOWN").upper()
             if state == "STOPPED" and not options.get("show_stopped", True):
@@ -117,9 +137,12 @@ class HomelabAdapter(Adapter):
             health = {"RUNNING": "ok", "STOPPED": "unknown", "DEPLOYING": "warn", "CRASHED": "bad"}.get(state, "unknown")
             if health in ("warn", "bad"):
                 status = max((status, health), key=SEVERITY.get)
-            places.append({"id": f"{root}/app/{app['id']}", "name": str(app.get("name") or app["id"]),
-                           "kind": "container", "parent": root, "status": health,
-                           "detail": f"App · {state.replace('_', ' ').title()}"})
+            node = {"id": f"{root}/app/{app['id']}", "name": str(app.get("name") or app["id"]),
+                    "kind": "container", "parent": root, "status": health,
+                    "detail": f"App · {state.replace('_', ' ').title()}"}
+            if url := links.get(str(app["id"])):
+                node["url"] = url
+            places.append(node)
         return places, status
 
 

@@ -25,6 +25,10 @@ with their live state. Running apps are green, deployment is amber, crashed
 apps are red, and stopped or unknown apps are gray. **Show stopped guests and
 apps** controls whether stopped apps appear. PBS remains a datastore view.
 
+Click a linked app node to open its web UI in a new tab. Keyboard users can
+focus the node with Tab and open it with Enter. Both LANCache nodes open the
+LANCache dashboard. Nodes without a configured web UI remain status displays.
+
 Hover over a node for its full name and details. Status
 colors come from the existing adapters, including system alerts. A red TrueNAS
 node can indicate an open alert while the system remains reachable. An
@@ -35,9 +39,13 @@ WebSocket API and publishes only app names and states, never app configuration.
 
 The small `homelab.map` adapter lives in `roles/nexdeck/files/homelab.py`.
 The NexDeck role installs it after the pinned release and checks that it loads.
-It reuses the native topology renderer and connection permissions. It does
-not add credentials or change upstream source files. The map collects read-only
-data and exposes no power, storage, or backup actions.
+It reuses the native topology renderer and connection permissions. A small
+`topology-links.patch` adds accessible links to the renderer. The role tests
+and builds the frontend separately before replacing the served build. Previous
+sources and builds remain under `/opt/nexdeck/frontend-backups/`. The patch
+refuses unexpected source changes instead of guessing during an upgrade.
+The map adds no credentials, collects read-only data, and exposes no power,
+storage, or backup actions.
 
 Cards update through NexDeck's live event stream. Collection intervals range
 from 10 seconds for downloads to five minutes for recent library additions.
@@ -78,6 +86,18 @@ NexDeck stacks the cards in reading order on phones. Links open in new tabs.
 The categories are Everyday, Watch & listen, Downloads & archive, Home &
 making, Search & AI, Code & tools, Infrastructure, and Network & files.
 LibreSpeed keeps its direct HTTP URL, so a proxy cannot distort its results.
+
+For map links, open the map card's settings and edit **App web UIs**. Use
+the TrueNAS app ID and its friendly URL, one pair per line:
+
+```text
+plex | https://plex.example.com/web/index.html
+tdarr | https://tdarr.example.com/
+```
+
+Add a line when a new app needs a link. Only absolute HTTP or HTTPS URLs
+without embedded credentials are accepted. Links come from these explicit
+settings, not from potentially sensitive portal data in app configuration.
 
 ## Export, import, and recovery
 
@@ -132,3 +152,7 @@ Copy `tests/test_nexdeck_homelab.py` into the guest first. The tests cover the
 combined tree, source isolation, alert propagation, duplicate sources, invalid
 settings, and app states and failures. Recheck the extension when upgrading
 NexDeck's adapter API.
+
+The renderer patch adds link safety and keyboard-focus tests to the upstream
+topology tests. The deployment runs them with `npm test --
+src/components/TopologyCard.test.tsx` and completes the production build.

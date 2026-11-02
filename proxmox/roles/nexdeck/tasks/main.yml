@@ -34,6 +34,7 @@
           - curl
           - nodejs
           - npm
+          - patch
           - python3
           - python3-venv
           - tar
@@ -175,6 +176,28 @@
       changed_when: false
       when: not ansible_check_mode
 
+    - name: Deploy clickable topology renderer
+      ansible.builtin.command:
+        expand_argument_vars: false
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - runuser
+          - -u
+          - nexdeck
+          - --
+          - bash
+          - -ceu
+          - "{{ lookup('file', role_path ~ '/files/deploy-topology-links.sh') }}"
+          - nexdeck-topology-links
+          - "{{ ansible_check_mode | ternary('check', 'apply') }}"
+        stdin: "{{ lookup('file', role_path ~ '/files/topology-links.patch') }}"
+      register: nexdeck_topology_deploy
+      changed_when: "'changed' in nexdeck_topology_deploy.stdout_lines"
+      check_mode: false
+
     - name: Render NexDeck service file
       ansible.builtin.template:
         src: nexdeck.service.j2
@@ -209,7 +232,8 @@
       when: >-
         nexdeck_installed_version.stdout | trim != nexdeck_version or
         nexdeck_service_render.changed or
-        nexdeck_map_deploy.changed
+        nexdeck_map_deploy.changed or
+        nexdeck_topology_deploy.changed
 
     - name: Check NexDeck service
       ansible.builtin.command:

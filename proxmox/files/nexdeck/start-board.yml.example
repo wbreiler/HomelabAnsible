@@ -161,6 +161,20 @@ pages:
       options:
         sources: []  # Select Proxmox, TrueNAS and PBS in the card settings after import.
         show_stopped: true
+        app_links: |-
+          cobalt | https://cobalt.example.com/
+          deluge | https://deluge.example.com/
+          fastchannels | https://fastchannels.example.com/
+          iso-server | https://iso.example.com/
+          lancache | https://lancache.example.com/
+          lancache-dashboard | https://lancache.example.com/
+          lidarr | https://lidarr.example.com/
+          pinchflat | https://pinchflat.example.com/
+          plex | https://plex.example.com/web/index.html
+          sabnzbd | https://sabnzbd-nas.example.com/
+          spotdl | https://spotdl.example.com/
+          tdarr | https://tdarr.example.com/
+          threadfin | https://threadfin.example.com/web/
       layout:
         lg:
           x: 0
