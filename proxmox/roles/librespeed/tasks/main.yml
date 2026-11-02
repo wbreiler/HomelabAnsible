@@ -1,4 +1,23 @@
 ---
+- name: Inspect successful automatic LibreSpeed pins
+  ansible.builtin.stat:
+    path: /etc/librespeed-auto-update.json
+  register: librespeed_auto_pin_file
+
+- name: Preserve the automatically installed LibreSpeed release
+  when: librespeed_auto_pin_file.stat.exists
+  block:
+    - name: Read automatic LibreSpeed pins
+      ansible.builtin.slurp:
+        src: /etc/librespeed-auto-update.json
+      register: librespeed_auto_pins
+
+    - name: Adopt automatic LibreSpeed version and checksum
+      ansible.builtin.set_fact:
+        librespeed_version: "{{ (librespeed_auto_pins.content | b64decode | from_json).librespeed_version }}"
+        librespeed_release_url: "{{ (librespeed_auto_pins.content | b64decode | from_json).librespeed_release_url }}"
+        librespeed_release_checksum: "{{ (librespeed_auto_pins.content | b64decode | from_json).librespeed_release_checksum }}"
+
 - name: Validate LibreSpeed platform and release
   ansible.builtin.assert:
     that:

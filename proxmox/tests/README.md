@@ -34,6 +34,8 @@ python3 tests/test_zipline_client.py
 python3 tests/test_service_boundaries.py
 python3 tests/test_logging_ingress.py
 python3 tests/test_lxc_auto_update.py
+python3 tests/test_lxc_app_updates.py
+python3 tests/test_native_app_updates.py
 ```
 
 These cover IP-tag parsing/filtering, the local upload client, and application
@@ -41,5 +43,8 @@ filesystem/credential boundaries. The boundary fixtures use PyYAML from the
 Ansible environment and run without application code, downloads, or live hosts.
 The logging fixtures also use Jinja2 to check the explicit source policy,
 listener addresses, permitted ingress routes, and isolated retention ports.
+Application updater tests cover stable release selection, package aging,
+artifact integrity, backup gates, failed-retry blocking, saved pins, and
+native archive/release preservation. Run them with Ansible's Python environment.
 Terraform mock tests and live adoption checks are documented in
 [`terraform/README.md`](../../terraform/README.md).

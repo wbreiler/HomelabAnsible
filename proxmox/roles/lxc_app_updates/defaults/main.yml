@@ -1,0 +1,28 @@
+---
+lxc_app_updates_enabled: false
+lxc_app_updates_schedule: "Sun *-*-* 01:15:00 America/Chicago"
+lxc_app_updates_randomized_delay: 15m
+lxc_app_updates_backup_storage: "{{ pbs_storage_id | default('') }}"
+lxc_app_updates_minimum_age_hours: 72
+lxc_app_updates_exclude: []
+# Map these catalog names to existing guest hostnames in ignored group variables.
+lxc_app_updates_native_guests: {}
+lxc_app_updates_packages: [alloy, loki, grafana, tailscale]
+lxc_app_updates_root: /opt/homelab-app-updates
+lxc_app_updates_roles:
+  - pocket_id
+  - spoolman
+  - forgejo
+  - prowlarr
+  - homebridge
+  - sonarr
+  - radarr
+  - seerr
+  - gitea_mirror
+  - diun
+  - vaultwarden
+  - zipline
+  - bambuddy
+  - nexdeck
+  - speedtest_tracker
+  - homelable

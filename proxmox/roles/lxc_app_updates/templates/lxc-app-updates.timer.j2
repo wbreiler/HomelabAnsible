@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly compatible stable app updates for running LXCs
+
+[Timer]
+OnCalendar={{ lxc_app_updates_schedule }}
+RandomizedDelaySec={{ lxc_app_updates_randomized_delay }}
+Persistent=false
+
+[Install]
+WantedBy=timers.target

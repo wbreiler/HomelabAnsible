@@ -99,7 +99,9 @@
       >> /root/.ssh/authorized_keys && echo changed; fi"
   register: _lxc_ssh_key
   changed_when: _lxc_ssh_key.stdout | trim == 'changed'
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - lxc_manage_ssh_key | default(true) | bool
 
 - name: Create NFS mountpoint
   ansible.builtin.command:

@@ -1,0 +1,121 @@
+---
+- name: Validate LXC application update configuration
+  ansible.builtin.assert:
+    that:
+      - lxc_app_updates_backup_storage is match('^[a-zA-Z][a-zA-Z0-9_-]*$')
+      - lxc_app_updates_minimum_age_hours | int >= 0
+      - lxc_app_updates_native_guests.keys() | difference(['nginx_proxy_manager', 'sabnzbd', 'open_webui', 'librespeed', 'netboot_xyz']) | length == 0
+      - lxc_app_updates_packages | difference(['alloy', 'loki', 'grafana', 'tailscale']) | length == 0
+      - >-
+        lxc_app_updates_roles | difference(['pocket_id', 'spoolman', 'forgejo', 'prowlarr',
+        'homebridge', 'sonarr', 'radarr', 'seerr', 'gitea_mirror', 'diun', 'vaultwarden',
+        'zipline', 'bambuddy', 'nexdeck', 'speedtest_tracker', 'homelable']) | length == 0
+
+- name: Install the distribution Ansible runtime
+  ansible.builtin.apt:
+    name: [ansible-core, python3-yaml, python3-jinja2]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create application updater directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  loop:
+    - "{{ lxc_app_updates_root }}"
+    - "{{ lxc_app_updates_root }}/roles"
+    - "{{ lxc_app_updates_root }}/tasks"
+    - "{{ lxc_app_updates_root }}/files"
+    - /var/lib/homelab-app-updates
+    - /var/lib/homelab-app-updates/tmp
+
+- name: Create private cluster release state
+  ansible.builtin.file:
+    path: /etc/pve/priv/homelab-app-updates
+    state: directory
+    mode: '0700'
+
+- name: Install existing application roles
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/roles/{{ item }}/"
+    dest: "{{ lxc_app_updates_root }}/roles/{{ item }}/"
+    owner: root
+    group: root
+    mode: preserve
+  loop: "{{ lxc_app_updates_roles }}"
+
+- name: Install shared application tasks
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/tasks/{{ item }}"
+    dest: "{{ lxc_app_updates_root }}/tasks/{{ item }}"
+    owner: root
+    group: root
+    mode: '0600'
+  loop: [create_lxc.yml, resolve_lxc_node.yml, service_directories.yml, app_update_pins.yml]
+
+- name: Install trusted directory helper
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/files/service-directories.py"
+    dest: "{{ lxc_app_updates_root }}/files/service-directories.py"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Install application updater and release catalog
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ lxc_app_updates_root }}/{{ item }}"
+    owner: root
+    group: root
+    mode: '0700'
+  loop: [lxc_app_updates.py, native_apps.py, catalog.yml]
+
+- name: Install local Ansible entry point
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ lxc_app_updates_root }}/{{ item }}"
+    owner: root
+    group: root
+    mode: '0600'
+  loop: [ansible.cfg, run.yml]
+
+- name: Preserve application settings for unattended role runs
+  ansible.builtin.copy:
+    content: >-
+      {{ {'backup_storage': lxc_app_updates_backup_storage,
+          'minimum_age_hours': lxc_app_updates_minimum_age_hours | int,
+          'exclude': lxc_app_updates_exclude,
+          'roles': lxc_app_updates_roles,
+          'native_guests': lxc_app_updates_native_guests,
+          'packages': lxc_app_updates_packages,
+          'variables': hostvars[inventory_hostname] | dict2items |
+            selectattr('key', 'match', '^(' ~ (lxc_app_updates_roles | join('|')) ~ ')_') |
+            items2dict} | to_nice_json }}
+    dest: "{{ lxc_app_updates_root }}/config.json"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+
+- name: Install application update timer units
+  ansible.builtin.template:
+    src: "lxc-app-updates.{{ item }}.j2"
+    dest: "/etc/systemd/system/lxc-app-updates.{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: [service, timer]
+  notify: Restart LXC application update timer
+
+- name: Configure application update timer state
+  ansible.builtin.systemd_service:
+    name: lxc-app-updates.timer
+    daemon_reload: true
+    enabled: "{{ lxc_app_updates_enabled | bool }}"
+    state: "{{ 'started' if lxc_app_updates_enabled | bool else 'stopped' }}"
+  when: not ansible_check_mode

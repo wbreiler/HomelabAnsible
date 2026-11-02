@@ -258,6 +258,20 @@ lxc_auto_update_backup_storage: "{{ pbs_storage_id }}"
 lxc_auto_update_backup_max_age_hours: 8
 lxc_auto_update_skip_vmids: []
 
+install_lxc_app_updates: false
+lxc_app_updates_enabled: false  # Enable after live --dry-run validation on both nodes.
+lxc_app_updates_schedule: "Sun *-*-* 01:15:00 America/Chicago"
+lxc_app_updates_randomized_delay: 15m
+lxc_app_updates_backup_storage: "{{ pbs_storage_id }}"
+lxc_app_updates_minimum_age_hours: 72
+lxc_app_updates_exclude: []  # Catalog application names.
+lxc_app_updates_native_guests: {}  # Optional existing guest hostnames, for example:
+#  nginx_proxy_manager: npm-example
+#  sabnzbd: sabnzbd-example
+#  open_webui: openwebui-example
+#  librespeed: librespeed-example
+#  netboot_xyz: pxe-example
+
 run_updates: false  # Set to true to run system updates
 update_nodes: true  # Update Proxmox host nodes
 update_lxcs: true   # Update LXC containers

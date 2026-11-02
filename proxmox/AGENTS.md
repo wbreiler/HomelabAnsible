@@ -134,7 +134,7 @@ storage configuration.
 1. **Ansible Vault**: `group_vars/proxmox_cluster.yml` is encrypted and contains secrets like the PBS password and fingerprint.
 2. **Password Protection**: Tasks handling credentials (e.g., `pbs_storage`) must use `no_log: true` and must not place secrets in process arguments. Use a supported prompt, stdin, or secret-file mechanism.
 3. **Gitignore Strategy**: `inventory.yml`, `group_vars/proxmox_cluster.yml`, and `host_vars/*.yml` are all gitignored to protect sensitive data. Their sanitized `*.yml.example` templates remain tracked.
-4. **Installer Integrity**: Third-party releases and source revisions are pinned and checksum-verified before root executes or installs them. Bump versions and checksums together after reviewing upstream changes.
+4. **Installer Integrity**: Third-party releases and source revisions are pinned and checksum-verified before root executes or installs them. Bump versions and checksums together after reviewing upstream changes. The explicitly authorized `lxc_app_updates` workflow may select compatible stable releases automatically, resolve exact checksums or image digests, and deploy only after a fresh backup. Preserve its release, backup, health, and failed-retry guards.
 
 ## Development Conventions
 
@@ -403,6 +403,22 @@ management, LXC installation, system updates, and PBS restores.
 * Keep Terraform backup schedules and application release ownership intact.
 * Validate with `python3 tests/test_lxc_auto_update.py` and a live
   `lxc-auto-update --dry-run` on both nodes before enabling the timer.
+
+### lxc_app_updates
+
+* Runs weekly on each PVE node without a controller or Codex dependency.
+* Selects stable releases within the installed major, or minor for 0.x.
+  Rejects downgrades, prereleases, and releases younger than 72 hours.
+* Creates a fresh PBS snapshot backup before each application deployment.
+  Reuses managed roles or bounded native adapters. Never invokes remote hooks.
+* Saves successful pins in `/etc/pve/priv/homelab-app-updates`. Shared bootstrap
+  loads these pins during later ordinary role runs. Explicit extra vars win.
+* Failed deployments require inspection and explicit `--retry-failed`.
+  Preserve previous code, data, and backups. Never restore PBS automatically.
+* Validate both Python test files, Ansible lint/syntax/check mode, and live
+  `--dry-run` on both nodes before enabling `lxc-app-updates.timer`.
+* SearXNG has no stable releases. Manual Minecraft packs, major upgrades,
+  auxiliary database images, and build-tool upgrades remain separate work.
 
 ### update_reminder
 

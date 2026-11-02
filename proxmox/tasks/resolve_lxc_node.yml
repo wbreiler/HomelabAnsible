@@ -8,6 +8,12 @@
 #   lxc_fallback_node   - node to use when the container does not exist yet
 # Sets: lxc_current_node
 
+- name: Preserve successful automatic application release pins
+  ansible.builtin.include_tasks: app_update_pins.yml
+  when:
+    - ansible_role_name is defined
+    - not lxc_app_updates_running | default(false) | bool
+
 - name: "Locate cluster-wide container {{ lxc_lookup_hostname }}"
   ansible.builtin.command: pvesh get /cluster/resources --type vm --output-format json
   register: _lxc_cluster_resources

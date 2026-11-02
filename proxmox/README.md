@@ -668,6 +668,72 @@ journalctl -u lxc-auto-update.service
 Use `lxc_auto_update_skip_vmids` to exclude guests. To disable the timer, rerun
 the role with `install_lxc_auto_update=true lxc_auto_update_enabled=false`.
 
+#### Automatic stable application updates
+
+The opt-in `lxc_app_updates` role runs on both PVE nodes. Its weekly timer
+starts Sunday at 01:15 America/Chicago, with up to 15 minutes of delay.
+Codex and the controller can be offline. Missed windows do not run at boot.
+
+```bash
+ansible-playbook site.yml --tags lxc_app_updates -e install_lxc_app_updates=true
+# On each node, inspect discovery before enabling the schedule:
+/opt/homelab-app-updates/lxc_app_updates.py --dry-run
+```
+
+Set `install_lxc_app_updates: true` and `lxc_app_updates_enabled: true` in
+ignored group variables after validation. Deploy the same tag again.
+The role copies application settings into a root-only server configuration.
+Redeploy this role after changing application settings in the inventory.
+
+Stable releases must remain within the installed major version. For 0.x,
+they must also remain within the installed minor version. GitHub and
+Codeberg releases must be at least 72 hours old. Signed APT candidates must
+remain the selected candidate for 72 hours after first discovery.
+Prereleases, downgrades, and unrecognized version formats do not install.
+The updater resolves exact artifact checksums and container digests before
+deployment. It uses repository-owned URL templates and verifies downloads.
+
+Every actual app update requires a new, successful PBS snapshot backup.
+Existing Terraform backup schedules and retention remain unchanged.
+The updater discovers only running local guests and shares the OS updater's
+lock. It never changes guest power, guest hardware, or host packages.
+Application updates can restart services and migrate application databases.
+Version and health checks must pass before successful pins are saved.
+
+Coverage includes Pocket ID, Spoolman, Forgejo, Prowlarr, Homebridge, Sonarr,
+Radarr, Seerr, Gitea Mirror, Diun, Vaultwarden, Zipline, Bambuddy, NexDeck,
+Speedtest Tracker, and Homelable. The signed package path covers Alloy,
+Loki, Grafana, and Tailscale. Optional `lxc_app_updates_native_guests` mappings
+enable Nginx Proxy Manager, SABnzbd, Open WebUI, LibreSpeed, and netboot.xyz.
+See the variable example and `roles/lxc_app_updates/files/catalog.yml`.
+
+SearXNG publishes no stable releases and remains manual. Manual Minecraft
+packs retain their existing workflow. Other Minecraft timers remain unchanged.
+Auxiliary PostgreSQL/Apprise images and build tools retain their existing pins.
+NPM's OpenResty/Certbot installation also remains separate from its app release.
+
+```bash
+systemctl list-timers lxc-app-updates.timer
+journalctl -u lxc-app-updates.service
+cat /var/lib/homelab-app-updates/last-run.json
+# Optional immediate update of one application, with backup and health checks:
+/opt/homelab-app-updates/lxc_app_updates.py diun
+```
+
+Successful pins and failed-deployment markers live in the cluster-private
+`/etc/pve/priv/homelab-app-updates` directory. Later role runs adopt successful
+pins, preventing unintended downgrades. Explicit Ansible extra vars override
+these pins. Failed apps remain blocked until an operator inspects the journal
+and runs the selected app with `--retry-failed`. PBS restore is manual.
+If the failed update already installed the target version, repair and verify
+the application before removing its specific `*.failed.json` marker.
+Native adapters preserve old code and build before stopping services, but
+do not automatically reverse database migrations. Retained releases and
+artifact caches require occasional disk-space review.
+
+Disable the schedule with `lxc_app_updates_enabled: false` and redeploy the
+role. Use `lxc_app_updates_exclude` for individual catalog applications.
+
 #### Manual system and application updates
 
 Install the repository-owned Community Scripts application updater with:

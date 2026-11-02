@@ -1,0 +1,15 @@
+---
+- name: Apply one verified application release on its current node
+  hosts: all
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    proxmox_node_name: "{{ inventory_hostname }}"
+    lxc_manage_ssh_key: false
+    lxc_app_updates_running: true
+    zipline_manage_proxy: false
+  tasks:
+    - name: Apply the selected application role
+      ansible.builtin.include_role:
+        name: '{% raw %}{{ update_role }}{% endraw %}'

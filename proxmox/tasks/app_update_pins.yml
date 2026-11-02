@@ -1,0 +1,31 @@
+---
+# Successful pins are cluster-wide, root-only metadata. Extra vars still win.
+- name: Inspect automatic application pin directory
+  ansible.builtin.stat:
+    path: /etc/pve/priv/homelab-app-updates
+  register: _app_update_pin_file
+
+- name: Find successful automatic application pins
+  ansible.builtin.find:
+    paths: /etc/pve/priv/homelab-app-updates
+    patterns: ["{{ ansible_role_name }}.json", "{{ ansible_role_name }}-*.json"]
+  register: _app_update_pin_files
+  when: _app_update_pin_file.stat.exists
+
+- name: Read successful automatic application pins
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  register: _app_update_pins
+  loop: "{{ _app_update_pin_files.files | default([]) }}"
+
+- name: Preserve successfully installed versions on later role runs
+  ansible.builtin.set_fact:
+    "{{ item.key }}": "{{ item.value }}"
+  loop: >-
+    {{ _app_update_pins.results | default([]) | selectattr('content', 'defined') |
+       map(attribute='content') | map('b64decode') | map('from_json') | list | combine | dict2items }}
+  when:
+    - >-
+      item.key is match('^' ~ ansible_role_name ~
+      '_(version|release_url|release_checksum|source_url|source_checksum|image|' ~
+      'web_version|web_url|web_checksum|rust_version|alloy_version|loki_version|grafana_version)$')

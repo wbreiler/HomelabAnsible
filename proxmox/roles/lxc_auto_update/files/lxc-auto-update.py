@@ -10,6 +10,7 @@ import time
 
 
 UPDATE = r"""set -eu
+umask 022
 export DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_MODE=a
 apt-get -o DPkg::Lock::Timeout=300 -o APT::Update::Error-Mode=any update
 apt-get -o DPkg::Lock::Timeout=300 -o Dpkg::Options::=--force-confdef \

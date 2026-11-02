@@ -1,0 +1,15 @@
+[Unit]
+Description=Back up and update compatible stable LXC applications
+Wants=network-online.target
+After=network-online.target pve-cluster.service
+
+[Service]
+Type=oneshot
+ExecStart={{ lxc_app_updates_root }}/lxc_app_updates.py
+WorkingDirectory={{ lxc_app_updates_root }}
+TimeoutStartSec=infinity
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+Environment=PYTHONUNBUFFERED=1

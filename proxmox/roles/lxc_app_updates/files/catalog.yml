@@ -1,0 +1,75 @@
+# Version probes run inside existing guests. They never read credentials.
+pocket_id:
+  repository: pocket-id/pocket-id
+  probe: cd /opt/pocket-id && ./pocket-id version
+spoolman:
+  repository: Donkie/Spoolman
+  probe: cat /opt/spoolman/.ansible-version
+forgejo:
+  repository: forgejo/forgejo
+  api: https://codeberg.org/api/v1
+  probe: /usr/local/bin/forgejo --version
+prowlarr:
+  repository: Prowlarr/Prowlarr
+  probe: cat /opt/Prowlarr/.ansible-version
+homebridge:
+  package: homebridge
+  probe: dpkg-query -W -f='${Version}' homebridge
+sonarr:
+  repository: Sonarr/Sonarr
+  probe: cat /opt/Sonarr/.ansible-version
+radarr:
+  repository: Radarr/Radarr
+  probe: cat /opt/Radarr/.ansible-version
+seerr:
+  repository: seerr-team/seerr
+  probe: node -p 'require("/opt/seerr/package.json").version'
+gitea_mirror:
+  repository: RayLabsHQ/gitea-mirror
+  probe: python3 -c 'import json; print(json.load(open("/opt/gitea-mirror/package.json"))["version"])'
+diun:
+  repository: crazy-max/diun
+  probe: /opt/diun/diun --version
+vaultwarden:
+  repository: dani-garcia/vaultwarden
+  probe: /opt/vaultwarden/bin/vaultwarden --version
+  artifact: source
+zipline:
+  repository: diced/zipline
+  image: ghcr.io/diced/zipline
+  compose: /opt/zipline
+  service: zipline
+bambuddy:
+  repository: maziggy/bambuddy
+  probe: cat /opt/bambuddy/.ansible-version
+nexdeck:
+  repository: DerKezorm/nexdeck
+  probe: cat /opt/nexdeck/.ansible-version
+speedtest_tracker:
+  repository: linuxserver/docker-speedtest-tracker
+  image: ghcr.io/linuxserver/speedtest-tracker
+  compose: /opt/speedtest-tracker
+  service: speedtest-tracker
+homelable:
+  native: true
+  repository: Pouzor/homelable
+  probe: cat /opt/homelable/.ansible-version
+nginx_proxy_manager:
+  native: true
+  repository: NginxProxyManager/nginx-proxy-manager
+  probe: node -p 'require("/app/package.json").version'
+sabnzbd:
+  native: true
+  repository: sabnzbd/sabnzbd
+  probe: /opt/sabnzbd/venv/bin/python /opt/sabnzbd/SABnzbd.py --version
+open_webui:
+  native: true
+  repository: open-webui/open-webui
+  probe: /root/.local/share/uv/tools/open-webui/bin/python -c 'import importlib.metadata; print(importlib.metadata.version("open-webui"))'
+librespeed:
+  native: true
+  repository: librespeed/speedtest
+  probe: sed -n 's|.*root /var/www/librespeed-\([0-9.]*\);.*|\1|p' /etc/nginx/sites-available/librespeed
+netboot_xyz:
+  native: true
+  repository: netbootxyz/netboot.xyz
