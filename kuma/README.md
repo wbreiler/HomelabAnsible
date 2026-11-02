@@ -1,5 +1,7 @@
 # Uptime Kuma Mini PC Ansible Configuration
 
+[Agent guidance](AGENTS.md) covers retirement boundaries, reference code, and validation.
+
 **Retired:** the user confirmed on 2026-10-02 that Kuma no longer exists.
 This project is retained as reference automation, not an active deployment.
 Ignored inventory entries are stale and must not be treated as live hosts.
