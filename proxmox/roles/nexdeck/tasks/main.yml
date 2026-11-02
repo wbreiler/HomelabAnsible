@@ -133,6 +133,48 @@
       changed_when: true
       when: nexdeck_installed_version.stdout | trim != nexdeck_version
 
+    - name: Stage native homelab map adapter
+      ansible.builtin.copy:
+        src: homelab.py
+        dest: "/tmp/nexdeck-homelab-{{ lxc_resolved_vmid }}.py"
+        mode: "0644"
+
+    - name: Install native homelab map adapter
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          source_file=/tmp/nexdeck-homelab-{{ lxc_resolved_vmid }}.py
+          destination=/opt/nexdeck/app/backend/app/adapters/homelab.py
+          local_hash=$(sha256sum "$source_file" | cut -d ' ' -f 1)
+          remote_hash=$(pct exec {{ lxc_resolved_vmid }} -- sha256sum "$destination" 2>/dev/null | cut -d ' ' -f 1 || true)
+          if test "$local_hash" != "$remote_hash"; then
+            pct push {{ lxc_resolved_vmid }} "$source_file" "$destination" --perms 0644
+            echo changed
+          fi
+        executable: /bin/bash
+      register: nexdeck_map_deploy
+      changed_when: "'changed' in nexdeck_map_deploy.stdout"
+
+    - name: Verify native homelab map adapter loads
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - runuser
+          - -u
+          - nexdeck
+          - --
+          - env
+          - NEXDECK_DATA_DIR=/var/lib/nexdeck
+          - PYTHONPATH=/opt/nexdeck/app/backend
+          - /opt/nexdeck/venv/bin/python
+          - -c
+          - "from app.adapters import get_adapter; assert get_adapter('homelab').widget('map').renderer == 'topology'"
+      changed_when: false
+      when: not ansible_check_mode
+
     - name: Render NexDeck service file
       ansible.builtin.template:
         src: nexdeck.service.j2
@@ -166,7 +208,8 @@
       changed_when: true
       when: >-
         nexdeck_installed_version.stdout | trim != nexdeck_version or
-        nexdeck_service_render.changed
+        nexdeck_service_render.changed or
+        nexdeck_map_deploy.changed
 
     - name: Check NexDeck service
       ansible.builtin.command:

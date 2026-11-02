@@ -110,7 +110,7 @@ pages:
       layout:
         lg:
           x: 0
-          y: 7
+          y: 13
           w: 8
           h: 5
     - kind: sabnzbd.queue
@@ -155,18 +155,18 @@ pages:
       integration: Radarr
       link: https://movies.example.com/
       refresh_seconds: 30
-    - kind: proxmox.map
+    - kind: homelab.map
       title: Your homelab, alive
       icon: lucide:network
       options:
+        sources: []  # Select Proxmox, TrueNAS and PBS in the card settings after import.
         show_stopped: true
       layout:
         lg:
-          x: 8
+          x: 0
           y: 7
-          w: 16
-          h: 5
-      integration: Proxmox VE
+          w: 24
+          h: 6
       link: https://pve.example.com/
       refresh_seconds: 30
     - kind: truenas.pools
@@ -175,10 +175,10 @@ pages:
       options: {}
       layout:
         lg:
-          x: 0
-          y: 12
+          x: 8
+          y: 13
           w: 8
-          h: 3
+          h: 2
       integration: TrueNAS
       link: https://truenas.example.com/
       refresh_seconds: 120
@@ -190,10 +190,10 @@ pages:
         only_errors: false
       layout:
         lg:
-          x: 8
-          y: 12
+          x: 16
+          y: 13
           w: 8
-          h: 3
+          h: 5
       integration: Proxmox Backup Server
       link: https://pbs.example.com/
       refresh_seconds: 60
@@ -204,8 +204,8 @@ pages:
         view: bars
       layout:
         lg:
-          x: 16
-          y: 12
+          x: 8
+          y: 15
           w: 8
           h: 3
       integration: Tdarr

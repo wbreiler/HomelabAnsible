@@ -12,12 +12,24 @@ homepage or startup page. Browser preferences are not managed by this change.
 
 ## Live activity
 
-The Live page uses the installed NexDeck widgets and existing integrations:
+The Live page uses NexDeck widgets and existing integrations:
 
 - A clock, search targets, and an icon grid for everyday favorites.
 - Plex streams with backdrop artwork and a moving strip of recent additions.
 - **In motion** tabs for SABnzbd, Sonarr, and Radarr queues.
-- A Proxmox cluster map, TrueNAS pool capacity, backup activity, and Tdarr workers.
+- A combined homelab map, TrueNAS pool capacity, backup activity, and Tdarr workers.
+
+**Your homelab, alive** shows Proxmox hosts and guests alongside TrueNAS pools
+and PBS datastores. Hover over a node for its full name and details. Status
+colors come from the existing adapters, including system alerts. A red TrueNAS
+node can indicate an open alert while the system remains reachable. An
+unreachable system shows **Unavailable** without hiding the other systems.
+
+The small `homelab.map` adapter lives in `roles/nexdeck/files/homelab.py`.
+The NexDeck role installs it after the pinned release and checks that it loads.
+It reuses the native topology renderer and connection permissions. It does
+not add credentials or change upstream source files. The map collects read-only
+data and exposes no power, storage, or backup actions.
 
 Cards update through NexDeck's live event stream. Collection intervals range
 from 10 seconds for downloads to five minutes for recent library additions.
@@ -71,6 +83,11 @@ a new board creates a duplicate. For another installation, configure the
 connections named under `integrations` in `start-board.yml.example` first.
 Change the example URLs and connection names to match that installation,
 then import the file. The example contains no connection credentials.
+Deploy the NexDeck role before importing the combined map. In the map's
+settings, select the existing Proxmox, TrueNAS, and PBS connections under
+**Systems**. These references use installation-specific IDs, so the tracked
+example leaves `sources` empty. Re-select them after moving an export to
+another installation.
 Configure a Google search target with shortcut `g` and URL
 `https://www.google.com/search?q={query}` before importing the Live search card.
 Search targets are shared application settings and are not part of board exports.
@@ -96,3 +113,13 @@ Creation and the Live update each saved a protected SQLite backup under
 API readback confirmed preservation of the existing bookmark cards and Home
 board. The only removed bookmark was Discord. The Live update reused existing
 service credentials and required no new packages.
+
+The map extension tests run against the installed NexDeck backend and venv:
+
+```bash
+PYTHONPATH=/opt/nexdeck/app/backend /opt/nexdeck/venv/bin/python /tmp/test_nexdeck_homelab.py -v
+```
+
+Copy `tests/test_nexdeck_homelab.py` into the guest first. The tests cover the
+combined tree, source isolation, alert propagation, duplicate sources, and
+invalid settings. Recheck the extension when upgrading NexDeck's adapter API.
