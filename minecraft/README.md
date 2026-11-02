@@ -48,7 +48,8 @@ downloads templates or changes guest hardware and cluster backup jobs.
 The user confirmed Cobbleverse is no longer live on 2026-10-24. Its
 `cobbleverse-nash` definition (former VMID 114) was removed from the ignored
 `ansible/servers.yml`. The tracked example contains no Cobbleverse definition.
-Normal `provision.yml`, `site.yml`, and `ha.yml` runs no longer select it.
+Normal `provision.yml` and `site.yml` runs no longer select it. The retired
+`ha.yml` entry point refuses all execution.
 Do not restore its definition without an explicit new deployment request.
 
 No guest, backup, world data, DNS record, or router forward was deleted.
@@ -68,7 +69,7 @@ example. Important fields include:
 | `mc_version`, `loader`, `loader_version` | Minecraft and loader selection |
 | `instance_name`, `xms`, `xmx` | systemd instance and JVM heap |
 | `server_properties`, `ops` | Managed server settings and operators |
-| `ha_*` | Optional HA resource and node-affinity policy |
+| `ha_*` | Historical reference only. Terraform owns HA policy |
 | `extra_modrinth_mods` | Extra Modrinth projects layered onto an automatic pack |
 | `bluemap_*`, `dh_pregen_*`, `chunky_pregen_*` | Optional idle-only map/world generation |
 
@@ -96,7 +97,8 @@ ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub
 ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub -e server_filter=yabu-nash
 ```
 
-Use the configured Bitwarden SSH agent. The public file `~/.ssh/lxc.pub`
+Use the configured SSH agent. The Mac profiles select 1Password when available.
+The public file `~/.ssh/lxc.pub`
 selects its guest key. `--private-key` overrides the legacy `lxc_nash` path
 still present in `ansible.cfg`; it does not require a private key on disk.
 Apply this override to existing-server commands too. Do not create an empty

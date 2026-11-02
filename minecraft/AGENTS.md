@@ -11,7 +11,8 @@ Automates existing Minecraft server configuration and modpack updates for a Prox
 
 The Ansible role deploys and invokes `update-script/update-modpack.sh`; the
 controller-side `apply-manual-pack.sh` is run separately for manually managed
-packs. Keep their shared paths and configuration contract aligned.
+packs. Both need `pack_archive.py` beside the script. Keep their shared paths,
+archive validation, and configuration contract aligned.
 
 ## Network layout
 
@@ -26,7 +27,8 @@ packs. Keep their shared paths and configuration contract aligned.
 - **Allocate VMIDs sequentially.** Check both live cluster state and the ignored
   `servers.yml`, then use the next unused sequential ID. Do not reserve or skip
   IDs without a current, documented conflict.
-- The CurseForge API key starts with `$2a$10$` — always store/echo it in **single quotes** to prevent bash variable expansion mangling it.
+- The CurseForge key has a shell-sensitive `$2a$10$` prefix. Preserve it
+  literally in Vault. Never echo it into logs or pass it through process arguments.
 
 ## Shell scripts (`set -euo pipefail` conventions)
 
@@ -43,14 +45,15 @@ Run from `ansible/`:
 # Reconcile existing servers only (no Proxmox mutations)
 ansible-playbook site.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub --check --diff
 
-# Provision all servers using the configured SSH agent
+# Configure all existing servers using the compatibility entry point
 ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub
 
-# Provision a single server
+# Configure one existing server
 ansible-playbook provision.yml --ask-vault-pass --private-key ~/.ssh/lxc.pub -e server_filter=atm10-nash
 ```
 
-Use the configured Bitwarden agent. The public selector `~/.ssh/lxc.pub`
+Use the configured SSH agent. The Mac profiles select 1Password when available.
+The public selector `~/.ssh/lxc.pub`
 identifies the guest key held by that agent. Pass `--private-key` to override
 the legacy `~/.ssh/lxc_nash` setting in `ansible.cfg`; that private file is
 absent on the audited controller. Do not replace the configured agent with
@@ -60,6 +63,9 @@ For `migrate_from`, rsync runs on the source and opens a second SSH connection
 to the destination. Ansible requests `ForwardAgent=yes`, unlike direct SSH
 defaults. Verify forwarded-agent authentication through the source before
 migration. Direct guest authentication alone does not validate the second hop.
+`check_migration_source.py` rejects source symlinks and unsafe ancestors.
+The trusted migration sender can run as root, but its destination receiver runs
+as `minecraft`. Preserve this separate migration contract.
 
 **Provisioning ownership**: Terraform creates guests and owns hardware and
 boot settings. `provision.yml` is a compatibility import of `site.yml`, which
@@ -156,9 +162,10 @@ reachable server needs a unique external port both forwarded on the router
 and published in its SRV record.
 
 The user confirmed Cobbleverse is retired on 2026-10-24. Its entry was removed
-from ignored `ansible/servers.yml`, so provisioning, existing-server setup, and
-HA runs no longer select it. Do not restore its definition without an explicit
-new deployment request. Existing backups and live infrastructure were untouched.
+from ignored `ansible/servers.yml`, so existing-server configuration no longer
+selects it. `ha.yml` is retired for every server. Do not restore its definition
+without an explicit new deployment request. Existing backups and live
+infrastructure were untouched.
 
 The active assignments below exclude Cobbleverse. The historical 2026-10-02
 DNS check covered six records, including its old port 25565. Its external DNS
@@ -182,7 +189,8 @@ Flow: Discord announce → 5-min countdown (skipped with `--no-wait`) →
 download, stage, and validate required content while the server stays online →
 briefly stop the service → atomically swap the staged content → restart and
 verify that it remains active, rolling back the mod directory and service on
-failure. The updater records the version successfully started in
+failure. This rollback does not restore non-mod overrides or loader files.
+The updater records the version successfully started in
 `/opt/minecraft/.running_version`; if the installed and running markers differ,
 the next update check performs one corrective restart. The latest three mod-directory backups
 are retained. The manual-pack script has different behavior: it stops the
@@ -190,6 +198,17 @@ service and preserves old directories, but does not restart or automatically
 roll back. Check players and announce the outage before invoking it.
 
 `--no-wait` is used by the Ansible role for initial provisioning.
+
+The updater uses root only for service control, private staging, logs, and
+root-only configuration. Game-file reads/writes and loader installation run as
+`minecraft`. Do not restore recursive root ownership changes. Both importers
+reject archive links, special files, path escapes, and non-HTTPS downloads.
+`--dry-run` does not apply a pack but can still send a Discord notification.
+
+Existing `run.sh` and Fabric `server.jar` files are preserved. Reconciliation
+does not upgrade their loader versions. Follow the [loader repair procedure](README.md#pack-management)
+for a compatible replacement, backup, startup log, and Minecraft status check.
+An active systemd process alone does not prove a successful server start.
 
 ## Server services and idle controllers
 
@@ -208,3 +227,17 @@ and resume only while the server is empty. Their inventory controls are
 `servers.yml.example` is the authoritative variable example. The DH
 controller supports a one-time chained expansion through
 `dh_pregen_followup_radius`.
+
+## Validation
+
+Run Ansible checks from `ansible/` and script checks from the same directory:
+
+```bash
+ansible-lint
+ansible-playbook site.yml --syntax-check --ask-vault-pass
+bash -n ../update-script/update-modpack.sh ../update-script/apply-manual-pack.sh
+python3 -m unittest discover -s ../update-script -p 'test_*.py'
+```
+
+Keep archive, privilege-boundary, migration, and updater fixtures aligned with
+script changes. These tests do not prove live player connectivity.
