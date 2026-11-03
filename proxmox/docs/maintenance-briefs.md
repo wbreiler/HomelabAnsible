@@ -268,3 +268,11 @@ execution passed. All 96 related local tests passed. The 27 approval tests also
 passed against the installed code on each Linux node with mocked external actions.
 A real synthetic `gpt-6.1-sol` high-reasoning structured request succeeded.
 The Discord owner-reaction round trip and a real maintenance repair remain untested.
+
+Later on 2026-11-03, the bot joined the server and access to the dedicated
+`homelab-maintenance-briefs` channel was verified. Interactive repair polling was
+enabled on Prometheus and Atlas. The activation check passed, repeat application
+reported `changed=0` on both nodes, and both deployed bot credentials could read
+the channel. Controller services completed successfully and private credential
+permissions remained `0600`. A no-op interaction test was posted on Prometheus
+and awaited the owner's Discord reactions. No real repair was performed.
