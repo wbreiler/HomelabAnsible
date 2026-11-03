@@ -173,6 +173,7 @@ class Groups(unittest.TestCase):
         self.assertLessEqual(size, 6000)
         self.assertIn('6 host cost unavailable', embed['footer']['text'])
         self.assertTrue(embed['footer']['text'].startswith('Known subtotal'))
+        self.assertIn('…', embed['fields'][0]['value'])
 
     def test_deleted_parent_clears_pending_without_replaying_inspection(self):
         self.process(0)

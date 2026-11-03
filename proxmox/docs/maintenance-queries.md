@@ -254,11 +254,21 @@ message and four optional thread details. Readback confirmed four host sections
 and the aggregated footer. One legacy result lacked cost metadata and remained
 explicitly unavailable. This preview made no OpenAI calls or host inspections.
 
-Linux deployment and repeat application passed on both PVE hosts and PBS.
-TrueNAS deployment remains blocked by its 1Password SSH signing failure.
-Activation is held: the Linux workers retain standalone replies through a
-temporary deployment override, so a mixed rollout cannot leave a shared summary
-waiting for a legacy TrueNAS reply. The ignored bot JSON retains the intended
-ordered `query_nodes` list. After restoring TrueNAS authentication, deploy its
-scoped worker first, then rerun the normal Linux playbook without the temporary
-override. Verify a new owner mention before claiming the combined path live.
+TrueNAS initially could not authenticate through its 1Password SSH agent.
+Activation stayed on hold with standalone replies until the owner unlocked it.
+The scoped TrueNAS deployment then passed, followed by Linux activation without
+the temporary override. Repeat applications reported `changed=0` on all four
+hosts. Installed source hashes, private file modes, shared host order, and Linux
+bot services passed verification. Guest state/uptime, TrueNAS apps/pools, and
+PBS proxy/pools matched the protected baseline.
+
+The owner then sent a new health mention. It produced exactly one public bot
+reply with four host sections and four optional detail messages in its thread.
+The shared reply progressed from 1/4 through 3/4 to 4/4 reported hosts.
+Readback confirmed the returned `gpt-4.1-mini-2025-04-14` model and a total
+estimated cost of $0.001688, matching the four per-host usage records within
+display rounding. Each host consumed one normal-model attempt. Aggregation
+made no additional OpenAI call. All jobs and summary tracking completed.
+The final renderer shortens summaries at word boundaries and preserves the
+complete per-host details in the thread. No fresh update scan or repair was
+needed for this delivery change.

@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import socket
 import subprocess
+from textwrap import shorten
 import time
 import urllib.error
 import urllib.request
@@ -425,7 +426,7 @@ def group_payload(config, bundle, results):
         else:
             measured = next((f['value'] for f in result.get('fields', []) if f['name'] == 'Measured'), '')
             changes = next((f['value'] for f in result.get('fields', []) if f['name'] == 'App versions'), '')
-            lines = [measured[:200], result.get('description', '')[:200], *changes.splitlines()[:2]]
+            lines = [measured[:200], shorten(result.get('description', ''), width=200, placeholder='…'), *changes.splitlines()[:2]]
             footer = result.get('footer', {}).get('text', '')
             usage, _, limits = footer.partition('\n')
             if limits:
