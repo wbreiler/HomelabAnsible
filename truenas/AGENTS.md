@@ -73,8 +73,10 @@ edits to the appliance filesystem or database.
   role from `../proxmox/roles` and reconciles only its named cron job through
   middleware. Export a protected configuration backup first. Keep the worker
   and credentials under `/root/homelab-status` with root-only permissions.
-  Preserve owner mentions, fixed read-only probes, and explicit cached/pinned
-  update limits. This workflow must not change SSH, accounts, pools, or network.
+  Preserve owner mentions and fixed read-only probes. Custom apps use live
+  platform-aware registry/source comparisons; only OS availability is cached.
+  Never pull image layers or rebuild/deploy apps during inspection. This
+  workflow must not change SSH, accounts, pools, or network.
   See [query coverage](../proxmox/docs/maintenance-queries.md).
 
 - Use the scoped playbooks under `playbooks/` for custom apps. Inspect their
