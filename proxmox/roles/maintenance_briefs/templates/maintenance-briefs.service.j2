@@ -1,7 +1,8 @@
 [Unit]
 Description=Read maintenance failures and send explanatory Discord briefs
 Wants=network-online.target
-After=network-online.target
+# Retain the manual drill's completed invocation for recovery collection.
+After=network-online.target maintenance-repair-drill.service
 
 [Service]
 Type=oneshot

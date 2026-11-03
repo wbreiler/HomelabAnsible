@@ -490,6 +490,8 @@ Use `../terraform/README.md` for provisioning and media management.
 * The manual backup drill is gated by `maintenance_briefs_drill_vmid` and the
   existing unprivileged `terraform-pilot` identity without external mounts.
   Its 15-minute backup check is read-only and uses a separate unit/report.
+  Keep the brief unit's ordering reference to the drill so systemd retains its
+  successful invocation for recovery collection without starting it automatically.
   The only approved drill repair is fresh backup plus targeted OS maintenance.
   Preserve normal scheduled reports, updater settings, and all existing backups.
 * The separate privileged executor may call only the existing guarded updater

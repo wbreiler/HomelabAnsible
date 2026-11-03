@@ -333,6 +333,10 @@ After the attempt finishes, rerun the read-only drill check while the backup is
 still fresh. A passing check clears the drill failure and produces its recovery
 brief. The report stays in `/var/lib/homelab-maintenance-repairs/drill-report.json`.
 No guest lifecycle or Terraform resource change is required for this workflow.
+The brief service orders itself after the drill. This retains the completed
+drill's systemd invocation without starting it automatically. Without that
+reference, systemd unloads a successful manual unit before recovery collection.
+See the [systemd unit retention rules](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html#Unit%20Garbage%20Collection).
 
 On 2026-11-03, live inspection found only baseline operating-system services in
 Atlas's existing pilot, with no external mounts or failed services. The drill
@@ -342,3 +346,24 @@ read-only check failed the 15-minute freshness rule as expected and delivered
 a labeled Discord brief. Guest uptime, packages, normal updater configuration,
 scheduled reports, and backup metadata were captured privately for comparison
 after the owner-approved repair.
+
+The owner then requested and approved the real drill repair in Discord. Atlas
+used `gpt-6.1-sol` with high reasoning for the proposal and result review. The
+executor created one new PBS snapshot for CT 114 and completed guarded OS
+maintenance for that guest alone. No packages needed changes. Baseline comparison
+confirmed that all older pilot backups remained, other guests had no status or
+reboot changes, and the pilot had no reboot or newly failed services. Normal
+updater configurations, scheduled reports, and maintenance invocation IDs stayed
+unchanged.
+
+The subsequent read-only backup check passed. This exposed a missing systemd
+ordering reference that allowed the successful manual unit's invocation to be
+unloaded. The reference was added, deployed, and verified against the retained
+invocation and delivered recovery brief. Proposal, final progress, and result
+messages also matched their recorded content. The fix passed all 67 focused
+tests, lint, syntax/check mode, and repeat application with `changed=0` on both
+nodes. No second repair or extra stronger-model request was needed.
+
+This validates an owner-approved backup-prerequisite repair and OS retry on the
+pilot. It does not validate package replacement, application repair, rollback,
+backup restoration, or every service's application-level health.
