@@ -268,6 +268,15 @@ lxc_app_updates_exclude: []  # Catalog application names.
 # Optional shared destination for OS/app completion and failure notifications.
 # Keep the webhook in ignored variables or Vault. Empty disables notifications.
 # lxc_update_discord_webhook_url: "{{ diun_discord_webhook_url }}"
+# Read-only explanations for completed OS/application maintenance failures.
+install_maintenance_briefs: false
+maintenance_briefs_enabled: true
+maintenance_briefs_model: gpt-4.1-mini
+maintenance_briefs_daily_call_limit: 10  # Per node, per UTC day; attempted calls count.
+# Put the key in the ignored, mode-0600 .maintenance-briefs-openai-key file,
+# or override maintenance_briefs_openai_api_key with a Vault-encrypted variable.
+# Without a key, the service sends factual briefs without OpenAI analysis.
+# maintenance_briefs_discord_webhook_url: "{{ lxc_update_discord_webhook_url }}"
 lxc_app_updates_native_guests: {}  # Optional existing guest hostnames, for example:
 #  nginx_proxy_manager: npm-example
 #  sabnzbd: sabnzbd-example

@@ -1,6 +1,7 @@
 # Ansible
 *.retry
 .vault_pass
+/.maintenance-briefs-openai-key
 /tmp
 .ansible
 

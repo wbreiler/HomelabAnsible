@@ -1,0 +1,7 @@
+---
+- name: Configure read-only maintenance failure briefs
+  hosts: proxmox_cluster
+  become: true
+  gather_facts: false
+  roles:
+    - maintenance_briefs

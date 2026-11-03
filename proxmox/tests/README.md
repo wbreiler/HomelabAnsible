@@ -39,6 +39,7 @@ python3 tests/test_lxc_auto_update.py
 python3 tests/test_lxc_app_updates.py
 python3 tests/test_native_app_updates.py
 python3 tests/test_lxc_update_notifications.py
+python3 tests/test_maintenance_briefs.py
 python3 tests/test_local_dns.py
 python3 tests/test_homebridge_mdns_proxy.py
 ```
@@ -53,6 +54,8 @@ artifact integrity, backup gates, failed-retry blocking, saved pins, and
 native archive/release preservation. Run them with Ansible's Python environment.
 Notification tests cover stale reports, failure summaries, credential redaction,
 Discord message limits, disabled mentions, delivery confirmation, and rate limits.
+Maintenance brief tests cover exact invocation evidence, secret exclusion,
+failure/recovery delivery, OpenAI request limits, and offline fallback behavior.
 DNS tests verify additive records and conflict rejection. Homebridge tests
 validate public advertisement data without contacting Avahi or a gateway.
 Terraform mock tests and live adoption checks are documented in

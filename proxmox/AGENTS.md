@@ -464,6 +464,25 @@ Use `../terraform/README.md` for provisioning and media management.
   disabled mentions. The optional `lxc_update_discord_webhook_url` belongs in
   ignored variables or Vault. Test delivery without running guest updates.
 
+### maintenance_briefs
+
+* `maintenance-briefs.yml` configures only the per-node read-only brief worker.
+  The `site.yml` role is gated by `install_maintenance_briefs`.
+* Read only completed OS/application maintenance reports and journals for the
+  matching systemd invocation. Preserve race checks, successful-run silence,
+  recovery semantics, and existing independent maintenance notifications.
+* Only normalized allowlisted signals and selected metadata may leave the host.
+  Never forward arbitrary journal lines, exception reasons, URLs, or config.
+* Keep the OpenAI key in the ignored, mode-0600 `.maintenance-briefs-openai-key`
+  file or override `maintenance_briefs_openai_api_key` with a Vault-encrypted
+  variable. No key means a labeled factual fallback. Never print the key.
+* Preserve the attempted-call cap, cached pending message, delivery confirmation,
+  retry backoff, and service filesystem restrictions. Never execute model output.
+* Run `python3 tests/test_maintenance_briefs.py`, lint, syntax/check mode, and
+  an idempotent deployment. Use `--preview` for read-only evidence checks and
+  `--test-discord` for an explicitly authorized labeled delivery test.
+* See `docs/maintenance-briefs.md` for key entry, activation, and limits.
+
 ### update_reminder
 
 * Installs a systemd timer on every Proxmox node and checks the node plus its

@@ -120,6 +120,10 @@
       when: install_lxc_app_updates | default(false) | bool
       tags: ['lxc_app_updates', 'maintenance']
 
+    - role: maintenance_briefs
+      when: install_maintenance_briefs | default(false) | bool
+      tags: ['maintenance_briefs', 'maintenance']
+
     - role: update_all
       when: run_updates | default(false) | bool
       tags: ['update', 'maintenance']

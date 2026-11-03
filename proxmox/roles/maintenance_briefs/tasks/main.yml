@@ -1,0 +1,58 @@
+---
+- name: Validate maintenance brief settings
+  ansible.builtin.assert:
+    that:
+      - maintenance_briefs_daily_call_limit | int >= 1
+      - maintenance_briefs_daily_call_limit | int <= 20
+      - maintenance_briefs_model is match('^[a-zA-Z0-9._-]+$')
+      - maintenance_briefs_discord_webhook_url is match('^https://(canary\.|ptb\.)?discord(app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$')
+      - maintenance_briefs_openai_api_key is string
+  no_log: true
+
+- name: Install maintenance brief reader
+  ansible.builtin.copy:
+    src: maintenance-briefs.py
+    dest: /usr/local/sbin/maintenance-briefs
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Store private maintenance brief configuration
+  ansible.builtin.copy:
+    content: >-
+      {{ {'model': maintenance_briefs_model,
+          'daily_call_limit': maintenance_briefs_daily_call_limit | int,
+          'openai_api_key': maintenance_briefs_openai_api_key,
+          'discord_webhook_url': maintenance_briefs_discord_webhook_url} | to_nice_json }}
+    dest: /etc/homelab-maintenance-briefs.json
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+
+- name: Install maintenance brief units
+  ansible.builtin.template:
+    src: "maintenance-briefs.{{ item }}.j2"
+    dest: "/etc/systemd/system/maintenance-briefs.{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: [service, timer]
+  notify: Reload maintenance brief units
+
+- name: Create private maintenance brief history
+  ansible.builtin.file:
+    path: /var/lib/homelab-maintenance-briefs
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Enable maintenance brief timer
+  ansible.builtin.systemd_service:
+    name: maintenance-briefs.timer
+    daemon_reload: true
+    enabled: "{{ maintenance_briefs_enabled | bool }}"
+    state: "{{ 'started' if maintenance_briefs_enabled | bool else 'stopped' }}"
+  when: not ansible_check_mode
