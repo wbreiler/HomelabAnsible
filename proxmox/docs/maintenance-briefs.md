@@ -236,6 +236,8 @@ Create a Discord application and bot named **Homelab Repairs**. Install it into
 the server containing the webhook's channel. Grant View Channel, Send Messages,
 Embed Links, Read Message History, and Add Reactions for that channel. Restrict
 its access to this channel. Do not grant Administrator or privileged intents.
+Combined health/update replies also require Create Public Threads and Send
+Messages in Threads. See [query deployment](maintenance-queries.md#deployment).
 Enable Discord Developer Mode and copy your own user ID.
 
 Keep this JSON in the ignored `proxmox/.maintenance-repairs-discord.json`, mode

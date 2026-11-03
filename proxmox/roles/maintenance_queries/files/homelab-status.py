@@ -3,6 +3,7 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from decimal import Decimal
 import fcntl
 import hashlib
 import importlib.util
@@ -26,7 +27,7 @@ _versions_spec = importlib.util.spec_from_file_location('app_versions', Path(__f
 versions = importlib.util.module_from_spec(_versions_spec)
 _versions_spec.loader.exec_module(versions)
 
-HELP = 'Mention me with “check for updates” or “how is the lab doing?”. Each server replies for itself and its guests. Checks never install updates or restart services. Repairs still require the separate proposal approval.'
+HELP = 'Mention me with “check for updates” or “how is the lab doing?”. One summary covers all hosts, with optional details in its thread. Checks never install updates or restart services. Repairs still require the separate proposal approval.'
 ID = re.compile(r'[0-9]{17,20}')
 # Fixed code only. User text is never passed to a command, path, URL, or probe.
 PROBE = r'''
@@ -108,7 +109,9 @@ def request(url, method='GET', payload=None, authorization=None):
 
 
 def discord(config, method='GET', suffix='', payload=None):
-    if suffix and not re.fullmatch(r'(?:/[0-9]{17,20}|\?limit=100(?:&after=[0-9]{17,20})?)', suffix):
+    if not ID.fullmatch(config['channel_id']):
+        raise ValueError('Invalid Discord channel')
+    if suffix and not re.fullmatch(r'(?:/[0-9]{17,20}(?:/threads)?|\?limit=100(?:&after=[0-9]{17,20})?)', suffix):
         raise ValueError('Invalid Discord route')
     return request('https://discord.com/api/v10/channels/' + config['channel_id'] + '/messages' + suffix,
                    method, payload, 'Bot ' + config['bot_token'])
@@ -410,16 +413,163 @@ def payload(config, kind, report, summary, usage=None):
             'allowed_mentions': {'parse': []}}
 
 
+def group_payload(config, bundle, results):
+    nodes = config['query_nodes']
+    expired = time.time() - bundle['created'] >= 1200
+    finished = len(results) == len(nodes)
+    fields, models, costs, unknown = [], set(), [], 0
+    for node in nodes:
+        result = results.get(node)
+        if result is None:
+            value = 'No result received within 20 minutes.' if expired else '⏳ Waiting for this host…'
+        else:
+            measured = next((f['value'] for f in result.get('fields', []) if f['name'] == 'Measured'), '')
+            changes = next((f['value'] for f in result.get('fields', []) if f['name'] == 'App versions'), '')
+            lines = [measured[:200], result.get('description', '')[:200], *changes.splitlines()[:2]]
+            footer = result.get('footer', {}).get('text', '')
+            usage, _, limits = footer.partition('\n')
+            if limits:
+                lines.append(limits[:140])
+            value = '\n'.join(line for line in lines if line)[:750] or 'No result details.'
+            match = re.search(r'\$([0-9]+(?:\.[0-9]+)?)', usage)
+            if match:
+                costs.append(Decimal(match[1]))
+            else:
+                unknown += 1
+            model = usage.split(' · ')[0]
+            if re.fullmatch(r'[A-Za-z0-9._-]+(?: \(requested\))?', model):
+                models.add(model)
+        fields.append({'name': node, 'value': value})
+    status = 'Complete' if finished else ('Partial result' if expired else '⏳ Working…')
+    cost = ('Known subtotal' if unknown else 'Total' if finished else 'So far') + f': ~${sum(costs, Decimal(0)):.6f} USD'
+    if unknown:
+        cost += f' · {unknown} host cost unavailable'
+    model = ', '.join(sorted(models)) or ('Model unavailable' if unknown else 'No API calls reported')
+    return {'content': '', 'embeds': [{'title': 'Homelab · ' + bundle['kind'].title(),
+            'description': f'{status} · {len(results)}/{len(nodes)} hosts reported. Details are in the thread below.',
+            'fields': fields, 'color': 0x3498DB if finished else 0xE67E22,
+            'footer': {'text': (cost + '\n' + model)[:500]}}], 'allowed_mentions': {'parse': []}}
+
+
+def prepare_group(config, state, path):
+    job = state['pending']
+    coordinator = config['node'] == config['query_nodes'][0]
+    title = 'Homelab · ' + job['kind'].title()
+    requested = ((int(job['message_id']) >> 22) + 1420070400000) / 1000
+    if not job.get('parent_id') and time.time() - requested >= 1200:
+        del state['pending']
+        save(path, state)
+        return False
+    if not job.get('parent_id'):
+        messages = discord(config, suffix='?limit=100&after=' + job['message_id'])
+        parent = next((m for m in messages if m.get('author', {}).get('id') == config['bot_user_id'] and
+                       not m.get('webhook_id') and m.get('message_reference', {}).get('message_id') == job['message_id'] and
+                       any(e.get('title') == title for e in m.get('embeds', []))), None)
+        if parent is None:
+            if not coordinator:
+                return False
+            # shortcut: search one channel page; add pagination if this channel routinely exceeds 100 new messages per request.
+            if len(messages) == 100:
+                raise ValueError('Cannot safely locate the existing summary in a busy channel')
+            body = group_payload(config, {'kind': job['kind'], 'created': time.time()}, {})
+            body.update(message_reference={'message_id': job['message_id'], 'fail_if_not_exists': False},
+                        nonce=hashlib.sha256(('summary-' + job['message_id']).encode()).hexdigest()[:24], enforce_nonce=True)
+            parent = discord(config, 'POST', payload=body)
+        if parent.get('channel_id') != config['channel_id'] or not ID.fullmatch(parent.get('id', '')):
+            raise ValueError('Unconfirmed summary')
+        job['parent_id'] = parent['id']
+        save(path, state)
+    if coordinator:
+        bundles = state.setdefault('bundles', {})
+        bundles.setdefault(job['parent_id'], {'kind': job['kind'], 'created': time.time(), 'results': {}})
+        save(path, state)
+    try:
+        parent = discord(config, suffix='/' + job['parent_id'])
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+        state['last_result'] = {'request_id': job['message_id'], 'kind': job['kind'],
+                                'ai_usage': job['ai_usage'], 'delivery_failed': True}
+        del state['pending']
+        save(path, state)
+        return False
+    thread = parent.get('thread')
+    if not thread:
+        if not coordinator:
+            return False
+        try:
+            thread = discord(config, 'POST', '/' + job['parent_id'] + '/threads',
+                             {'name': job['kind'].title() + ' · host details', 'auto_archive_duration': 60})
+        except urllib.error.HTTPError as error:
+            if error.code != 400 or json.loads(error.read(8192)).get('code') != 160004:
+                raise
+            return False  # Creation succeeded before a lost response; recover from the parent next poll.
+    if (thread.get('id') != job['parent_id'] or thread.get('parent_id') != config['channel_id'] or
+            thread.get('type') != 11):
+        raise ValueError('Unexpected details thread')
+    job['thread_id'] = thread['id']
+    save(path, state)
+    return True
+
+
+def refresh_groups(config, state, path):
+    if not config.get('query_nodes') or config['node'] != config['query_nodes'][0]:
+        return
+    for parent_id, bundle in list(state.get('bundles', {}).items()):
+        target = {**config, 'channel_id': parent_id}
+        try:
+            messages = discord(target, suffix='?limit=100')
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+            if time.time() - bundle['created'] < 1200:
+                continue  # The thread may not have been created yet.
+            messages = []
+        for message in sorted(messages, key=lambda m: int(m['id'])):
+            if message.get('author', {}).get('id') != config['bot_user_id'] or message.get('webhook_id'):
+                continue
+            for embed in message.get('embeds', []):
+                node = next((node for node in config['query_nodes'] if embed.get('title') == node + ' · ' + bundle['kind'].title()), None)
+                if node and int(message['id']) >= int(bundle.setdefault('result_ids', {}).get(node, '0')):
+                    bundle['results'][node] = embed
+                    bundle['result_ids'][node] = message['id']
+        body = group_payload(config, bundle, bundle['results'])
+        digest = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+        if digest != bundle.get('delivered'):
+            try:
+                receipt = discord(config, 'PATCH', '/' + parent_id, body)
+            except urllib.error.HTTPError as error:
+                if error.code != 404:
+                    raise
+                del state['bundles'][parent_id]
+                save(path, state)
+                continue
+            if receipt.get('id') != parent_id:
+                raise ValueError('Unconfirmed summary update')
+            bundle['delivered'] = digest
+        if len(bundle['results']) == len(config['query_nodes']) or time.time() - bundle['created'] >= 1200:
+            del state['bundles'][parent_id]
+        save(path, state)
+
+
 def process(config, state, path):
     job = state['pending']
     job.setdefault('ai_usage', None if job.get('started') else ai.record())
+    target = config
+    # Finish already-started legacy replies in place during deployment.
+    if config.get('query_nodes') and job['kind'] != 'help' and not (job.get('reply_id') and not job.get('parent_id')):
+        if not prepare_group(config, state, path):
+            return
+        target = {**config, 'channel_id': job['thread_id']}
     if not job.get('reply_id'):
-        reply = discord(config, 'POST', payload={
+        body = {
             'content': '⏳ **Working…** ' + clean(config['node']) + '\nChecking this host and its guests. Updates can take 2–5 minutes.',
-            'message_reference': {'message_id': job['message_id'], 'fail_if_not_exists': False},
             'allowed_mentions': {'parse': []},
-            'nonce': hashlib.sha256((config['node'] + job['message_id']).encode()).hexdigest()[:24], 'enforce_nonce': True})
-        if reply.get('channel_id') != config['channel_id'] or not ID.fullmatch(reply.get('id', '')):
+            'nonce': hashlib.sha256((config['node'] + job['message_id']).encode()).hexdigest()[:24], 'enforce_nonce': True}
+        if not job.get('thread_id'):
+            body['message_reference'] = {'message_id': job['message_id'], 'fail_if_not_exists': False}
+        reply = discord(target, 'POST', payload=body)
+        if reply.get('channel_id') != target['channel_id'] or not ID.fullmatch(reply.get('id', '')):
             raise ValueError('Unconfirmed reply')
         job['reply_id'] = reply['id']
         save(path, state)
@@ -438,8 +588,9 @@ def process(config, state, path):
                     return
                 last_progress[0] = time.monotonic()
                 try:
-                    discord(config, 'PATCH', '/' + job['reply_id'], {'content': '⏳ **Working…** ' + clean(config['node']) + '\n' + detail,
+                    discord(target, 'PATCH', '/' + job['reply_id'], {'content': '⏳ **Working…** ' + clean(config['node']) + '\n' + detail,
                             'allowed_mentions': {'parse': []}})
+                    refresh_groups(config, state, path)
                 except Exception:
                     pass
             try:
@@ -454,11 +605,16 @@ def process(config, state, path):
         save(path, state)
     if not job['payload'].get('embeds'):
         job['payload']['content'] = job['payload']['content'].split('\nAI:')[0] + '\nAI: ' + ai.label(job['ai_usage']).removeprefix('AI: ')
-    receipt = discord(config, 'PATCH', '/' + job['reply_id'], job['payload'])
+        if job.get('thread_id'):
+            job['payload'] = {'content': '', 'embeds': [{'title': config['node'] + ' · ' + job['kind'].title(),
+                'description': job['payload']['content'].split('\nAI:')[0][:450], 'color': 0xE67E22,
+                'footer': {'text': ai.label(job['ai_usage'])}}], 'allowed_mentions': {'parse': []}}
+            save(path, state)
+    receipt = discord(target, 'PATCH', '/' + job['reply_id'], job['payload'])
     if receipt.get('id') != job['reply_id']:
         raise ValueError('Unconfirmed result')
     state['last_result'] = {'request_id': job['message_id'], 'reply_id': job['reply_id'], 'kind': job['kind'],
-                            'ai_usage': job['ai_usage']}
+                            'ai_usage': job['ai_usage'], 'parent_id': job.get('parent_id')}
     del state['pending']
     save(path, state)
 
@@ -467,8 +623,11 @@ def poll(config, state, path):
     today = time.strftime('%Y-%m-%d', time.gmtime())
     if state.get('day') != today:
         state.update(day=today, calls=0, checks=0)
+    refresh_groups(config, state, path)
     if state.get('pending'):
         process(config, state, path)
+        if state.get('pending'):
+            return
     if 'cursor' not in state:
         messages = discord(config, suffix='?limit=100')
         # First activation never executes historical requests.
@@ -483,6 +642,9 @@ def poll(config, state, path):
         kind = intent(message, config)
         timestamp = ((int(message['id']) >> 22) + 1420070400000) / 1000
         if kind and 0 <= time.time() - timestamp < 900:
+            if kind == 'help' and config.get('query_nodes') and config['node'] != config['query_nodes'][0]:
+                save(path, state)
+                continue
             state['pending'] = {'message_id': message['id'], 'kind': kind}
             if kind != 'help' and (state['checks'] >= 20 or time.time() - state.get('last_checks', {}).get(kind, 0) < 60):
                 reason = 'Daily check limit reached (20).' if state['checks'] >= 20 else 'That check just ran. Wait one minute before repeating it.'
@@ -493,7 +655,10 @@ def poll(config, state, path):
                 state.setdefault('last_checks', {})[kind] = time.time()
             save(path, state)
             process(config, state, path)
+            if state.get('pending'):
+                return
         save(path, state)
+    refresh_groups(config, state, path)
 
 
 def main():
@@ -510,6 +675,11 @@ def main():
             raise ValueError('Invalid Discord identity')
     if config['bot_user_id'] == config['owner_user_id']:
         raise ValueError('Owner must be human')
+    nodes = config.get('query_nodes')
+    if nodes is not None and (not isinstance(nodes, list) or not 1 <= len(nodes) <= 6 or
+            any(not isinstance(node, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,60}', node) for node in nodes) or
+            len(set(nodes)) != len(nodes) or config['node'] not in nodes):
+        raise ValueError('Invalid summary host list')
     path = Path(config['state_dir']) / 'state.json'
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (path.parent / 'lock').open('a') as lock:

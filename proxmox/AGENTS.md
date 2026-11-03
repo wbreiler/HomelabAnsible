@@ -518,6 +518,11 @@ Use `../terraform/README.md` for provisioning and media management.
 * Accept only the configured human owner's mentions in the configured channel.
   Preserve cursors, stale-message rejection, budgets, and saved reply retries.
   Never replay an interrupted inspection automatically.
+* With `query_nodes`, only the first configured host writes the shared channel
+  summary. Workers write independent details inside its thread. Preserve this
+  single-writer rule, bot-author validation, explicit missing-host state, and
+  per-host cost accounting. Keep the ordered host list in the ignored bot JSON.
+  Run `tests/test_maintenance_query_groups.py` for delivery changes.
 * Run only fixed health/update probes. User text and model output must never
   become commands, URLs, or repair authorization. No updater entry point,
   backup, artifact resolution, pin writes, guest power, or service mutation.

@@ -7,9 +7,10 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
 **Second play**: `site.yml` also applies network tuning to both proxmox_cluster and pbs_nodes groups
 
 [Discord health and update queries](docs/maintenance-queries.md) provides
-owner-mentioned, read-only checks on PVE, PBS, and TrueNAS. Each host replies
-with measured results, custom-app version comparisons, and an AI summary with
-its model and estimated cost. Image/source checks include pinned containers,
+owner-mentioned, read-only checks on PVE, PBS, and TrueNAS. One shared reply
+shows host sections, custom-app version comparisons, and the total estimated
+API cost. Optional thread replies retain each host's details and model.
+Image/source checks include pinned containers,
 native LXC apps, and Minecraft packs.
 
 ## Provisioning ownership

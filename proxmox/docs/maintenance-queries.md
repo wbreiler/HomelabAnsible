@@ -11,10 +11,11 @@ Mention **Homelab Repairs** in the dedicated maintenance channel:
 Only the configured owner's mentions in that channel trigger inspections.
 Other users, bots, webhooks, and unmentioned conversations are ignored. Discord
 allows bots to read messages mentioning them without Message Content Intent.
-Each server posts one reply for itself and its guests. The reply starts with
-**Working…** and changes to a short summary, measured totals, and up to five
-installed → available app comparisons. Update summaries have a 200-character
-display limit. Confirmed comparisons appear before uncertain image changes.
+Each request gets **one channel reply**, with a separate section for each host.
+The reply starts with **Working…** and updates as hosts finish. Each section
+shows measured totals, a short summary, and up to two version comparisons.
+An optional thread holds the full host replies, including up to five installed
+→ available comparisons. Confirmed comparisons appear before uncertain image changes.
 Full normalized evidence stays in the host's private report. PVE/PBS poll
 every 10 seconds. TrueNAS polls every minute. Update checks can take 2–5 minutes.
 
@@ -75,9 +76,10 @@ normalized facts, `store: false`, a strict JSON schema, no tools, and at most
 and arbitrary user text do not leave the host. Measured details and coverage
 limits accompany the AI summary. API failure or the request cap leaves a factual
 reply. Stronger models remain reserved for repair proposals and result reviews.
-Each reply's footer shows the actual model identifier and its estimated API cost
-in USD. The estimate uses returned token usage, including cache discounts.
-Skipped calls show $0. Missing usage shows cost unavailable. See
+The shared footer shows the reported model identifiers and total estimated API
+cost in USD. It sums the rounded per-host estimates, including cache discounts.
+Each thread reply retains its own model and cost. Incomplete requests show a
+subtotal. Skipped calls show $0. Missing usage remains explicitly unavailable. See
 [cost accounting and rates](maintenance-briefs.md#model-and-estimated-cost).
 
 Each host permits 20 checks per UTC day, with one minute between repetitions
@@ -94,6 +96,15 @@ It does not trigger a second OpenAI call or another completed inspection.
 See [Discord rate limits](https://docs.discord.com/developers/topics/rate-limits)
 and [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
 
+The first configured host coordinates the channel reply. Other hosts publish
+their results only inside its details thread. This avoids simultaneous edits
+overwriting another host's section. The coordinator refreshes the reply during
+its check and subsequent polls. After 20 minutes, missing hosts are marked as
+unreported. A missing response never counts as a healthy host. Coordination
+uses Discord and needs no cross-host SSH access or additional model call.
+The coordinator must be available to begin a combined reply. Its saved state
+survives worker restarts. Delivery retries reuse completed results.
+
 ## Deployment
 
 The worker reuses `proxmox/.maintenance-repairs-discord.json` and
@@ -101,10 +112,24 @@ The worker reuses `proxmox/.maintenance-repairs-discord.json` and
 root-only credentials. No cross-host SSH credential, new API account, inbound
 port, or external controller is required.
 
+For combined replies, add `query_nodes` to the ignored bot JSON on the controller,
+with the same ordered list on every deployment. The first host is the coordinator.
+Names must match the configured inventory names. For example:
+
+```json
+"query_nodes": ["pve-a", "pve-b", "backup", "storage"]
+```
+
+One to six unique hosts are supported. Omitting the list preserves standalone
+host replies. The bot also needs **Create Public Threads** and **Send Messages
+in Threads** in the maintenance channel. Existing owner-only routing still
+applies. Only the coordinator answers help requests.
+
 From `proxmox/`:
 
 ```sh
 python3 tests/test_maintenance_queries.py
+python3 tests/test_maintenance_query_groups.py
 python3 tests/test_app_versions.py
 python3 tests/test_openai_usage.py
 ansible-lint
@@ -215,3 +240,25 @@ because its 1Password SSH agent refused signing. After the owner unlocked
 The installed PBS renderer passed the 200-character check using saved evidence.
 Its bot timer, backup proxy, and pools remained healthy. Verification did not
 make another OpenAI request or alter the existing query counters.
+
+### Combined reply rollout later that day
+
+The shared-reply implementation passed 104 maintenance/query tests, including
+12 grouping tests, plus 14 app-version tests and five cost tests. Both projects
+passed lint and syntax checks. Grouping tests cover one public reply, independent
+thread results, retries without repeated inspections or API calls, forged-result
+rejection, missing hosts, unknown costs, and newest-result ordering.
+
+A labeled Discord preview used previously saved results. It created one channel
+message and four optional thread details. Readback confirmed four host sections
+and the aggregated footer. One legacy result lacked cost metadata and remained
+explicitly unavailable. This preview made no OpenAI calls or host inspections.
+
+Linux deployment and repeat application passed on both PVE hosts and PBS.
+TrueNAS deployment remains blocked by its 1Password SSH signing failure.
+Activation is held: the Linux workers retain standalone replies through a
+temporary deployment override, so a mixed rollout cannot leave a shared summary
+waiting for a legacy TrueNAS reply. The ignored bot JSON retains the intended
+ordered `query_nodes` list. After restoring TrueNAS authentication, deploy its
+scoped worker first, then rerun the normal Linux playbook without the temporary
+override. Verify a new owner mention before claiming the combined path live.

@@ -11,6 +11,13 @@
       - maintenance_queries_discord.bot_user_id is match('^[0-9]{17,20}$')
       - maintenance_queries_discord.channel_id is match('^[0-9]{17,20}$')
       - maintenance_queries_discord.bot_user_id != maintenance_queries_discord.owner_user_id
+      - (maintenance_queries_discord.query_nodes | default([maintenance_queries_node]) | type_debug) == 'list'
+      - maintenance_queries_discord.query_nodes | default([maintenance_queries_node]) | length >= 1
+      - maintenance_queries_discord.query_nodes | default([maintenance_queries_node]) | length <= 6
+      - maintenance_queries_node in maintenance_queries_discord.query_nodes | default([maintenance_queries_node])
+      - >-
+        maintenance_queries_discord.query_nodes | default([maintenance_queries_node]) | unique | length
+        == maintenance_queries_discord.query_nodes | default([maintenance_queries_node]) | length
   no_log: true
 
 - name: Create private query state directory
