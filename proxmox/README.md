@@ -711,6 +711,7 @@ Radarr, Seerr, Gitea Mirror, Diun, Vaultwarden, Zipline, Bambuddy, NexDeck,
 Speedtest Tracker, and Homelable. The signed package path covers Alloy,
 Loki, Grafana, and Tailscale. Optional `lxc_app_updates_native_guests` mappings
 enable Nginx Proxy Manager, SABnzbd, Open WebUI, LibreSpeed, and netboot.xyz.
+For DHCP settings across VLANs, see [PXE network boot](docs/network-boot.md).
 See the variable example and `roles/lxc_app_updates/files/catalog.yml`.
 
 SearXNG publishes no stable releases and remains manual. Manual Minecraft

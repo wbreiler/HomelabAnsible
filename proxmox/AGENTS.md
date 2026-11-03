@@ -619,3 +619,12 @@ Use `../terraform/README.md` for provisioning and media management.
 * TrueNAS routes require `scheme: https` and `require_tls_upstream: true`.
   Validate DNS and TLS from each calling application, not only the browser.
   Keep proxy upstreams on infrastructure addresses to avoid a proxy loop.
+
+### PXE network boot
+
+* `files/unifi_pxe.py` previews or partially updates DHCP boot settings through
+  the UniFi controller API over verified SSH. It backs up before writing and
+  checks complete readback. Keep the API key and deployment JSON outside Git.
+* DHCP belongs to each subnet's actual router. Do not enable UniFi routing on
+  an externally routed VLAN. Arista changes need explicit approval through its
+  separate workflow. See `docs/network-boot.md` for verification and recovery.
