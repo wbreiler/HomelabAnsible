@@ -212,8 +212,8 @@ The cache role configures only that guest and its local APT proxy. It does not
 change other clients or install Avahi for cache advertisement. Its health
 check verifies the local cache report page.
 
-LXCs use Debian templates. VMs support Debian or Ubuntu installation ISOs and
-always use UEFI with Secure Boot. Unsupported apps and Fedora profiles fail
+LXCs use Debian templates. New VMs install Debian or Ubuntu through PXE and
+always use UEFI with Secure Boot. Configure the [PXE service and library](#pxe-service-and-library) first. Unsupported apps and Fedora profiles fail
 before provisioning because the current guest application role requires a
 Debian-family guest. Other applications need a guest-targeted Ansible entry
 point before they can join the allowlist. Legacy node-targeted roles are not
@@ -231,15 +231,20 @@ VMID allocation checks live guests, retained installer inputs, and the ignored
 Minecraft deployment. Retained installer inputs also reserve their original
 VMIDs and IPs in the existing installer schema.
 IP checks reject addresses already present in Terraform state or accepting SSH.
-Use an allocated static IP outside DHCP. These checks cannot prove that every
+Use an allocated static IP outside DHCP. Set `vlan_id = 0` for an untagged
+interface on a bridge whose native network is the desired VLAN. Use a nonzero
+tag only when the bridge uplink carries that VLAN tagged. These checks cannot prove that every
 unmanaged or powered-off network device has released an address.
-The scoped `TerraformGuest` role must already exist. Trusted root SSH to the
+The scoped `TerraformGuest` role must already exist. The API user and token also
+need `SDN.Use` on the selected bridge/VLAN. The workflow does not widen those
+network permissions. Trusted root SSH to the
 Proxmox endpoint grants that existing role only on the new `/vms/<id>` path,
 for the configured API user and token. It does not change existing guest,
 cluster, network, or storage permissions.
 
 New LXCs default to two cores, 2 GiB RAM, and an 8 GiB disk. VMs default to two
-cores, 2 GiB RAM, and a 24 GiB disk. Both default to host auto-start enabled.
+cores and a 24 GiB disk. Debian VMs default to 2 GiB RAM. Ubuntu PXE VMs
+default to 8 GiB because their live ISO loads into memory. Both default to host auto-start enabled.
 VM system disks default to backup enabled. Disposable validation profiles
 explicitly disable both. LXCs follow the existing backup
 selection. Profiles can set `cores`, `memory_mb`, `disk_gb`, `on_boot`, and VM
@@ -514,18 +519,39 @@ apply, and verify the dataset's `acltype` and the final Terraform plan.
 
 ## Platform policy and media
 
-### ISO library
+### PXE service and library
 
-`proxmox/iso.tf` caches a checksum-pinned ISO library on each selected node.
-Copy `iso.auto.tfvars.example` to ignored `iso.auto.tfvars` and supply the
-server URL, nodes, and filename-to-SHA256 map. Obtain hashes through trusted
-access to the source files. A hash pins those bytes but does not establish
-the publisher's identity. Use a new filename for each new image version.
+The PXE guest stores the ISO library under `/srv/pxe/iso` and serves it directly
+through HTTP. It does not proxy installation traffic to the NAS. Terraform
+owns the library through `proxmox/pxe.tf`. Ansible configures the existing guest
+through [pxe-guests.yml](../proxmox/pxe-guests.yml). Terraform also owns any
+required guest disk expansion. Allow space for the source ISOs, extracted
+Fedora trees, and per-VM Debian initrds.
 
-The deployment uses the dedicated Erebus ISO server. Its actual address,
-node selection, and observed source hashes remain in ignored local variables.
-Existing adopted media keeps its original Terraform addresses and filenames.
-Even similar names or equal sizes do not establish identical content.
+1. Configure the existing service using the [network boot guide](../proxmox/docs/network-boot.md).
+2. Copy `pxe.auto.tfvars.example` and `iso.auto.tfvars.example` to ignored `.auto.tfvars` files.
+3. Set the PXE address, SSH public-key selector, source URL, filenames, and trusted SHA256 pins.
+4. Review and apply a saved plan that only adds the expected PXE library resource.
+5. Verify the HTTP library before deploying a guest profile.
+
+`iso_library.base_url` is the import source. Terraform copies each original ISO
+onto PXE and verifies its checksum before publishing it. An existing filename
+with different bytes fails instead of being overwritten. New VMs fetch their
+installer files from PXE. Add new image versions under new filenames. No library
+operation removes original NAS files, cached Proxmox files, or older PXE files.
+The publisher can use direct guest SSH, or `container_id` with the hosting node's
+SSH address for an existing Proxmox LXC.
+
+Set `cached_files = []` for a new PXE-only deployment. Existing deployments must
+list every previously managed Proxmox ISO in `cached_files` to preserve those
+resources. Omitting this field retains the legacy behavior of caching all images
+on every selected node. Do not remove existing cache resources as migration cleanup.
+The node set still bounds where installation VMs can run.
+
+### Retained Proxmox ISO caches
+
+`proxmox/iso.tf` retains existing checksum-pinned caches and their resource
+addresses. These files remain recovery media. New PXE VMs do not attach them.
 
 Each new ISO has `overwrite = false`, `overwrite_unmanaged = false`, and
 `prevent_destroy = true`. Source URLs and checksums are creation metadata,
@@ -562,7 +588,7 @@ Automatic installation validation is covered below.
 ### Automatic Debian, Ubuntu, and Fedora installation
 
 `proxmox/iso-install.tf` provisions fresh AMD64 server VMs in one Terraform
-apply. It builds a separate private ISO, creates the VM, and waits until SSH
+apply. With `boot_method = "pxe"`, it publishes network boot files, creates the VM, and waits until SSH
 confirms the installed OS, generated machine UUID, completion marker, disk
 root, locked accounts, disabled password/root SSH login, guest-agent health,
 and zero failed systemd units. It never types installer answers into a console.
@@ -570,9 +596,11 @@ and zero failed systemd units. It never types installer answers into a console.
 Supported source profiles are Debian netinst, Ubuntu live-server, and Fedora
 Server DVD. Select a filename already present in the checksum-pinned
 `iso_library`. The source is cached and SHA256-verified on the controller.
-Original NAS and Proxmox ISOs are never edited or replaced.
+Original NAS and Proxmox ISOs are never edited or replaced. Debian PXE uses a
+separately pinned Debian 13 network kernel and initrd. Ubuntu uses its ISO
+kernel/initrd and loads the ISO from PXE. Fedora uses its extracted DVD tree.
 
-The controller needs Python 3.11+, xorriso, and an unlocked SSH agent containing
+The controller needs Python 3.11+, xorriso, rsync, and an unlocked SSH agent containing
 the private counterpart of the selected public key. On this Mac, xorriso
 1.5.8.pl02 was installed with Homebrew. No build tools were installed on PVE.
 The HCP workspace must retain Local execution mode.
@@ -596,6 +624,14 @@ Normal VMs enable host boot and backup of the system disk. Validation VMs
 explicitly disable both. The existing cluster backup policy determines coverage.
 No HA or replication policy is added automatically.
 
+For PXE, set `boot_method = "pxe"`, `firmware = "uefi"`, and `secure_boot = true`.
+The guest profile workflow sets these automatically. PXE VMs have no CD-ROM,
+boot their disk before `net0`, and include VirtIO RNG for OVMF network drivers.
+After installed-system verification, Terraform removes the automatic PXE entry
+and saves a completion marker on PXE. Later media publication preserves that marker.
+A later disk failure therefore cannot silently start another installation.
+Unregistered clients receive the interactive netboot.xyz menu.
+
 Set `firmware = "uefi"` before creation to use OVMF, a q35 machine, and a
 private persistent 4m EFI variables disk on the selected VM datastore. BIOS
 remains the default and has no EFI disk. Set `secure_boot = true` together
@@ -606,19 +642,14 @@ guard blocks. Create a new VM entry for a different policy. No custom signing
 keys, MOK enrollment, or TPM provisioning are needed for these signed distro
 bootloaders and kernels. TPM and custom module signing remain outside this workflow.
 
-Debian receives a root-only preseed inside its initramfs. Ubuntu receives
-`autoinstall.yaml` on the derived media. Fedora receives Kickstart on that
-media. Each installer verifies its own machine UUID before partitioning and
-selects only `/dev/sda`. The boot menus default immediately to installation.
-Xorriso retains the hybrid BIOS/UEFI boot layout. Installed machines
-boot their disk first, so leaving their read-only installation media attached
-does not restart the installer. No post-install flag or console work is needed.
+Debian receives a preseed inside its network initrd. Ubuntu receives NoCloud
+user-data over HTTP. Fedora receives Kickstart over HTTP. Every installer checks
+its own machine UUID before partitioning and selects only `/dev/sda`.
 
-Fedora's DVD also stores GRUB menus inside its hidden EFI image. The builder
-updates both mirrored menus in that private copy, retaining FAT file sizes and
-allocation. It replaces the appended EFI partition and verifies both EFI boot
-records against the updated image. Unknown layouts or oversized menus fail
-before upload. The pinned source image remains unchanged.
+Existing definitions default to `boot_method = "iso"` to preserve their immutable
+media and resource addresses. That legacy builder embeds answers into a private
+ISO and retains its hybrid BIOS/UEFI layout. It remains available for recovery.
+New guest profiles select PXE. No existing guest is converted or reinstalled.
 
 The bootstrap account has key-only SSH and password-free sudo. Root and user
 passwords stay locked. Private keys and real passwords never enter an ISO or
@@ -634,13 +665,13 @@ state. Enabled Secure Boot additionally requires enrolled PK, KEK, and db
 variables, disabled Setup Mode, active shim validation, and kernel lockdown
 in integrity or confidentiality mode. A firmware flag alone cannot pass.
 
-Keep controller `artifacts/iso-install/` protected. It contains source caches,
-per-VM images, manifests, known-host keys, and verification evidence. Derived
-media includes network settings and account policy even though it contains no
-password or private key. Never publish these images or answer files through
-the ISO web server. Allow source-cache space, one full image per VM, build
-workspace, and twice each concurrent image size for the provider's upload.
-`-parallelism=2` limits simultaneous builds/uploads and installations.
+Keep controller `artifacts/iso-install/` and `artifacts/pxe/` protected. They
+contain source caches, manifests, SSH host keys, and verification evidence.
+The LAN HTTP service exposes per-VM answer files with public keys and network
+settings. It must not contain passwords or private keys. Use trusted installation
+networks. Secure Boot validates signed loaders and kernels, not HTTP answer files.
+Do not publish the legacy private ISOs. PXE avoids a full derived ISO per VM.
+Ubuntu PXE requires at least 8 GiB RAM. `-parallelism=2` bounds concurrent installs.
 
 Installation inputs are creation-only: use a new entry for another machine.
 Existing images are immutable and checksum-checked before reuse. Builder

@@ -31,9 +31,9 @@ Save plans with the ignored `.tfplan` extension. Git is not a state backup.
 | Path under `proxmox/` | Purpose |
 | --- | --- |
 | `main.tf`, `platform.tf`, `pilot.tf` | Provider/discovery, sensitive PBS input, and bounded pilot definitions |
-| `iso.tf`, `debian-install.tf`, `iso-install.tf` | Pinned media and installation resources |
+| `iso.tf`, `pxe.tf`, `debian-install.tf`, `iso-install.tf` | Pinned media and installation resources |
 | `scripts/deploy_guest.py` | Validated profile, VMID allocation, guarded plans, and application handoff |
-| `scripts/iso_install.py` | Private installer construction and installed-guest verification |
+| `scripts/pxe_install.py`, `scripts/iso_install.py` | PXE publication, retained ISO construction, and installed-guest verification |
 | `*.tftest.hcl`, `tests/` | Mock-provider and local Python regression checks |
 
 ## Guest workflow
@@ -45,7 +45,11 @@ The preview still reads live state and creates protected local artifacts.
 It restores temporary definition edits and does not apply or run Ansible.
 
 - Supported applications are Gatus, Apt-Cacher NG, and LibreSpeed. The workflow
-  supports Debian LXCs and Debian/Ubuntu VMs with UEFI and Secure Boot.
+  supports Debian LXCs and Debian/Ubuntu PXE VMs with UEFI and Secure Boot.
+  The PXE service must exist before library publication or guest deployment.
+  Preserve legacy ISO inputs and caches. PXE does not authorize their deletion.
+  Ubuntu PXE needs at least 8 GiB RAM. Retire automatic entries only after
+  installed-system verification. Re-arm them only for a reviewed new VM creation.
   The lower-level ISO installer also supports Fedora. Do not conflate them.
 - VMID allocation checks the live cluster, ignored Minecraft definitions,
   and retained installation inputs. Preserve their reservations. Check IP

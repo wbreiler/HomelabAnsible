@@ -54,6 +54,22 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual((job/'previous-install-known_hosts').read_text(),'previous-host-key')
             self.assertEqual((cache/'known_hosts').read_text(),'previous-host-key')
 
+    def test_reviewed_recreation_rearms_only_its_retained_pxe_identity(self):
+        identifier = '00000000-0000-4000-8000-000000000001'
+        p = dict(example('vm'), vm_id=132)
+        media = {'uuid': identifier, 'name': p['name']}
+        resources = [
+            {'address': 'terraform_data.install_identity["workflow-test"]', 'values': {'id': identifier}},
+            {'address': 'terraform_data.pxe_media["workflow-test"]', 'values': {'input': media}},
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(deploy, 'ROOT', Path(directory)), patch.object(deploy.subprocess, 'run') as run:
+            deploy.prepare_vm_recreation(p, resources, Path(directory))
+            self.assertEqual(json.loads(run.call_args.kwargs['env']['ISO_INSTALL_SPEC']), media)
+            media['uuid'] = '00000000-0000-4000-8000-000000000002'
+            with self.assertRaisesRegex(ValueError, 'Inconsistent retained PXE'):
+                deploy.prepare_vm_recreation(p, resources, Path(directory))
+            self.assertEqual(run.call_count, 1)
+
     def test_new_guest_access_never_passes_token_secret_to_ssh(self):
         p=dict(example(),vm_id=132)
         with patch.dict(deploy.os.environ,{'PROXMOX_VE_API_TOKEN':'terraform@pve!pilot=private-secret'}),patch.object(deploy,'ssh_args',return_value=['ssh','test-node']),patch.object(deploy.subprocess,'run') as run:
@@ -90,6 +106,13 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(calls[-1][-1],'apt-cacher-ng-guests.yml')
         self.assertEqual(json.loads((d/'complete.json').read_text())['app'],'apt_cacher_ng')
 
+    def test_native_vlan_uses_an_untagged_interface(self):
+        profile = deploy.validate(dict(example(), vlan_id=0))
+        self.assertEqual(profile['vlan_id'], 0)
+        config = deploy.lxc_config(dict(profile, vm_id=999))
+        resource = next(iter(config['resource']['proxmox_virtual_environment_container'].values()))
+        self.assertIsNone(resource['network_interface'][0]['vlan_id'])
+
     def test_profile_boundaries(self):
         p=example()
         for key,value in [('name','x;id'),('name','../test'),('kind','qemu'),('app','unknown'),('os','fedora'),
@@ -104,6 +127,7 @@ class WorkflowTests(unittest.TestCase):
         spec=deploy.vm_spec(p)
         self.assertEqual(spec['firmware'],'uefi')
         self.assertIs(spec['secure_boot'],True)
+        self.assertEqual(spec['boot_method'],'pxe')
         self.assertEqual(spec['disk_gb'],24)
         self.assertTrue(spec['on_boot'])
         self.assertTrue(spec['backup'])
@@ -228,6 +252,20 @@ class WorkflowTests(unittest.TestCase):
         (root/'iso-install.auto.tfvars.json').write_text(json.dumps({'iso_installations':{p['name']:deploy.vm_spec(p)}}))
         execute()
         self.assertEqual(calls[-1][0],'ansible-playbook')
+
+    def test_legacy_ubuntu_resume_keeps_its_recorded_memory_default(self):
+        root, p, directory, calls, execute = self.harness('vm', owned=True, plans=[{'resource_changes': []}])
+        p['os'] = 'ubuntu'
+        raw = dict(p)
+        raw.pop('memory_mb')
+        self.assertEqual(deploy.validate(raw)['memory_mb'], 8192)
+        (root / 'profile.json').write_text(json.dumps(raw))
+        deploy.write_json(directory / 'profile.json', p)
+        spec = dict(deploy.vm_spec(p), boot_method='iso')
+        (root / 'iso-install.auto.tfvars.json').write_text(json.dumps({'iso_installations': {p['name']: spec}}))
+        execute()
+        self.assertEqual(json.loads((directory / 'profile.json').read_text())['memory_mb'], 2048)
+        self.assertEqual(calls[-1][0], 'ansible-playbook')
 
     def test_existing_guest_without_workflow_record_is_rejected(self):
         root,p,d,calls,execute=self.harness('vm',owned=True)

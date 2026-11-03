@@ -1,0 +1,7 @@
+pxe_server = {
+  host                = "192.0.2.10"
+  http_url            = "http://192.0.2.10"
+  ssh_public_key_file = "~/.ssh/lxc.pub"
+  # For publication through a Proxmox node, use its host/key and set container_id.
+  # container_id = 999
+}

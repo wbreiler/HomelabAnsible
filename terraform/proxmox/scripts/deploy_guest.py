@@ -45,6 +45,8 @@ def validate(profile):
     p = dict(app="gatus", datastore_id="local-zfs", bridge="vmbr0", cores=2, memory_mb=2048,
              on_boot=True, backup=True, os="debian")
     p.update(profile)
+    if p.get("kind") == "vm" and p.get("os") == "ubuntu" and "memory_mb" not in profile:
+        p["memory_mb"] = 8192
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,45}[a-z0-9]", p.get("name", "")):
         raise ValueError("Use a hostname with 2–47 lowercase letters, digits, or hyphens")
     if p.get("kind") not in {"lxc", "vm"} or p["app"] not in APPS:
@@ -54,7 +56,7 @@ def validate(profile):
     for field in ["node_name", "datastore_id", "bridge"]:
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,62}", p.get(field, "")):
             raise ValueError("Invalid " + field)
-    for field, low, high in [("vlan_id", 1, 4094), ("cores", 1, 16), ("memory_mb", 2048, 32768)]:
+    for field, low, high in [("vlan_id", 0, 4094), ("cores", 1, 16), ("memory_mb", 2048, 32768)]:
         if type(p.get(field)) is not int or not low <= p[field] <= high:
             raise ValueError("Invalid " + field)
     if "vm_id" in p and (type(p["vm_id"]) is not int or not 100 <= p["vm_id"] <= 999999999):
@@ -100,7 +102,7 @@ def address(p):
 def vm_spec(p):
     fields = ["vm_id", "node_name", "datastore_id", "os", "iso_filename", "bridge", "vlan_id", "ipv4_address",
               "gateway", "dns_servers", "ssh_public_key_file", "cores", "memory_mb", "disk_gb", "on_boot", "backup"]
-    return dict({key: p[key] for key in fields}, firmware="uefi", secure_boot=True)
+    return dict({key: p[key] for key in fields}, firmware="uefi", secure_boot=True, boot_method="pxe")
 
 
 def lxc_config(p, bootstrap=False):
@@ -113,7 +115,7 @@ def lxc_config(p, bootstrap=False):
         "initialization": {"hostname": p["name"], "dns": {"servers": p["dns_servers"]},
                            "ip_config": {"ipv4": {"address": p["ipv4_address"], "gateway": p["gateway"]}},
                            "user_account": {"keys": [Path(p["ssh_public_key_file"]).read_text().strip()]}},
-        "network_interface": [{"name": "eth0", "bridge": p["bridge"], "vlan_id": p["vlan_id"]}],
+        "network_interface": [{"name": "eth0", "bridge": p["bridge"], "vlan_id": p["vlan_id"] or None}],
         "lifecycle": {"prevent_destroy": True, "ignore_changes": ["tags"]},
     }
     if bootstrap:
@@ -131,7 +133,7 @@ def review_plan(plan, p, start=False):
     allowed = {address(p)}
     if p["kind"] == "vm":
         allowed |= {kind + '[' + json.dumps(p["name"]) + ']' for kind in [
-            "terraform_data.install_identity", "terraform_data.install_media", "proxmox_virtual_environment_file.install_media", "terraform_data.installation_ready"]}
+            "terraform_data.install_identity", "terraform_data.install_media", "terraform_data.pxe_media", "proxmox_virtual_environment_file.install_media", "terraform_data.installation_ready"]}
     if plan.get("errored") or plan.get("deferred_changes"):
         raise ValueError("Terraform plan is incomplete")
     for r in plan.get("resource_changes", []):
@@ -213,6 +215,14 @@ def prepare_vm_recreation(p, resources, directory):
                 shutil.copy2(source, directory / ("previous-install-" + name))
         # A reviewed new VM creation legitimately rotates host keys. The installer repins only after UUID and OS verification.
         verified.unlink()
+    media = next((r for r in resources if r['address'] == 'terraform_data.pxe_media[' + json.dumps(p['name']) + ']'), None)
+    if media:
+        spec = media['values']['input']
+        if spec['uuid'] != identifier or spec['name'] != p['name']:
+            raise ValueError('Inconsistent retained PXE identity')
+        # Only a reviewed, new VM creation may re-arm a retired network installer.
+        subprocess.run(['python3', str(ROOT / 'scripts/pxe_install.py'), 'rearm'],
+                       env={**os.environ, 'ISO_INSTALL_SPEC': json.dumps(spec)}, check=True)
 
 
 def grant_new_guest_access(p):
@@ -303,7 +313,8 @@ def load_environment():
 def deploy(args):
     os.umask(0o077)
     source = args.profile.resolve()
-    p = validate(json.loads(source.read_text()))
+    profile = json.loads(source.read_text())
+    p = validate(profile)
     load_environment()
     terraform = args.terraform or os.environ.get("TF_BIN") or shutil.which("terraform")
     if not terraform or not shutil.which("ansible-playbook"):
@@ -319,6 +330,8 @@ def deploy(args):
         recorded = directory / "profile.json"
         if recorded.exists():
             previous = json.loads(recorded.read_text())
+            if "memory_mb" not in profile:
+                p = validate(dict(profile, memory_mb=previous["memory_mb"]))
             p.setdefault("vm_id", previous["vm_id"])
             if {k:v for k,v in p.items() if k != "app_vars_file"} != {k:v for k,v in previous.items() if k != "app_vars_file"}:
                 raise ValueError("Guest hardware is immutable in this creation workflow. Use a separately reviewed Terraform change")
@@ -373,10 +386,11 @@ def deploy(args):
                 installations = variables.setdefault("iso_installations", {})
                 if p["name"] in installations:
                     existing = installations[p["name"]]
-                    normalized = dict(cores=2, memory_mb=2048, disk_gb=24, on_boot=True, backup=True, firmware="bios", secure_boot=False)
+                    expected = dict(vm_spec(p), boot_method=existing.get("boot_method", "iso"))
+                    normalized = dict(cores=2, memory_mb=2048, disk_gb=24, on_boot=True, backup=True, firmware="bios", secure_boot=False, boot_method="iso")
                     normalized.update(existing)
                     normalized["ssh_public_key_file"] = str(Path(normalized["ssh_public_key_file"]).expanduser().resolve())
-                    if any(normalized.get(k) != v for k, v in vm_spec(p).items()) or existing.get("username", "ansible") != "ansible":
+                    if any(normalized.get(k) != v for k, v in expected.items()) or existing.get("username", "ansible") != "ansible":
                         raise ValueError("An installation entry already exists with different settings")
                 else:
                     installations[p["name"]] = vm_spec(p)

@@ -1,6 +1,7 @@
 iso_library = {
   base_url = "http://your-iso-server.example"
   nodes    = ["your-node"]
+  cached_files = [] # retain existing cache filenames when migrating an existing deployment
   files = {
     "versioned-installer.iso" = "REPLACE_WITH_TRUSTED_LOWERCASE_SHA256"
   }

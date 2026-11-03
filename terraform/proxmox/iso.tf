@@ -5,6 +5,7 @@ variable "iso_library" {
     nodes        = set(string)
     datastore_id = optional(string, "local")
     files        = map(string)
+    cached_files = optional(set(string))
   })
   default = null
 
@@ -12,6 +13,7 @@ variable "iso_library" {
     condition = var.iso_library == null ? true : (
       can(regex("^https?://[^[:space:]]+$", var.iso_library.base_url)) &&
       length(var.iso_library.nodes) > 0 &&
+      (var.iso_library.cached_files == null ? true : alltrue([for name in var.iso_library.cached_files : contains(keys(var.iso_library.files), name)])) &&
       alltrue([for name, checksum in var.iso_library.files :
         can(regex("^[A-Za-z0-9][A-Za-z0-9_.-]*\\.iso$", name)) &&
         can(regex("^[a-f0-9]{64}$", checksum))
@@ -23,7 +25,7 @@ variable "iso_library" {
 
 locals {
   iso_targets = var.iso_library == null ? {} : {
-    for pair in setproduct(var.iso_library.nodes, keys(var.iso_library.files)) :
+    for pair in setproduct(var.iso_library.nodes, var.iso_library.cached_files == null ? toset(keys(var.iso_library.files)) : var.iso_library.cached_files) :
     "${pair[0]}/${pair[1]}" => {
       node_name = pair[0]
       file_name = pair[1]

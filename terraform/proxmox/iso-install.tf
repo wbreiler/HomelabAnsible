@@ -5,6 +5,7 @@ variable "iso_installations" {
     node_name           = string
     datastore_id        = string
     os                  = string
+    boot_method         = optional(string, "iso")
     firmware            = optional(string, "bios")
     secure_boot         = optional(bool, false)
     iso_filename        = string
@@ -28,10 +29,14 @@ variable "iso_installations" {
       can(regex("^[a-z][a-z0-9-]{0,61}[a-z0-9]$", name)) &&
       contains(["debian", "ubuntu", "fedora"], vm.os) &&
       contains(["bios", "uefi"], vm.firmware) &&
+      contains(["iso", "pxe"], vm.boot_method) &&
+      (vm.boot_method != "pxe" || (vm.firmware == "uefi" && var.pxe_server != null)) &&
+      (vm.boot_method != "pxe" || vm.os != "ubuntu" || vm.memory_mb >= 8192) &&
       (!vm.secure_boot || vm.firmware == "uefi") &&
       can(cidrnetmask(vm.ipv4_address)) &&
       can(regex("^[a-z_][a-z0-9_-]{0,31}$", vm.username)) && vm.username != "root" &&
       can(regex("^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/]+=*( [^\\r\\n]*)?$", trimspace(file(pathexpand(vm.ssh_public_key_file))))) &&
+      vm.vlan_id >= 0 && vm.vlan_id <= 4094 &&
       vm.vm_id >= 100 && vm.cores >= 1 && vm.memory_mb >= 2048 && vm.disk_gb >= 24 &&
       try(contains(var.iso_library.nodes, vm.node_name), false) &&
       can(var.iso_library.files[vm.iso_filename])
@@ -71,7 +76,7 @@ locals {
         "name", "os", "uuid", "username", "public_key", "ipv4_address", "gateway", "dns_servers",
         "source_url", "source_sha256", "iso_filename", "output_iso",
       ], key)
-    }
+    } if spec.boot_method == "iso"
   }
 }
 
@@ -91,7 +96,7 @@ resource "terraform_data" "install_media" {
 }
 
 resource "proxmox_virtual_environment_file" "install_media" {
-  for_each     = local.install_specs
+  for_each     = { for name, spec in local.install_specs : name => spec if spec.boot_method == "iso" }
   content_type = "iso"
   datastore_id = var.iso_library.datastore_id
   node_name    = each.value.node_name
@@ -114,10 +119,10 @@ resource "proxmox_virtual_environment_vm" "iso_installation" {
   vm_id               = each.value.vm_id
   bios                = each.value.firmware == "uefi" ? "ovmf" : "seabios"
   machine             = each.value.firmware == "uefi" ? "q35" : "pc"
-  description         = "Automatic ${each.value.os} ISO installation. Provisioning owned by Terraform."
+  description         = "Automatic ${each.value.os} ${upper(each.value.boot_method)} installation. Provisioning owned by Terraform."
   started             = true
   on_boot             = each.value.on_boot
-  boot_order          = ["scsi0", "ide2"]
+  boot_order          = ["scsi0", each.value.boot_method == "pxe" ? "net0" : "ide2"]
   scsi_hardware       = "virtio-scsi-single"
   stop_on_destroy     = true
   reboot_after_update = false
@@ -149,13 +154,16 @@ resource "proxmox_virtual_environment_vm" "iso_installation" {
     replicate    = false
     discard      = "on"
   }
-  cdrom {
-    file_id   = proxmox_virtual_environment_file.install_media[each.key].id
-    interface = "ide2"
+  dynamic "cdrom" {
+    for_each = each.value.boot_method == "iso" ? [true] : []
+    content {
+      file_id   = proxmox_virtual_environment_file.install_media[each.key].id
+      interface = "ide2"
+    }
   }
   network_device {
     bridge  = each.value.bridge
-    vlan_id = each.value.vlan_id
+    vlan_id = each.value.vlan_id == 0 ? null : each.value.vlan_id
     model   = "virtio"
   }
   operating_system {
@@ -165,12 +173,20 @@ resource "proxmox_virtual_environment_vm" "iso_installation" {
     uuid = each.value.uuid
   }
   serial_device {}
+  dynamic "rng" {
+    for_each = each.value.boot_method == "pxe" ? [true] : []
+    content {
+      # OVMF network drivers need entropy before the guest OS starts.
+      source = "/dev/urandom"
+    }
+  }
   agent {
     enabled = true
     wait_for_ip {
       disabled = true
     }
   }
+  depends_on = [terraform_data.pxe_media]
   lifecycle {
     prevent_destroy      = true
     ignore_changes       = [tags]
@@ -180,11 +196,11 @@ resource "proxmox_virtual_environment_vm" "iso_installation" {
 
 resource "terraform_data" "installation_ready" {
   for_each         = local.install_specs
-  input            = each.value
-  triggers_replace = [proxmox_virtual_environment_vm.iso_installation[each.key].id, each.value]
+  input            = jsondecode(each.value.boot_method == "pxe" ? jsonencode(merge(each.value, { pxe_server = var.pxe_server })) : jsonencode({ for k, v in each.value : k => v if k != "boot_method" }))
+  triggers_replace = [proxmox_virtual_environment_vm.iso_installation[each.key].id, jsondecode(each.value.boot_method == "pxe" ? jsonencode(merge(each.value, { pxe_server = var.pxe_server })) : jsonencode({ for k, v in each.value : k => v if k != "boot_method" }))]
 
   provisioner "local-exec" {
-    interpreter = ["python3", "${path.module}/scripts/iso_install.py"]
+    interpreter = ["python3", "${path.module}/scripts/${each.value.boot_method == "pxe" ? "pxe_install" : "iso_install"}.py"]
     command     = "wait"
     environment = {
       ISO_INSTALL_SPEC = jsonencode(self.input)
