@@ -77,6 +77,8 @@ edits to the appliance filesystem or database.
   platform-aware registry/source comparisons; only OS availability is cached.
   Never pull image layers or rebuild/deploy apps during inspection. This
   workflow must not change SSH, accounts, pools, or network.
+  Preserve the shared `query_nodes` order. Only its first host writes the main
+  Discord summary; other hosts publish details inside the associated thread.
   See [query coverage](../proxmox/docs/maintenance-queries.md).
 
 - Use the scoped playbooks under `playbooks/` for custom apps. Inspect their

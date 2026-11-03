@@ -10,6 +10,8 @@ local read-only worker and one middleware cron job after a protected config
 backup. It shares the Proxmox role without altering appliance management access.
 Custom containers get live upstream image/source comparisons, including pinned
 images, local builds, and sidecars. Checks never pull layers or deploy updates.
+The configured host group shares one channel summary, with optional details in
+its thread and combined API cost accounting.
 
 [ISO web server](files/iso-server/SETUP.md): a deployed read-only custom app
 with a dedicated macvlan address. HTTP, Proxmox downloads, and repeat-run
