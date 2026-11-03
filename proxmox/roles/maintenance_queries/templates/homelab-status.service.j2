@@ -1,0 +1,18 @@
+[Unit]
+Description=Answer owner mentions with read-only local homelab inspections
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ maintenance_queries_script }} --config {{ maintenance_queries_config }}
+User=root
+Group=root
+UMask=0077
+TimeoutStartSec=15min
+MemoryMax=512M
+Nice=19
+IOSchedulingClass=idle
+NoNewPrivileges=true
+# pct exec needs namespace privileges. Only fixed probes run, never model/user commands.
+ReadOnlyPaths=/etc /usr /boot

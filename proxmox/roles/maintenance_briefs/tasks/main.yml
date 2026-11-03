@@ -26,6 +26,14 @@
   when: maintenance_briefs_repairs_enabled | bool
   no_log: true
 
+- name: Install shared API usage estimator
+  ansible.builtin.copy:
+    src: "{{ role_path | dirname | dirname }}/files/openai_usage.py"
+    dest: /usr/local/sbin/openai_usage.py
+    owner: root
+    group: root
+    mode: '0640'
+
 - name: Install maintenance brief reader
   ansible.builtin.copy:
     src: maintenance-briefs.py

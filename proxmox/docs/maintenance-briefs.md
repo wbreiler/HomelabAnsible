@@ -100,6 +100,39 @@ per node per UTC day, including failed requests. Successful maintenance and
 Discord delivery retries do not call OpenAI. This is a request cap, not a dollar
 cap; model pricing determines cost. No OpenAI request retries occur within a run.
 
+### Model and estimated cost
+
+Briefs and [host query replies](maintenance-queries.md) show the returned model
+identifier and estimated USD cost. Repair proposals show their planning cost.
+Repair results show planning and review costs separately. Working indicators do
+not make API requests. A four-host query has four separate reply costs.
+
+`files/openai_usage.py` computes estimates from the actual response usage.
+It prices ordinary input, cached reads, both cache-write lifetimes, and output.
+Output already includes reasoning tokens. Requests explicitly select the
+standard service tier. Unknown models, tiers, missing usage, and failed HTTP
+requests display **cost unavailable**. A skipped API call displays **$0**.
+Incomplete model output still retains its returned usage and cost.
+
+Standard prices per million tokens, verified November 3, 2026:
+
+| Model | Input | Cached read | Output |
+| --- | ---: | ---: | ---: |
+| gpt-4.1-mini | $0.40 | $0.10 | $1.60 |
+| gpt-6.1-sol | $2.00 | $0.10 | $10.00 |
+| gpt-6-astra | $10.00 | $1.00 | $50.00 |
+
+For the repair models, 30-minute writes cost 1.25 times input and 12-hour writes
+cost 2.5 times input. Above 272,000 input tokens, input/cache prices double and
+output prices increase by 50%. The workers' input bounds stay below that size.
+See [OpenAI pricing](https://developers.openai.com/api/docs/pricing) and
+[cache usage accounting](https://developers.openai.com/api/docs/guides/prompt-caching#monitor-cache-performance).
+
+These estimates exclude account discounts, taxes, and future price changes.
+Historical calls without saved usage cannot be priced retroactively. Delivery
+retries reuse the saved cost and do not generate another model request. Maintain
+the price table when changing models or when published prices change.
+
 History and a pending Discord payload live in the root-only
 `/var/lib/homelab-maintenance-briefs/` directory. Delivery requires Discord to
 return a message ID. Failed delivery preserves the payload and retries with a
@@ -123,6 +156,7 @@ limit matters in actual use.
 
 ```sh
 python3 tests/test_maintenance_briefs.py
+python3 tests/test_openai_usage.py
 ansible-lint
 ansible-playbook maintenance-briefs.yml --syntax-check
 ansible-playbook site.yml --syntax-check

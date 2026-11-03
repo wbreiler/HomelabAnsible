@@ -479,6 +479,10 @@ Use `../terraform/README.md` for provisioning and media management.
   variable. No key means a labeled factual fallback. Never print the key.
 * Preserve the attempted-call cap, cached pending message, delivery confirmation,
   retry backoff, and service filesystem restrictions. Never execute model output.
+* Briefs, queries, and repair phases share `files/openai_usage.py`. Preserve
+  returned model/token usage before output validation. Never report missing
+  usage as zero. Refresh official rates when changing models. Include this
+  helper in the repair implementation fingerprint and run its cost tests.
 * Interactive repairs require `maintenance_briefs_repairs_enabled` and private
   bot credentials. Only the configured Discord owner may request a proposal
   and approve one specific attempt. Preserve expiry, displayed-message checks,
@@ -505,6 +509,23 @@ Use `../terraform/README.md` for provisioning and media management.
   an idempotent deployment. Use `--preview` for read-only evidence checks and
   `--test-discord` for an explicitly authorized labeled delivery test.
 * See `docs/maintenance-briefs.md` for key entry, activation, and limits.
+
+### maintenance_queries
+
+* `maintenance-queries.yml` installs local mention-driven inspections on PVE
+  and PBS. TrueNAS reuses the role through its scoped playbook and middleware
+  cron job. See [query coverage](docs/maintenance-queries.md).
+* Accept only the configured human owner's mentions in the configured channel.
+  Preserve cursors, stale-message rejection, budgets, and saved reply retries.
+  Never replay an interrupted inspection automatically.
+* Run only fixed health/update probes. User text and model output must never
+  become commands, URLs, or repair authorization. No updater entry point,
+  backup, artifact resolution, pin writes, guest power, or service mutation.
+* APT metadata refresh is permitted. Keep raw errors, logs, configuration, and
+  secrets out of Discord and model input. Identify unsupported, stopped,
+  failed, and cached checks. Never equate missing evidence with healthy.
+* Run `python3 tests/test_maintenance_queries.py`, lint, syntax/check mode,
+  live inspections, an owner mention round trip, and repeat application.
 
 ### update_reminder
 

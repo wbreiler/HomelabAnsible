@@ -209,6 +209,15 @@ class Lifecycle(unittest.TestCase):
                 analysis, _ = briefs.explain(evidence(), CONFIG, {})
                 self.assertIsNone(analysis)
 
+    def test_incomplete_response_preserves_cost_in_factual_brief(self):
+        response = {'status': 'incomplete', 'model': 'gpt-4.1-mini-2025-04-14', 'service_tier': 'default',
+                    'usage': {'input_tokens': 1000, 'input_tokens_details': {'cached_tokens': 0}, 'output_tokens': 700}}
+        state = {}
+        with patch.object(briefs, 'post', return_value=response), patch.object(briefs, 'deliver', return_value={'id': '123'}) as deliver:
+            briefs.process(evidence(), CONFIG, state)
+        self.assertAlmostEqual(state['ai_usage']['cost_usd'], 0.00152)
+        self.assertIn('~$0.001520', deliver.call_args.args[0]['embeds'][0]['footer']['text'])
+
     def test_config_and_state_are_not_written_in_preview(self):
         with patch('sys.argv', ['maintenance-briefs', '--preview']), patch.object(briefs, 'collect', return_value=evidence()), \
                 patch.object(briefs, 'post') as post, patch.object(briefs, 'save') as save, \

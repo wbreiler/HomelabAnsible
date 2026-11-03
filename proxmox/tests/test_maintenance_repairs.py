@@ -474,6 +474,20 @@ class Repairs(unittest.TestCase):
             repairs.plan(SETTINGS, value)
         self.assertEqual(value['status'], 'closed')
 
+    def test_incomplete_model_usage_is_saved_before_validation(self):
+        value = incident('planning')
+        response = {'status': 'incomplete', 'model': 'gpt-6.1-sol', 'service_tier': 'default',
+                    'usage': {'input_tokens': 1000, 'input_tokens_details': {'cached_tokens': 0}, 'output_tokens': 6000}}
+        with patch.object(repairs.briefs, 'post', return_value=response):
+            with self.assertRaises(ValueError):
+                repairs.model(SETTINGS, {}, {'field': {'type': 'string'}}, 'Analyze.', value)
+        self.assertAlmostEqual(self.stored()['plan_usage']['cost_usd'], 0.062)
+        value['status'] = 'closed'
+        value['outcome'] = 'Analysis unavailable.'
+        with patch.object(repairs, 'publish') as publish:
+            repairs.advance(SETTINGS, value)
+        self.assertIn('Plan: gpt-6.1-sol · ~$0.062000', publish.call_args.args[3])
+
     def test_discord_scope_checked_before_network(self):
         with patch.object(repairs.urllib.request, 'build_opener') as opener, self.assertRaises(ValueError):
             repairs.discord(SETTINGS, 'GET', '/channels/55555555555555555/messages')

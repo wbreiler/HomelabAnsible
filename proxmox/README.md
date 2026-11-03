@@ -6,6 +6,10 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
 **PBS Server**: mnemosyne (10.10.20.2, `pbs_nodes` inventory group)
 **Second play**: `site.yml` also applies network tuning to both proxmox_cluster and pbs_nodes groups
 
+[Discord health and update queries](docs/maintenance-queries.md) provides
+owner-mentioned, read-only checks on PVE, PBS, and TrueNAS. Each host replies
+with its own measured results, application coverage limits, and an AI summary.
+
 ## Provisioning ownership
 
 Terraform owns all existing guest hardware and lifecycle declarations. See

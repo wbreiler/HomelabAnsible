@@ -1,0 +1,76 @@
+---
+- name: Validate read-only query settings
+  ansible.builtin.assert:
+    that:
+      - maintenance_queries_platform in ['pve', 'pbs', 'truenas']
+      - maintenance_queries_daily_call_limit | int >= 1
+      - maintenance_queries_daily_call_limit | int <= 20
+      - maintenance_queries_model is match('^[a-zA-Z0-9._-]+$')
+      - maintenance_queries_discord.bot_token is match('^[A-Za-z0-9_.-]{40,200}$')
+      - maintenance_queries_discord.owner_user_id is match('^[0-9]{17,20}$')
+      - maintenance_queries_discord.bot_user_id is match('^[0-9]{17,20}$')
+      - maintenance_queries_discord.channel_id is match('^[0-9]{17,20}$')
+      - maintenance_queries_discord.bot_user_id != maintenance_queries_discord.owner_user_id
+  no_log: true
+
+- name: Create private query state directory
+  ansible.builtin.file:
+    path: "{{ maintenance_queries_state }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Install shared API usage estimator
+  ansible.builtin.copy:
+    src: "{{ role_path | dirname | dirname }}/files/openai_usage.py"
+    dest: "{{ maintenance_queries_script | dirname }}/openai_usage.py"
+    owner: root
+    group: root
+    mode: '0640'
+
+- name: Install read-only query worker
+  ansible.builtin.copy:
+    src: homelab-status.py
+    dest: "{{ maintenance_queries_script }}"
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Store private query configuration
+  ansible.builtin.copy:
+    content: >-
+      {{ maintenance_queries_discord | combine({
+           'node': maintenance_queries_node,
+           'platform': maintenance_queries_platform,
+           'state_dir': maintenance_queries_state,
+           'model': maintenance_queries_model,
+           'daily_call_limit': maintenance_queries_daily_call_limit | int,
+           'openai_api_key': maintenance_queries_openai_api_key}) | to_nice_json }}
+    dest: "{{ maintenance_queries_config }}"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+
+- name: Install Linux query units
+  ansible.builtin.template:
+    src: "homelab-status.{{ item }}.j2"
+    dest: "/etc/systemd/system/homelab-status.{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: [service, timer]
+  when: maintenance_queries_platform != 'truenas'
+  notify: Reload homelab query units
+
+- name: Enable Linux query timer
+  ansible.builtin.systemd_service:
+    name: homelab-status.timer
+    daemon_reload: true
+    enabled: "{{ maintenance_queries_enabled | bool }}"
+    state: "{{ 'started' if maintenance_queries_enabled | bool else 'stopped' }}"
+  when:
+    - maintenance_queries_platform != 'truenas'
+    - not ansible_check_mode
