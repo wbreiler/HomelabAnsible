@@ -125,13 +125,17 @@ def reactions(settings, incident, slot, emojis):
     save(incident)
 
 
-def publish(settings, incident, slot, content):
+def publish(settings, incident, slot, content, reply_to=None):
     if incident.get(slot):
         return
     if len(content) > 2000:
         raise ValueError('Interactive message too long')
     payload = {'content': content, 'allowed_mentions': {'parse': []},
                'nonce': hashlib.sha256((incident['id'] + slot).encode()).hexdigest()[:24], 'enforce_nonce': True}
+    if reply_to:
+        if not ID.fullmatch(reply_to):
+            raise ValueError('Invalid reply identifier')
+        payload['message_reference'] = {'message_id': reply_to, 'fail_if_not_exists': False}
     incident[slot + '_content'] = content
     save(incident)
     receipt = discord(settings, 'POST', route(settings), payload)
@@ -139,6 +143,38 @@ def publish(settings, incident, slot, content):
         raise ValueError('Discord did not confirm the expected channel')
     incident[slot] = receipt['id']
     save(incident)
+    return receipt
+
+
+def progress(settings, incident, stage):
+    if incident.get('progress_stage') == stage:
+        return
+    labels = {
+        'planning': '⏳ **Working…**\nPreparing your AI proposal. No repair is authorized yet.',
+        'proposed': '⏸ **Waiting for your approval**\nThe proposal is ready. React ✅ on the separate proposal message to authorize it.',
+        'approved': '⏳ **Working…**\nApproval received. Starting the repair worker for this one attempt.',
+        'executing': '🛠️ **Working…**\nRunning your approved attempt. Backups and updates can take several minutes.',
+        'reviewing': '⏳ **Working…**\nThe attempt finished. The stronger model is reviewing the result.',
+        'closed': '🏁 **Finished**\n' + briefs.plain(incident.get('outcome', 'See the result message.')),
+    }
+    content = (('**TEST**\n' if incident.get('test') else '') + briefs.plain(incident['evidence']['node']) + '\n' +
+               labels[stage] + f'\nLast update: <t:{int(time.time())}:R>.')
+    try:
+        receipt = None
+        if not incident.get('progress_id'):
+            receipt = publish(settings, incident, 'progress_id', content, reply_to=incident.get('offer_id'))
+        # A nonce retry can return an earlier stage's message after a lost response.
+        if receipt is None or receipt.get('content') != content:
+            receipt = discord(settings, 'PATCH', route(settings, incident['progress_id']),
+                              {'content': content, 'allowed_mentions': {'parse': []}})
+        if (receipt.get('id') != incident['progress_id'] or receipt.get('channel_id') != settings['channel_id'] or
+                receipt.get('content') != content):
+            raise ValueError('Discord did not confirm the progress update')
+        incident.update(progress_stage=stage, progress_id_content=content)
+        save(incident)
+    except Exception as error:
+        # A notification failure must not interrupt an approved package transaction.
+        print(f'Repair progress update deferred ({type(error).__name__}); credentials omitted.')
 
 
 def model(settings, evidence, properties, instructions):
@@ -352,6 +388,7 @@ def execute(settings):
         # Persist consumption before any mutation; interrupted attempts never auto-repeat.
         incident.update(status='executing', started=time.time())
         save(incident)
+        progress(settings, incident, 'executing')
     stage = 'Another maintenance run holds the shared lock. No action started.'
     log_path = ROOT / (incident['id'] + '.log')
     try:
@@ -379,6 +416,8 @@ def execute(settings):
             stream.seek(max(0, log_path.stat().st_size - 100_000))
             result['observations'] = briefs.signals(stream.read(100_000).decode(errors='replace'))
     with locked():
+        # The controller may have retried a status update while the updater ran.
+        incident = briefs.read_json(ROOT / (incident['id'] + '.json'))
         incident.update(status='executed', result=result, finished=time.time())
         save(incident)
 
@@ -416,6 +455,8 @@ def advance(settings, incident):
             incident.update(status='closed', outcome='The repair process was interrupted. Its outcome is unknown. Inspect the private local log before any further work.')
             save(incident)
             status = 'closed'
+        else:
+            progress(settings, incident, 'executing')
     if incident['owner_user_id'] != settings['owner_user_id'] and status not in ('executing', 'executed'):
         incident.update(status='closed', outcome='Approval owner changed; this request is closed.')
         save(incident)
@@ -430,6 +471,7 @@ def advance(settings, incident):
         elif reacted(settings, incident['offer_id'], '🔍'):
             incident['status'] = 'planning'
             save(incident)
+            progress(settings, incident, 'planning')
             try:
                 plan(settings, incident)
             except Exception as error:
@@ -442,17 +484,20 @@ def advance(settings, incident):
         else:
             publish(settings, incident, 'proposal_id', proposal(incident))
             reactions(settings, incident, 'proposal_id', ('✅', '❌'))
+            progress(settings, incident, 'proposed')
             if reacted(settings, incident['proposal_id'], '❌'):
                 incident.update(status='closed', outcome='Repair declined. No attempt was started.')
                 save(incident)
             elif reacted(settings, incident['proposal_id'], '✅'):
                 authorize(settings, incident)
     if incident['status'] == 'approved':
+        progress(settings, incident, 'approved')
         subprocess.run(['systemctl', 'start', '--no-block', 'maintenance-repair-execute.service'], check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
     if incident['status'] == 'executed':
         incident['status'] = 'reviewing'
         save(incident)
+        progress(settings, incident, 'reviewing')
         try:
             analysis = model(settings, {'original': incident['evidence'], 'approved_action': incident['selected'], 'result': incident['result']},
                              {'assessment': {'type': 'string'}, 'next_check': {'type': 'string'}},
@@ -465,6 +510,8 @@ def advance(settings, incident):
         incident.update(status='closed', outcome=outcome)
         save(incident)
     if incident['status'] == 'closed':
+        if 'progress_id_content' in incident:
+            progress(settings, incident, 'closed')
         publish(settings, incident, 'result_id', ('**TEST result**\n' if incident.get('test') else '**Repair result**\n') +
                 incident['evidence']['node'] + '\n' + incident['outcome'] + '\nNo additional attempt is authorized.')
 

@@ -145,12 +145,25 @@ after transfer.
 
 The optional Discord bot adds a separate approval workflow. The brief worker
 remains read-only. No public callback endpoint or privileged Discord intent is
-required. The controller polls normal message reactions every 30 seconds.
+required. The controller polls normal message reactions about every 10 seconds
+while idle. An API request or another in-progress analysis can delay the next poll.
 
 1. React 🔍 on a failure brief to request a stronger-model proposal.
 2. Read the target, fixed operation, side effects, reason, and uncertainty.
 3. React ✅ on that proposal to authorize one attempt, or ❌ to decline.
 4. Read the result and the stronger-model review in the same channel.
+
+A single status reply acknowledges the request and updates through **Working…**
+(preparing the proposal), **Waiting for your approval**, **Working…** (approval
+received, running the attempt, then reviewing the result), and **Finished**.
+Each update includes its timestamp. Long backups retain the running stage until
+the attempt ends. Declines, expiry, errors, and detected interruptions also clear
+an existing working indicator. The final result remains a separate message.
+
+Status updates do not call OpenAI. The bot edits its status reply and preserves
+the proposal text used to validate consent. Notification failures do not interrupt
+an approved package transaction. A later stage or controller poll retries status
+delivery. A host or Discord outage can delay updates, so check the displayed time.
 
 Only the configured owner's Discord user ID counts. Other users and bots cannot
 request analysis or approve an attempt. Requests expire after 24 hours. Proposals
@@ -283,3 +296,10 @@ executor. The executor succeeded without infrastructure actions. The stronger-mo
 result review and final Discord delivery also completed. The closed incident
 retained the owner approval and successful no-op result. This used Prometheus's
 two stronger-model requests for the UTC day. No real maintenance repair was tested.
+
+Progress indicators were then deployed on both nodes. All 59 focused local tests
+passed, including the 35 repair tests also run against each installed Linux worker
+with external actions mocked. Lint, syntax, check mode, timer validation, and
+repeat deployment (`changed=0`) passed. A labeled Discord display test updated
+one reply through all six stages and verified the final content. It used temporary
+state, left the OpenAI request counter unchanged, and performed no real repair.

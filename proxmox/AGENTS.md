@@ -483,6 +483,10 @@ Use `../terraform/README.md` for provisioning and media management.
   bot credentials. Only the configured Discord owner may request a proposal
   and approve one specific attempt. Preserve expiry, displayed-message checks,
   code/config/evidence fingerprints, durable consumption, and shared updater locks.
+* Progress uses one separate bot-owned status reply. Preserve the immutable
+  proposal, disabled mentions, and terminal-state updates. Status delivery failures
+  must not interrupt approved transactions. Merge controller progress changes
+  when the executor saves its result under the shared state lock.
 * The separate privileged executor may call only the existing guarded updater
   for one approved guest/application. No generated commands, automatic repeats,
   guest lifecycle operations, or infrastructure configuration repairs. Interrupted

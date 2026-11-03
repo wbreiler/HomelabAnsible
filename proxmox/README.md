@@ -753,6 +753,8 @@ Optional interactive repairs use a Discord bot: the owner requests a stronger-mo
 proposal with 🔍 and approves one concrete attempt with ✅. The separate executor
 reuses guarded single-guest maintenance, retains backup/version checks, and never
 runs generated commands. See the same guide for credentials, limits, and tests.
+One status reply shows proposal preparation, approval, execution, review, and
+completion. Idle reaction checks run about every ten seconds.
 
 Set `lxc_update_discord_webhook_url` in ignored group variables or Vault.
 It can reference an existing webhook, such as `"{{ diun_discord_webhook_url }}"`.

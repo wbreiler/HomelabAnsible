@@ -1,5 +1,7 @@
 """Owner identity, immutable consent, durable execution, and bounded API use."""
 import importlib.util
+import contextlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -43,6 +45,9 @@ class Repairs(unittest.TestCase):
             context = patch.object(target, name, value)
             context.start()
             self.addCleanup(context.stop)
+        self.progress_patch = patch.object(repairs, 'progress')
+        self.progress = self.progress_patch.start()
+        self.addCleanup(self.progress_patch.stop)
 
     def stored(self):
         return repairs.briefs.read_json(self.root / 'incident-test-1.json')
@@ -137,12 +142,116 @@ class Repairs(unittest.TestCase):
         repairs.save(incident('approved'))
         def perform(value):
             self.assertEqual(self.stored()['status'], 'executing')
+            self.assertEqual(self.progress.call_args.args[2], 'executing')
             return {'passed': True, 'summary': 'Test passed.'}
         with patch.object(repairs, 'perform', side_effect=perform) as perform:
             repairs.execute(SETTINGS)
             repairs.execute(SETTINGS)
         perform.assert_called_once()
         self.assertEqual(self.stored()['status'], 'executed')
+
+    def test_executor_preserves_controller_progress_updates(self):
+        repairs.save(incident('approved'))
+        def perform(value):
+            current = self.stored()
+            current.update(progress_stage='executing', progress_id='55555555555555555')
+            repairs.save(current)
+            return {'passed': True, 'summary': 'Test passed.'}
+        with patch.object(repairs, 'perform', side_effect=perform):
+            repairs.execute(SETTINGS)
+        self.assertEqual(self.stored()['progress_id'], '55555555555555555')
+        self.assertEqual(self.stored()['progress_stage'], 'executing')
+
+    def test_progress_precedes_model_work_and_finishes_after_error(self):
+        value = incident('offered')
+        value.update(offer_id=MESSAGE, offer_id_reactions=True, progress_id_content='Started')
+        def plan(settings, item):
+            self.assertEqual(self.stored()['status'], 'planning')
+            self.assertEqual(self.progress.call_args.args[2], 'planning')
+            raise ValueError('API unavailable')
+        with patch.object(repairs, 'reacted', side_effect=[False, True]), \
+                patch.object(repairs, 'plan', side_effect=plan), patch.object(repairs, 'publish'):
+            repairs.advance(SETTINGS, value)
+        self.assertEqual([call.args[2] for call in self.progress.call_args_list], ['planning', 'closed'])
+
+    def test_approval_acknowledged_before_worker_start(self):
+        value = incident()
+        value['proposal_id_reactions'] = True
+        def start(*args, **kwargs):
+            self.assertEqual(self.stored()['status'], 'approved')
+            self.assertEqual(self.progress.call_args.args[2], 'approved')
+        with patch.object(repairs, 'reacted', side_effect=[False, True, True, False]), \
+                patch.object(repairs, 'discord', return_value=self.displayed(value)), \
+                patch.object(repairs.subprocess, 'run', side_effect=start) as run:
+            repairs.advance(SETTINGS, value)
+        run.assert_called_once()
+
+    def test_review_notice_precedes_model_call(self):
+        value = incident('executed')
+        value.update(result={'summary': 'Test completed.'}, progress_id_content='Running')
+        def model(*args):
+            self.assertEqual(self.stored()['status'], 'reviewing')
+            self.assertEqual(self.progress.call_args.args[2], 'reviewing')
+            return {'assessment': 'Passed.', 'next_check': 'No action needed.'}
+        with patch.object(repairs, 'model', side_effect=model), patch.object(repairs, 'publish'):
+            repairs.advance(SETTINGS, value)
+        self.assertEqual([call.args[2] for call in self.progress.call_args_list], ['reviewing', 'closed'])
+
+    def test_interrupted_work_clears_busy_indicator(self):
+        value = incident('executing')
+        value['progress_id_content'] = 'Working'
+        with patch.object(repairs.briefs, 'unit_status', return_value={'ActiveState': 'inactive'}), \
+                patch.object(repairs, 'publish'):
+            repairs.advance(SETTINGS, value)
+        self.assertEqual(value['status'], 'closed')
+        self.assertEqual(self.progress.call_args.args[2], 'closed')
+
+    def test_progress_edits_one_message_without_changing_proposal_or_calling_model(self):
+        self.progress_patch.stop()
+        value = incident()
+        value['offer_id'] = '66666666666666666'
+        original_proposal = value['proposal_id_content']
+        def discord(settings, method, route, payload):
+            if method == 'POST':
+                self.assertEqual(payload['message_reference']['message_id'], value['offer_id'])
+            else:
+                self.assertEqual(method, 'PATCH')
+                self.assertTrue(route.endswith('/55555555555555555'))
+            self.assertEqual(payload['allowed_mentions'], {'parse': []})
+            return {'id': '55555555555555555', 'channel_id': SETTINGS['channel_id'], 'content': payload['content']}
+        with patch.object(repairs, 'discord', side_effect=discord) as send, patch.object(repairs, 'model') as model:
+            for stage in ['planning', 'planning', 'proposed', 'approved', 'executing', 'reviewing', 'closed']:
+                repairs.progress(SETTINGS, value, stage)
+        self.assertEqual([call.args[1] for call in send.call_args_list], ['POST', *['PATCH'] * 5])
+        model.assert_not_called()
+        self.assertEqual(value['proposal_id_content'], original_proposal)
+        self.assertEqual(value['progress_stage'], 'closed')
+        self.assertNotIn('Working', value['progress_id_content'])
+
+    def test_progress_corrects_old_nonce_content(self):
+        self.progress_patch.stop()
+        value = incident()
+        receipt = {'id': '55555555555555555', 'channel_id': SETTINGS['channel_id']}
+        def send(settings, method, route, payload):
+            return {**receipt, 'content': 'Old stage' if method == 'POST' else payload['content']}
+        with patch.object(repairs, 'discord', side_effect=send) as discord:
+            repairs.progress(SETTINGS, value, 'reviewing')
+        self.assertEqual([call.args[1] for call in discord.call_args_list], ['POST', 'PATCH'])
+        self.assertEqual(value['progress_stage'], 'reviewing')
+
+    def test_failed_progress_update_can_retry_without_stopping_work(self):
+        self.progress_patch.stop()
+        value = incident('executing')
+        value.update(progress_id='55555555555555555', progress_stage='approved')
+        output = io.StringIO()
+        with patch.object(repairs, 'discord', side_effect=OSError('secret-token')), contextlib.redirect_stdout(output):
+            repairs.progress(SETTINGS, value, 'executing')
+        self.assertEqual(value['progress_stage'], 'approved')
+        self.assertNotIn('secret-token', output.getvalue())
+        with patch.object(repairs, 'discord', side_effect=lambda s, m, r, p: {
+                'id': value['progress_id'], 'channel_id': SETTINGS['channel_id'], 'content': p['content']}):
+            repairs.progress(SETTINGS, value, 'executing')
+        self.assertEqual(value['progress_stage'], 'executing')
 
     def test_crash_after_consumption_never_replays(self):
         repairs.save(incident('approved'))
