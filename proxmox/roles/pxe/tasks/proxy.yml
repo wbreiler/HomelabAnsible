@@ -1,0 +1,60 @@
+---
+- name: Refresh interface facts after Terraform network changes
+  ansible.builtin.setup:
+    gather_subset: ['!all', network]
+
+- name: Validate proxy DHCP interfaces and networks
+  ansible.builtin.assert:
+    that:
+      - item.interface in ansible_facts.interfaces
+      - item.interface is match('^[a-zA-Z0-9_.-]+$')
+      - item.network is match('^[0-9.]+$')
+      - item.netmask is match('^[0-9.]+$')
+      - pxe_tftp_address is match('^[0-9.]+$')
+  loop: "{{ pxe_proxy_networks }}"
+
+- name: Install the proxy DHCP binary without a separate DNS service
+  ansible.builtin.apt:
+    name: dnsmasq-base
+    state: present
+
+- name: Keep the PXE guest from routing between attached networks
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "0"
+    sysctl_file: /etc/sysctl.d/90-pxe-no-forwarding.conf
+    sysctl_set: true
+    reload: true
+  loop: [net.ipv4.ip_forward, net.ipv6.conf.all.forwarding]
+
+- name: Configure boot information without allocating DHCP leases
+  ansible.builtin.template:
+    src: dnsmasq.conf.j2
+    dest: /etc/dnsmasq-pxe.conf
+    mode: "0644"
+    validate: /usr/sbin/dnsmasq --test --conf-file=%s
+  notify: Restart PXE proxy
+
+- name: Install the proxy DHCP service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/pxe-proxy.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=PXE boot information proxy (no address allocation)
+      Wants=network-online.target
+      After=network-online.target
+      [Service]
+      ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/dnsmasq-pxe.conf --pid-file=/run/pxe-proxy.pid
+      Restart=on-failure
+      [Install]
+      WantedBy=multi-user.target
+  notify: Restart PXE proxy
+
+- name: Enable the PXE proxy service
+  ansible.builtin.systemd_service:
+    name: pxe-proxy
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode

@@ -622,6 +622,12 @@ Use `../terraform/README.md` for provisioning and media management.
 
 ### PXE network boot
 
+* `pxe-guests.yml` configures the existing PXE guest with signed iPXE, TFTP,
+  HTTP, and rsync. Terraform owns its ISO library, per-VM installer files, and
+  disk capacity. Its optional proxy DHCP supplies boot information only.
+  Preserve router lease allocation, disable guest packet forwarding, and keep
+  the managed-shim marker and updater protection.
+  See [network boot](docs/network-boot.md) and [Terraform](../terraform/README.md#pxe-service-and-library).
 * `files/unifi_pxe.py` previews or partially updates DHCP boot settings through
   the UniFi controller API over verified SSH. It backs up before writing and
   checks complete readback. Keep the API key and deployment JSON outside Git.

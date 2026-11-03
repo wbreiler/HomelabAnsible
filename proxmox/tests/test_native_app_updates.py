@@ -39,6 +39,24 @@ class Preservation(unittest.TestCase):
                 native.replace_with_link(app, target, '1.2.3')
             self.assertTrue(app.is_symlink())
 
+    def test_netboot_update_preserves_the_managed_signed_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def mapped(value):
+                path = Path(value)
+                return root / str(path).lstrip('/') if path.is_absolute() else path
+            for path in ['srv/tftp', 'etc', 'downloads']:
+                (root / path).mkdir(parents=True, exist_ok=True)
+            (root / 'etc/netboot-xyz-managed-shim').write_text('2.0.0')
+            (root / 'srv/tftp/netboot.xyz.efi').write_bytes(b'signed shim')
+            for name in ['netboot.xyz.efi', 'netboot.xyz.kpxe']:
+                (root / 'downloads' / name).write_bytes(b'updated ' + name.encode())
+            with patch.object(native, 'Path', side_effect=mapped), patch.object(native, 'run'), patch.object(native.sys, 'argv', ['update', 'netboot_xyz', '3.0.4', '/downloads/netboot.xyz.efi']):
+                native.main()
+            self.assertEqual((root / 'srv/tftp/netboot.xyz.efi').read_bytes(), b'signed shim')
+            self.assertEqual((root / 'srv/tftp/netboot.xyz-unsigned.efi').read_bytes(), b'updated netboot.xyz.efi')
+            self.assertEqual((root / 'srv/tftp/netboot.xyz.kpxe').read_bytes(), b'updated netboot.xyz.kpxe')
+
     def test_link_failure_restores_original_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -1,0 +1,6 @@
+---
+- name: Configure network installation on existing PXE guests
+  hosts: pxe_guests
+  become: true
+  roles:
+    - pxe

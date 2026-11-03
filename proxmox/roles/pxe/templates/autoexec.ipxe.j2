@@ -1,0 +1,9 @@
+#!ipxe
+dhcp || goto failed
+chain --autofree {{ pxe_http_url }}/boot/${uuid}.ipxe || goto menu
+:menu
+chain --autofree https://boot.netboot.xyz || goto failed
+:failed
+echo Network boot failed. No disk changes were requested.
+sleep 10
+exit

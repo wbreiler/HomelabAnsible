@@ -1,0 +1,14 @@
+# PXE proxy only. Existing routers retain all DHCP address allocation.
+port=0
+no-hosts
+no-resolv
+bind-dynamic
+log-dhcp
+dhcp-no-override
+{% for network in pxe_proxy_networks %}
+interface={{ network.interface }}
+dhcp-range={{ network.network }},proxy,{{ network.netmask }}
+{% endfor %}
+dhcp-boot=netboot.xyz.efi,,{{ pxe_tftp_address }}
+pxe-service=7,"UEFI x86-64",netboot.xyz.efi,{{ pxe_tftp_address }}
+pxe-service=9,"UEFI x86-64",netboot.xyz.efi,{{ pxe_tftp_address }}

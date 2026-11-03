@@ -1,0 +1,116 @@
+---
+- name: Validate PXE service addresses and release pin
+  ansible.builtin.assert:
+    that:
+      - pxe_http_url is match('^http://[A-Za-z0-9.-]+(:[0-9]+)?$')
+      - pxe_ipxe_version is match('^[0-9.]+$')
+      - pxe_ipxe_checksum is match('^sha256:[a-f0-9]{64}$')
+      - pxe_tftp_address is match('^[0-9.]+$')
+
+- name: Install PXE service packages
+  ansible.builtin.apt:
+    name: [nginx, tftpd-hpa, rsync]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create PXE service directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /srv/tftp
+    - /srv/pxe
+    - /srv/pxe/boot
+    - /srv/pxe/install
+    - /srv/pxe/images
+    - /srv/pxe/iso
+    - /var/lib/pxe
+
+- name: Download the signed iPXE release
+  ansible.builtin.get_url:
+    url: "https://github.com/ipxe/ipxe/releases/download/v{{ pxe_ipxe_version }}/ipxeboot.tar.gz"
+    dest: "/var/lib/pxe/ipxeboot-{{ pxe_ipxe_version }}.tar.gz"
+    checksum: "{{ pxe_ipxe_checksum }}"
+    mode: "0644"
+
+- name: Extract the verified iPXE release
+  ansible.builtin.unarchive:
+    src: "/var/lib/pxe/ipxeboot-{{ pxe_ipxe_version }}.tar.gz"
+    dest: /var/lib/pxe
+    remote_src: true
+
+- name: Preserve the original netboot.xyz loader
+  ansible.builtin.copy:
+    src: /srv/tftp/netboot.xyz.efi
+    dest: /srv/tftp/netboot.xyz-unsigned.efi
+    remote_src: true
+    force: false
+    mode: "0644"
+
+- name: Install the signed UEFI chain at the existing DHCP filename
+  ansible.builtin.copy:
+    src: "/var/lib/pxe/ipxeboot/x86_64-sb/{{ item.source }}"
+    dest: "/srv/tftp/{{ item.destination }}"
+    remote_src: true
+    mode: "0644"
+  loop:
+    - {source: ipxe-shim.efi, destination: netboot.xyz.efi}
+    - {source: ipxe-shim.efi, destination: ipxe-shim.efi}
+    - {source: ipxe.efi, destination: ipxe.efi}
+    - {source: shimx64.efi, destination: shimx64.efi}
+
+- name: Protect the signed entry point from the netboot.xyz updater
+  ansible.builtin.copy:
+    content: "{{ pxe_ipxe_version }}\n"
+    dest: /etc/netboot-xyz-managed-shim
+    mode: "0644"
+
+- name: Configure the unattended dispatcher and interactive fallback
+  ansible.builtin.template:
+    src: autoexec.ipxe.j2
+    dest: /srv/tftp/autoexec.ipxe
+    mode: "0644"
+
+- name: Configure HTTP installation files and the shared ISO library
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/pxe
+    mode: "0644"
+  notify: Reload PXE HTTP service
+
+- name: Enable the PXE HTTP site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/pxe
+    dest: /etc/nginx/sites-enabled/pxe
+    state: link
+  notify: Reload PXE HTTP service
+
+- name: Remove the default HTTP site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload PXE HTTP service
+
+- name: Bind TFTP replies to the advertised boot server address
+  ansible.builtin.copy:
+    dest: /etc/default/tftpd-hpa
+    mode: "0644"
+    content: |
+      TFTP_USERNAME="tftp"
+      TFTP_DIRECTORY="/srv/tftp"
+      TFTP_ADDRESS="{{ pxe_tftp_address }}:69"
+      TFTP_OPTIONS="--secure"
+  notify: Restart PXE TFTP service
+
+- name: Enable the PXE services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: [nginx, tftpd-hpa]
+
+- name: Configure optional PXE proxy DHCP
+  ansible.builtin.include_tasks: proxy.yml
+  when: pxe_proxy_networks | length > 0

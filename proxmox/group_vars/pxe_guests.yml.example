@@ -1,0 +1,7 @@
+---
+pxe_http_url: http://192.0.2.10
+pxe_tftp_address: 192.0.2.10
+# Enable only on attached networks whose DHCP server lacks BOOTP next-server.
+pxe_proxy_networks: []
+# pxe_proxy_networks:
+#   - {interface: eth0, network: 192.0.2.0, netmask: 255.255.255.0}

@@ -10,6 +10,7 @@ files/gallery-dl-cookies.txt
 # Sensitive files
 inventory.yml
 group_vars/proxmox_cluster.yml
+group_vars/pxe_guests.yml
 host_vars/*.yml
 host_vars/*/secrets.yml
 

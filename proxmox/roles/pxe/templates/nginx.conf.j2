@@ -1,0 +1,9 @@
+server {
+    listen 80 default_server;
+    server_name _;
+    root /srv/pxe;
+    autoindex off;
+    location / { try_files $uri =404; }
+    location /iso/ { autoindex on; }
+    location ~ /\.(?!treeinfo$) { deny all; }
+}

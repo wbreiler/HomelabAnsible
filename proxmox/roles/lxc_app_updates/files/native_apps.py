@@ -85,6 +85,8 @@ def main():
         # The parent downloads and verifies both artifacts as one release.
         for name in ('netboot.xyz.efi', 'netboot.xyz.kpxe'):
             destination = Path('/srv/tftp') / name
+            if name == 'netboot.xyz.efi' and Path('/etc/netboot-xyz-managed-shim').exists():
+                destination = destination.with_name('netboot.xyz-unsigned.efi')
             temporary = destination.with_suffix(destination.suffix + '.new')
             shutil.copyfile(source.parent / name, temporary)
             temporary.chmod(0o644)
