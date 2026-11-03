@@ -152,7 +152,10 @@ confirm its SVI/subnet, static addresses, existing DHCP servers, and free range.
 Compare running and startup configurations before any save, because EOS saves
 the whole running configuration. A DHCP update may briefly interrupt new leases.
 EOS 4.28 uses DHCP options 66 and 67 here; it does not support the newer
-`next-server` command. Verify firmware support for these options.
+`next-server` command. OVMF ignores option 66 and contacts the DHCP server when
+the BOOTP next-server field is empty. The [PXE proxy service](../proxmox/docs/network-boot.md#routers-without-a-usable-next-server-field)
+provides compatible boot information while Arista retains all address allocation.
+A successful explicit-server TFTP test does not prove firmware compatibility.
 
 After explicit approval for the exact commands, run from `arista/`:
 

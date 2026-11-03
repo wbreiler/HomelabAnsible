@@ -17,6 +17,9 @@ confirmed out-of-band path and separate approval for the exact change.
 DHCP is outside `site.yml`. The separate `network-boot.yml` entry point
 manages only global DHCP boot options and explicitly reviewed new scopes on
 VLANs 20 and 30. It preserves the existing guest scope and reservations.
+EOS 4.28 cannot set BOOTP `next-server`. Firmware such as OVMF requires the
+PXE proxy service documented in `proxmox/docs/network-boot.md`. Preserve Arista
+address allocation. Do not replace DHCP scopes or add relays to work around it.
 Its independent `arista_apply_network_boot` gate defaults to false. Read the
 network boot section in the README before preview or application.
 
