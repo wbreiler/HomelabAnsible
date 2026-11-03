@@ -70,6 +70,12 @@ class Routing(unittest.TestCase):
 
 
 class Probes(unittest.TestCase):
+    def setUp(self):
+        for name in ['lxc_updates', 'image_updates', 'docker_inventory']:
+            mock = patch.object(q.versions, name, return_value=[])
+            mock.start()
+            self.addCleanup(mock.stop)
+
     def test_only_allowlisted_probe_fields_leave_host(self):
         value = {'updates': 4, 'held_updates': 1, 'metadata_refreshed': True,
                  'packages': ['secret-package'], 'token': 'private-secret'}
@@ -108,7 +114,8 @@ class Probes(unittest.TestCase):
             result = q.truenas('updates')
         self.assertEqual([call.args[0] for call in mid.call_args_list], ['app.query', 'update.status', 'system.version'])
         self.assertNotIn('secret', json.dumps(result))
-        self.assertTrue(result['apps'][0]['custom'])
+        self.assertEqual(result['apps'], [])
+        q.versions.docker_inventory.assert_called_once()
         self.assertIn('cached', result['limits'][0])
 
     def test_truenas_prereleases_and_zfs_cache_are_explicit(self):
@@ -249,6 +256,19 @@ class Workflow(unittest.TestCase):
         self.assertLessEqual(total, 1000)
         self.assertTrue(all(len(f['value']) <= 1024 for f in embed['fields']))
         self.assertEqual(value['allowed_mentions'], {'parse': []})
+
+    def test_update_reply_prioritizes_confirmed_changes_and_preserves_uncertainty(self):
+        report = {**REPORT, 'apps': [
+            {'app': 'plex', 'current': 'plexpass', 'latest': 'plexpass sha256:123456789012',
+             'available': 'plexpass sha256:123456789012 (image index changed; platform needs review)',
+             'comparison_uncertain': True},
+            {'app': 'lidarr', 'current': '3.1.0', 'available': '3.1.6'}]}
+        embed = q.payload(CONFIG, 'updates', report, 'A long AI summary. '*30)['embeds'][0]
+        self.assertLessEqual(len(embed['description']), 200)
+        self.assertTrue(embed['description'].endswith('…'))
+        lines = embed['fields'][1]['value'].splitlines()
+        self.assertTrue(lines[0].startswith('lidarr:'))
+        self.assertTrue(lines[1].endswith('(platform unconfirmed)'))
 
 
 if __name__ == '__main__':

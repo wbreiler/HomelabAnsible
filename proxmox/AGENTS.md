@@ -524,6 +524,12 @@ Use `../terraform/README.md` for provisioning and media management.
 * APT metadata refresh is permitted. Keep raw errors, logs, configuration, and
   secrets out of Discord and model input. Identify unsupported, stopped,
   failed, and cached checks. Never equate missing evidence with healthy.
+* `app_versions.py` adds read-only registry/source probes for custom apps,
+  sidecars, native services, and Minecraft packs. Compare platform/config
+  digests before claiming an image update. Never pull layers, run an updater,
+  rebuild a local image, or replace the netboot Secure Boot shim. Keep the
+  existing CurseForge key inside its guest; return only selected version data.
+  Run `tests/test_app_versions.py` when changing these probes.
 * Run `python3 tests/test_maintenance_queries.py`, lint, syntax/check mode,
   live inspections, an owner mention round trip, and repeat application.
 

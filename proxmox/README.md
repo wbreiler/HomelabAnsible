@@ -8,7 +8,9 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
 
 [Discord health and update queries](docs/maintenance-queries.md) provides
 owner-mentioned, read-only checks on PVE, PBS, and TrueNAS. Each host replies
-with its own measured results, application coverage limits, and an AI summary.
+with measured results, custom-app version comparisons, and an AI summary with
+its model and estimated cost. Image/source checks include pinned containers,
+native LXC apps, and Minecraft packs.
 
 ## Provisioning ownership
 

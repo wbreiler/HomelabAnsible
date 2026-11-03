@@ -12,26 +12,55 @@ Only the configured owner's mentions in that channel trigger inspections.
 Other users, bots, webhooks, and unmentioned conversations are ignored. Discord
 allows bots to read messages mentioning them without Message Content Intent.
 Each server posts one reply for itself and its guests. The reply starts with
-**Working…** and changes to two short sentences, measured totals, and coverage
-gaps. Full normalized evidence stays in the host's private report. PVE/PBS poll
+**Working…** and changes to a short summary, measured totals, and up to five
+installed → available app comparisons. Update summaries have a 200-character
+display limit. Confirmed comparisons appear before uncertain image changes.
+Full normalized evidence stays in the host's private report. PVE/PBS poll
 every 10 seconds. TrueNAS polls every minute. Update checks can take 2–5 minutes.
 
 ## Coverage
 
 | Target | Update checks | Health checks |
 | --- | --- | --- |
-| PVE hosts and running LXCs | Refresh APT metadata and count available/held packages. Compare catalog apps with stable releases, including newer major/minor releases. | Guest power state, root filesystem and memory usage, failed systemd units, reboot flags, host ZFS, and cluster quorum. |
+| PVE hosts and running LXCs | Refresh APT metadata. Compare catalog apps, native packages, SearXNG commits, Minecraft packs, and all running Docker images with their upstream sources. | Guest power state, root filesystem and memory usage, failed systemd units, reboot flags, host ZFS, and cluster quorum. |
 | PBS | Refresh APT metadata and count host/PBS package updates. | Host resources/services, ZFS health, datastore filesystem usage. |
-| TrueNAS | Supported middleware OS/catalog/image update status. | Host resources, app states, pool states, active alert classes. |
+| TrueNAS | Middleware OS availability plus live registry/source comparisons for every running container, including custom apps and sidecars. | Host resources, app states, pool states, active alert classes. |
 | Stopped guests and QEMU VMs | Explicitly uninspected. Never start a guest. | Observed power state and missing probes. |
 
-TrueNAS reports its cached middleware availability. Custom app versions are
-deployment labels, not upstream versions. Pinned custom releases need manual
-review. Minecraft packs, SearXNG, and other applications without catalog probes
-are named as uncovered. Failed probes mean unknown, not up to date. Application
-logins, playback, restores, and complete service paths are not tested.
+Custom apps are inspected directly. A TrueNAS deployment label such as `1.0.0`
+is not used as the installed application version. `app_versions.py` reads image
+references, selected OCI labels, and installed digests. Docker Hub uses its tag
+metadata API to reduce registry throttling. Other registries use Docker Buildx
+to read manifests and image configuration metadata without pulling layers.
+Comparisons select the host's platform. Buildx also checks the image configuration
+digest. Docker Hub manifest changes are labeled separately from app releases.
+If an old pinned index has lost its tag metadata, the report explicitly marks
+the platform comparison as unconfirmed instead of claiming a verified update.
 
-No inspection installs packages, resolves/downloads application artifacts,
+Version-pinned images compare against their upstream release channel. Explicit
+channels such as `stable-alpine` and `plexpass` stay selected. FastChannels,
+Gluetun, and the SABnzbd image use published release tags. If a publisher does not
+provide a usable version, the reply identifies the concrete image build by digest.
+A different image with the same app version is labeled **image rebuild**. Local
+builds use their source revision and upstream release or default branch. Local
+patches are preserved; these comparisons never rebuild or deploy an image.
+
+Native LXC probes cover Apt-Cacher NG, Tailscale, Loki, Grafana, SearXNG, and
+netboot.xyz alongside the updater's existing catalog. Netboot compares the real
+payload hashes, not its Secure Boot shim. Minecraft compares installed file IDs
+with stable releases for the configured game version. Modrinth also filters the
+loader. CurseForge uses the configured pack project and server-pack type. Manual ATM10
+and Better MC imports remain manual, but now get release comparisons. CurseForge
+requests run inside the existing credential-bearing guest. Its key never enters
+the parent report, process arguments, model input, or Discord.
+
+TrueNAS OS availability remains cached. Source-tracked apps such as SearXNG and
+local Cobalt builds report revisions when no release tags exist. Failed probes
+name the app and failure category. Application logins, playback, restores, and
+complete service paths are not tested. Available versions can require major
+upgrades or manual rebuilds; availability is not authorization to install.
+
+No inspection installs packages, downloads image layers or application archives,
 writes release pins, creates backups, changes guest power, or restarts services.
 APT metadata and private query state are the only inspection writes. User text
 routes to fixed `updates`, `health`, or `help` checks. Neither user text nor model
@@ -76,6 +105,7 @@ From `proxmox/`:
 
 ```sh
 python3 tests/test_maintenance_queries.py
+python3 tests/test_app_versions.py
 python3 tests/test_openai_usage.py
 ansible-lint
 ansible-playbook maintenance-queries.yml --syntax-check
@@ -150,3 +180,36 @@ Discord confirmed the model and rounded $0.000155 footer. The test consumed
 one ordinary-model attempt. Existing repair budgets and incident history were
 preserved. Repair cost reporting used mocked responses, including incomplete
 output and both cache-write lifetimes. No additional repair was run.
+
+### Expanded custom-app checks later that day
+
+The custom-app extension resolved the initial release gaps. Installed workers
+completed 22 app entries on Prometheus, 12 on Atlas, and 18 running-container
+entries on TrueNAS. These covered all 31 running LXCs and 13 TrueNAS apps.
+No app probe failed. Stopped VM 122 remained uninspected.
+
+Examples included Better MC v62 → v62hf, SearXNG 28 commits behind master,
+FastChannels 5.6.0 → 5.8.0, and Lidarr 3.1.0.4875-ls43 → 3.1.6.5079-ls46.
+Netboot 3.0.3, both ATM10 8.4 packs, and the local Cobalt revisions matched
+their checked upstreams. These are dated observations, not current guarantees.
+Docker Hub registry throttling prompted the tag metadata probe. Missing old
+index metadata remains an explicit platform-comparison limit.
+
+Validation passed 92 maintenance/query tests, 14 app-version tests, and five
+cost tests. Both projects passed lint, syntax checks, and deployment dry runs.
+Repeat applies reported `changed=0` on all four hosts. Installed source hashes,
+private file modes, imports, and Linux timers passed. Linux inspections also
+passed with the service's filesystem restrictions and `NoNewPrivileges`.
+
+Labeled update reports reached Discord through the installed workers using
+the normal AI counters. Readback confirmed the app comparisons, returned model,
+and estimated cost. No owner message or approval reaction was simulated.
+Guest states and uptimes, TrueNAS apps/pools, and PBS proxy/pools matched the
+protected baseline. No package, image, pack, or application update was installed.
+
+The final display adjustment limits update summaries to 200 characters and
+prioritizes confirmed comparisons. It passed repeat deployment and source-hash
+checks on both PVE hosts and TrueNAS. PBS retains the preceding display code:
+its 1Password SSH agent refused signing during the final deployment attempt.
+The version-probe deployment and its earlier PBS repeat check had already passed.
+Resume the scoped PBS deployment after SSH authentication becomes available.

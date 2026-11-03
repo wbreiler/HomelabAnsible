@@ -29,6 +29,14 @@
     group: root
     mode: '0640'
 
+- name: Install read-only application version probes
+  ansible.builtin.copy:
+    src: app_versions.py
+    dest: "{{ maintenance_queries_script | dirname }}/app_versions.py"
+    owner: root
+    group: root
+    mode: '0700'
+
 - name: Install read-only query worker
   ansible.builtin.copy:
     src: homelab-status.py
