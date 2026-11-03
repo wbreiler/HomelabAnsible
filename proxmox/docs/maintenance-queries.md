@@ -209,7 +209,9 @@ protected baseline. No package, image, pack, or application update was installed
 
 The final display adjustment limits update summaries to 200 characters and
 prioritizes confirmed comparisons. It passed repeat deployment and source-hash
-checks on both PVE hosts and TrueNAS. PBS retains the preceding display code:
-its 1Password SSH agent refused signing during the final deployment attempt.
-The version-probe deployment and its earlier PBS repeat check had already passed.
-Resume the scoped PBS deployment after SSH authentication becomes available.
+checks on all four hosts. PBS initially remained on the preceding display code
+because its 1Password SSH agent refused signing. After the owner unlocked
+1Password, the scoped PBS dry run, deployment, and repeat apply passed.
+The installed PBS renderer passed the 200-character check using saved evidence.
+Its bot timer, backup proxy, and pools remained healthy. Verification did not
+make another OpenAI request or alter the existing query counters.
