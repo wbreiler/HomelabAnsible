@@ -267,12 +267,19 @@ disabled while Discord bot installation was pending. Check mode, repeat applicat
 execution passed. All 96 related local tests passed. The 27 approval tests also
 passed against the installed code on each Linux node with mocked external actions.
 A real synthetic `gpt-6.1-sol` high-reasoning structured request succeeded.
-The Discord owner-reaction round trip and a real maintenance repair remain untested.
+At that stage, the Discord owner-reaction round trip and a real repair were untested.
 
 Later on 2026-11-03, the bot joined the server and access to the dedicated
 `homelab-maintenance-briefs` channel was verified. Interactive repair polling was
 enabled on Prometheus and Atlas. The activation check passed, repeat application
 reported `changed=0` on both nodes, and both deployed bot credentials could read
 the channel. Controller services completed successfully and private credential
-permissions remained `0600`. A no-op interaction test was posted on Prometheus
-and awaited the owner's Discord reactions. No real repair was performed.
+permissions remained `0600`.
+
+The owner subsequently completed the live no-op test on Prometheus. The bot
+recognized the owner's 🔍, generated a `gpt-6.1-sol` proposal with high reasoning,
+accepted the owner's ✅ on that separate proposal, and started the one-shot
+executor. The executor succeeded without infrastructure actions. The stronger-model
+result review and final Discord delivery also completed. The closed incident
+retained the owner approval and successful no-op result. This used Prometheus's
+two stronger-model requests for the UTC day. No real maintenance repair was tested.
