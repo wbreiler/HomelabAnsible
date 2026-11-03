@@ -118,13 +118,13 @@ def collect(kind):
     return evidence
 
 
-def post(url, payload, key=None):
+def post(url, payload, key=None, timeout=30):
     headers = {'Content-Type': 'application/json', 'User-Agent': 'HomelabAnsible-maintenance-briefs'}
     if key:
         headers['Authorization'] = 'Bearer ' + key
     request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method='POST')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    with opener.open(request, timeout=30) as response:
+    with opener.open(request, timeout=timeout) as response:
         raw = response.read(100_001)
         if len(raw) > 100_000:
             raise ValueError('HTTP response exceeds limit')
@@ -209,6 +209,20 @@ def deliver(payload, config):
     response = post(url + '?wait=true', payload)
     if not isinstance(response, dict) or not response.get('id'):
         raise ValueError('Discord did not confirm delivery')
+    return response
+
+
+def offer_repair(evidence, receipt):
+    directory = STATE / 'repair-offers'
+    directory.mkdir(mode=0o700, exist_ok=True)
+    path = directory / (evidence['job'] + '-' + evidence['invocation'] + '.json')
+    if path.exists():
+        return
+    offer = {'evidence': evidence, 'message_id': receipt['id'], 'channel_id': receipt['channel_id']}
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(offer) + '\n')
+    temporary.chmod(0o600)
+    temporary.replace(path)
 
 
 def process(evidence, config, state):
@@ -219,6 +233,10 @@ def process(evidence, config, state):
     if evidence['failed'] or previous.get('failed'):
         analysis, note = explain(evidence, config, state) if evidence['failed'] else (None, '')
         state['pending'] = {'evidence': evidence, 'payload': message(evidence, analysis, note), 'attempts': 0, 'retry_after': 0}
+        if config.get('repairs_enabled') and evidence['failed']:
+            state['pending']['payload']['embeds'][0]['fields'].append({
+                'name': 'Interactive repair',
+                'value': 'React 🔍 to request a stronger-model proposal, or ❌ to dismiss. A separate ✅ approval is required before one attempt can run.'})
         save(state)
         flush_pending(config, state)
     else:
@@ -235,8 +253,12 @@ def flush_pending(config, state):
     pending['attempts'] += 1
     pending['retry_after'] = time.time() + min(3600, 300 * 2 ** min(pending['attempts'] - 1, 4))
     save(state)
-    deliver(pending['payload'], config)
+    if not pending.get('receipt'):
+        pending['receipt'] = deliver(pending['payload'], config)
+        save(state)
     evidence = pending['evidence']
+    if config.get('repairs_enabled') and evidence['failed']:
+        offer_repair(evidence, pending['receipt'])
     state.setdefault('jobs', {})[evidence['job']] = {'invocation': evidence['invocation'], 'failed': evidence['failed']}
     del state['pending']
     save(state)

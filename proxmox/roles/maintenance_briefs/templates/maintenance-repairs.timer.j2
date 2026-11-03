@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Discord maintenance approvals every 30 seconds
+
+[Timer]
+OnBootSec=90s
+OnUnitInactiveSec=30s
+AccuracySec=5s
+Unit=maintenance-repairs.service
+
+[Install]
+WantedBy=timers.target

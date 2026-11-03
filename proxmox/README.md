@@ -749,6 +749,10 @@ explanations for failed OS/application runs. A per-node worker reads current
 reports and selected journal signals, then sends a Discord brief. OpenAI analysis
 uses a protected key file or Vault variable; without it, the worker sends factual
 briefs. Existing notifications remain independent. Deploy through `maintenance-briefs.yml`.
+Optional interactive repairs use a Discord bot: the owner requests a stronger-model
+proposal with 🔍 and approves one concrete attempt with ✅. The separate executor
+reuses guarded single-guest maintenance, retains backup/version checks, and never
+runs generated commands. See the same guide for credentials, limits, and tests.
 
 Set `lxc_update_discord_webhook_url` in ignored group variables or Vault.
 It can reference an existing webhook, such as `"{{ diun_discord_webhook_url }}"`.

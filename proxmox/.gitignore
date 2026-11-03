@@ -2,6 +2,7 @@
 *.retry
 .vault_pass
 /.maintenance-briefs-openai-key
+/.maintenance-repairs-discord.json
 /tmp
 .ansible
 

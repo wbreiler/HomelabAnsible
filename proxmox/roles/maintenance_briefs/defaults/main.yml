@@ -5,3 +5,8 @@ maintenance_briefs_daily_call_limit: 10
 maintenance_briefs_openai_api_key: >-
   {{ lookup('ansible.builtin.file', playbook_dir ~ '/.maintenance-briefs-openai-key', errors='ignore') | default('', true) | trim }}
 maintenance_briefs_discord_webhook_url: "{{ lxc_update_discord_webhook_url | default('') }}"
+maintenance_briefs_repairs_enabled: false
+maintenance_briefs_repairs_model: gpt-6.1-sol
+maintenance_briefs_repairs_daily_call_limit: 2
+maintenance_briefs_repairs_discord: >-
+  {{ lookup('ansible.builtin.file', playbook_dir ~ '/.maintenance-repairs-discord.json', errors='ignore') | default('{}', true) | from_json }}

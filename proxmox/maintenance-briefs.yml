@@ -1,5 +1,5 @@
 ---
-- name: Configure read-only maintenance failure briefs
+- name: Configure maintenance briefs and optional approved repairs
   hosts: proxmox_cluster
   become: true
   gather_facts: false

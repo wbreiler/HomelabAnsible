@@ -1,0 +1,30 @@
+[Unit]
+Description=Poll owner-approved Discord maintenance repair requests
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/maintenance-repairs
+User=root
+Group=root
+UMask=0077
+StateDirectory=homelab-maintenance-repairs
+StateDirectoryMode=0700
+TimeoutStartSec=600
+MemoryMax=256M
+Nice=10
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/homelab-maintenance-repairs

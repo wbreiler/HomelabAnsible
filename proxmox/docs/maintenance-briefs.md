@@ -59,7 +59,8 @@ ansible-playbook maintenance-briefs.yml
 
 The second application should report `changed=0`. Add `--ask-vault-pass` when
 the selected local variables contain Vault-encrypted values.
-The dedicated playbook touches only the brief worker and its own configuration.
+The dedicated playbook touches only the brief and optional repair workers and
+their configuration. It does not start an updater during deployment.
 The `maintenance_briefs` tag also integrates the role into `site.yml` when
 `install_maintenance_briefs` is true.
 
@@ -139,3 +140,131 @@ One synthetic OpenAI request and confirmed Discord delivery passed on each node.
 The tests preserved real incident history and did not run maintenance or induce
 a real failure. Neither key copy was tracked. The temporary key copy was removed
 after transfer.
+
+## Interactive repair approval
+
+The optional Discord bot adds a separate approval workflow. The brief worker
+remains read-only. No public callback endpoint or privileged Discord intent is
+required. The controller polls normal message reactions every 30 seconds.
+
+1. React 🔍 on a failure brief to request a stronger-model proposal.
+2. Read the target, fixed operation, side effects, reason, and uncertainty.
+3. React ✅ on that proposal to authorize one attempt, or ❌ to decline.
+4. Read the result and the stronger-model review in the same channel.
+
+Only the configured owner's Discord user ID counts. Other users and bots cannot
+request analysis or approve an attempt. Requests expire after 24 hours. Proposals
+expire after 30 minutes. Approval applies to that exact displayed proposal,
+target, code, configuration, and maintenance report. Changed or stale inputs
+cancel execution. Approvals are consumed before any mutation and cannot replay.
+Changing the channel requires new requests. This version permits one proposal
+and at most one attempt per failed invocation. It does not reopen closed requests.
+A new failed maintenance invocation can offer a new proposal and requires new consent.
+
+Initial supported operations are targeted retries through the existing updaters:
+
+| Operation | Scope and guards |
+| --- | --- |
+| OS retry | One running local guest, recent usable backup, holds, no package removals, and failed-service comparison. |
+| Backup and OS retry | Fresh PBS snapshot backup of that guest, then the same OS guards. Backup failure stops the attempt. |
+| Application retry | One configured catalog app on one running guest. Explicit failed-update retry, fresh PBS backup, compatible stable release, release age, checksums, and health checks remain required. |
+
+Services inside the selected guest can restart. This is a bounded retry system,
+not a general remote shell. The model selects an operation from a fixed schema.
+It cannot generate executable commands. Unsupported or ambiguous failures require
+manual investigation. Package-target application batches, host changes, guest
+power/hardware, storage/network/SSH changes, restore, and major upgrades are not
+available. The application updater can refuse a retry when no eligible newer
+release exists. No infrastructure action runs simply because analysis recommends it.
+
+The executor shares the scheduled updaters' lock. Busy maintenance stops the
+attempt without automatic retry. It writes separate repair results and preserves
+the scheduled `last-run.json` reports. A successful retry does not itself rewrite
+the scheduled failure into a recovery. Interrupted attempts never repeat and
+require local investigation. Active package transactions have no service timeout.
+
+### Bot credentials
+
+Create a Discord application and bot named **Homelab Repairs**. Install it into
+the server containing the webhook's channel. Grant View Channel, Send Messages,
+Embed Links, Read Message History, and Add Reactions for that channel. Restrict
+its access to this channel. Do not grant Administrator or privileged intents.
+Enable Discord Developer Mode and copy your own user ID.
+
+Keep this JSON in the ignored `proxmox/.maintenance-repairs-discord.json`, mode
+`0600`. Use strings for all Discord IDs. Never paste the token into chat or argv.
+
+```json
+{
+  "bot_token": "REPLACE_PRIVATELY",
+  "owner_user_id": "YOUR_DISCORD_USER_ID",
+  "channel_id": "WEBHOOK_CHANNEL_ID",
+  "bot_user_id": "BOT_USER_ID"
+}
+```
+
+Verify the bot identity with Discord's `GET /users/@me` and its access to
+`GET /channels/{channel_id}`. The channel must match the dedicated webhook.
+The role stores these values in `/etc/homelab-maintenance-repairs.json`, root
+`0600`, with secret output and diffs suppressed. The existing OpenAI key is reused.
+Set these non-secret values in ignored group variables:
+
+```yaml
+maintenance_briefs_repairs_enabled: true
+maintenance_briefs_repairs_model: gpt-6.1-sol
+maintenance_briefs_repairs_daily_call_limit: 2
+```
+
+Deploy with the same check/apply/repeat commands above. The controller timer is
+`maintenance-repairs.timer`. The privileged `maintenance-repair-execute.service`
+has no timer, automatic restart, or boot enablement. Only an approved request
+starts it. The controller has a read-only filesystem except for its own state.
+The executor needs the existing updaters' host privileges and is constrained by
+its fixed operation catalog and approval checks, not a filesystem sandbox.
+
+Set `maintenance_briefs_repairs_enabled: false` and redeploy to disable polling
+and reject new execution. This does not kill an already running transaction.
+
+### Stronger-model use and cost limits
+
+Planning and result review use `gpt-6.1-sol` with high reasoning, structured
+Responses output, `store: false`, and at most 6,000 output tokens per request.
+`gpt-6-astra` is an explicit configuration alternative. Availability depends on
+the OpenAI project. Ordinary failure briefs continue to use `gpt-4.1-mini`.
+
+At most two stronger-model requests are attempted per node per UTC day. Planning
+and review share that cap, including failures. Thus one normal proposal-plus-review
+can use a node's entire daily budget. If review cannot run, the factual result
+still posts. No automatic API retry or extra repair attempt occurs. This is a
+request cap, not a guaranteed dollar cap. Input is limited to 20,000 characters.
+
+Only normalized evidence, candidate operation metadata, a fixed result summary,
+and allowlisted failure signals from the final 100 KB of repair output reach
+OpenAI. Raw updater output stays in private local repair logs.
+The model has no tools or direct host access.
+
+### Interactive validation
+
+Run `python3 tests/test_maintenance_repairs.py` beside the brief tests. These
+cover owner checks, altered/expired/replayed approval, stale evidence, crashes,
+maintenance concurrency, API caps, one-guest dispatch, and backup failure guards.
+
+On one node, run `/usr/local/sbin/maintenance-repairs --test-interaction`. This
+posts a clearly labeled test. React 🔍 and then ✅ on its proposal. The stronger
+model makes real API calls, but the only permitted test operation is a no-op.
+This validates Discord consent and the executor without running maintenance.
+
+State, private logs, and the API counter live in
+`/var/lib/homelab-maintenance-repairs/`, root `0700`. Inspect controller errors
+with `journalctl -u maintenance-repairs.service -n 40`. Never publish raw logs.
+Discord message retries use a stable nonce. Discord's short nonce window does
+not guarantee deduplication after a long ambiguous outage. Duplicate messages
+cannot grant a second execution because authorization belongs to one local record.
+
+On 2026-11-03, the interactive workers were installed on both nodes with repairs
+disabled while Discord bot installation was pending. Check mode, repeat application
+(`changed=0`), unit validation, private permissions, and refusal of disabled
+execution passed. All 96 related local tests passed. The 27 approval tests also
+passed against the installed code on each Linux node with mocked external actions.
+A real synthetic `gpt-6.1-sol` high-reasoning structured request succeeded.
+The Discord owner-reaction round trip and a real maintenance repair remain untested.

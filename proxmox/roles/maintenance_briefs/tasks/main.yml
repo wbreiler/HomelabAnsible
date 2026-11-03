@@ -9,6 +9,22 @@
       - maintenance_briefs_openai_api_key is string
   no_log: true
 
+- name: Validate interactive repair settings
+  ansible.builtin.assert:
+    that:
+      - maintenance_briefs_enabled | bool
+      - maintenance_briefs_openai_api_key | length > 0
+      - maintenance_briefs_repairs_model in ['gpt-6.1-sol', 'gpt-6-astra']
+      - maintenance_briefs_repairs_daily_call_limit | int >= 1
+      - maintenance_briefs_repairs_daily_call_limit | int <= 2
+      - maintenance_briefs_repairs_discord.bot_token is match('^[A-Za-z0-9_.-]{40,200}$')
+      - maintenance_briefs_repairs_discord.owner_user_id is match('^[0-9]{17,20}$')
+      - maintenance_briefs_repairs_discord.channel_id is match('^[0-9]{17,20}$')
+      - maintenance_briefs_repairs_discord.bot_user_id is match('^[0-9]{17,20}$')
+      - maintenance_briefs_repairs_discord.owner_user_id != maintenance_briefs_repairs_discord.bot_user_id
+  when: maintenance_briefs_repairs_enabled | bool
+  no_log: true
+
 - name: Install maintenance brief reader
   ansible.builtin.copy:
     src: maintenance-briefs.py
@@ -23,6 +39,7 @@
       {{ {'model': maintenance_briefs_model,
           'daily_call_limit': maintenance_briefs_daily_call_limit | int,
           'openai_api_key': maintenance_briefs_openai_api_key,
+          'repairs_enabled': maintenance_briefs_repairs_enabled | bool,
           'discord_webhook_url': maintenance_briefs_discord_webhook_url} | to_nice_json }}
     dest: /etc/homelab-maintenance-briefs.json
     owner: root
@@ -55,4 +72,55 @@
     daemon_reload: true
     enabled: "{{ maintenance_briefs_enabled | bool }}"
     state: "{{ 'started' if maintenance_briefs_enabled | bool else 'stopped' }}"
+  when: not ansible_check_mode
+
+- name: Install interactive repair worker
+  ansible.builtin.copy:
+    src: maintenance-repairs.py
+    dest: /usr/local/sbin/maintenance-repairs
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Store private repair configuration
+  ansible.builtin.copy:
+    content: >-
+      {{ (maintenance_briefs_repairs_discord if maintenance_briefs_repairs_enabled | bool else {}) |
+         combine({'repairs_enabled': maintenance_briefs_repairs_enabled | bool,
+                  'repair_model': maintenance_briefs_repairs_model,
+                  'repair_daily_call_limit': maintenance_briefs_repairs_daily_call_limit | int}) | to_nice_json }}
+    dest: /etc/homelab-maintenance-repairs.json
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+
+- name: Create private repair history
+  ansible.builtin.file:
+    path: /var/lib/homelab-maintenance-repairs
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Install interactive repair units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - maintenance-repairs.service
+    - maintenance-repairs.timer
+    - maintenance-repair-execute.service
+  notify: Reload maintenance brief units
+
+- name: Enable interactive repair timer
+  ansible.builtin.systemd_service:
+    name: maintenance-repairs.timer
+    daemon_reload: true
+    enabled: "{{ maintenance_briefs_repairs_enabled | bool }}"
+    state: "{{ 'started' if maintenance_briefs_repairs_enabled | bool else 'stopped' }}"
   when: not ansible_check_mode

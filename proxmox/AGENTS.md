@@ -466,7 +466,8 @@ Use `../terraform/README.md` for provisioning and media management.
 
 ### maintenance_briefs
 
-* `maintenance-briefs.yml` configures only the per-node read-only brief worker.
+* `maintenance-briefs.yml` configures the per-node read-only brief worker and
+  optional Discord-approved repair workers.
   The `site.yml` role is gated by `install_maintenance_briefs`.
 * Read only completed OS/application maintenance reports and journals for the
   matching systemd invocation. Preserve race checks, successful-run silence,
@@ -478,6 +479,17 @@ Use `../terraform/README.md` for provisioning and media management.
   variable. No key means a labeled factual fallback. Never print the key.
 * Preserve the attempted-call cap, cached pending message, delivery confirmation,
   retry backoff, and service filesystem restrictions. Never execute model output.
+* Interactive repairs require `maintenance_briefs_repairs_enabled` and private
+  bot credentials. Only the configured Discord owner may request a proposal
+  and approve one specific attempt. Preserve expiry, displayed-message checks,
+  code/config/evidence fingerprints, durable consumption, and shared updater locks.
+* The separate privileged executor may call only the existing guarded updater
+  for one approved guest/application. No generated commands, automatic repeats,
+  guest lifecycle operations, or infrastructure configuration repairs. Interrupted
+  attempts require manual investigation. Never kill an active package transaction.
+* Run `python3 tests/test_maintenance_repairs.py` for approval and execution
+  guards. `maintenance-repairs --test-interaction` posts a labeled no-op test
+  that requires the owner's Discord reactions and uses real OpenAI requests.
 * Run `python3 tests/test_maintenance_briefs.py`, lint, syntax/check mode, and
   an idempotent deployment. Use `--preview` for read-only evidence checks and
   `--test-discord` for an explicitly authorized labeled delivery test.

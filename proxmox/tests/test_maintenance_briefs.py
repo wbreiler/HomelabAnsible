@@ -118,13 +118,32 @@ class Lifecycle(unittest.TestCase):
 
     def test_failure_then_recovery_sends_once_each(self):
         state = {}
-        with patch.object(briefs, 'deliver') as deliver, patch.object(briefs, 'explain', return_value=(None, 'offline')) as explain:
+        with patch.object(briefs, 'deliver', return_value={'id': '123', 'channel_id': '456'}) as deliver, patch.object(briefs, 'explain', return_value=(None, 'offline')) as explain:
             briefs.process(evidence(), CONFIG, state)
             briefs.process(evidence(), CONFIG, state)
             briefs.process(evidence(False, 'b' * 32), CONFIG, state)
         self.assertEqual(deliver.call_count, 2)
         explain.assert_called_once()
         self.assertIn('succeeded on the next run', deliver.call_args.args[0]['embeds'][0]['title'])
+
+    def test_offer_failure_reuses_confirmed_receipt_without_duplicate_message(self):
+        state = {}
+        config = {**CONFIG, 'repairs_enabled': True}
+        receipt = {'id': '123', 'channel_id': '456'}
+        with patch.object(briefs, 'deliver', return_value=receipt) as deliver, \
+                patch.object(briefs, 'explain', return_value=(None, 'offline')), \
+                patch.object(briefs, 'offer_repair', side_effect=OSError()):
+            with self.assertRaises(OSError):
+                briefs.process(evidence(), config, state)
+        self.assertEqual(state['pending']['receipt'], receipt)
+        with patch.object(briefs.time, 'time', return_value=state['pending']['retry_after'] + 1), \
+                patch.object(briefs, 'deliver') as retry:
+            briefs.flush_pending(config, state)
+        retry.assert_not_called()
+        deliver.assert_called_once()
+        offer = next((briefs.STATE / 'repair-offers').glob('*.json'))
+        self.assertEqual(briefs.read_json(offer)['message_id'], '123')
+        self.assertEqual(offer.stat().st_mode & 0o777, 0o600)
 
     def test_discord_retry_reuses_analysis_and_commits_only_confirmed_delivery(self):
         state = {}

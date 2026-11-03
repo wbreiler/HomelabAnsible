@@ -277,6 +277,11 @@ maintenance_briefs_daily_call_limit: 10  # Per node, per UTC day; attempted call
 # or override maintenance_briefs_openai_api_key with a Vault-encrypted variable.
 # Without a key, the service sends factual briefs without OpenAI analysis.
 # maintenance_briefs_discord_webhook_url: "{{ lxc_update_discord_webhook_url }}"
+# Optional owner-approved retries. Bot credentials belong in the ignored,
+# mode-0600 .maintenance-repairs-discord.json file. See docs/maintenance-briefs.md.
+maintenance_briefs_repairs_enabled: false
+maintenance_briefs_repairs_model: gpt-6.1-sol
+maintenance_briefs_repairs_daily_call_limit: 2  # Planning and result review share this cap.
 lxc_app_updates_native_guests: {}  # Optional existing guest hostnames, for example:
 #  nginx_proxy_manager: npm-example
 #  sabnzbd: sabnzbd-example
