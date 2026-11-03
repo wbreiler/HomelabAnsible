@@ -191,8 +191,14 @@ two-host approval and sequential execution. Both project lint/syntax checks and
 deployment dry runs passed. All four deployed hosts matched the source hashes
 and file permissions. Repeat runs returned `changed=0`. Guest uptime, NAS
 app/pool states, PBS health, and API counters remained unchanged. A live PBS
-plan resolved nine package upgrades without installing them. The owner batch
-proposal/cancellation test is pending. No real batch installation was tested.
+plan resolved nine package upgrades without installing them. The real owner
+fleet command produced one channel reply and four exact plan attachments.
+Each attachment matched its host's prepared manifest. The proposal covered
+37 OS packages and six apps, with exclusions recorded separately. The owner's
+❌ closed the batch on all four hosts. Every executor remained inactive, with
+no action started. All planned package versions, app versions/configuration,
+and NAS image identities remained unchanged. API counters and service baselines
+also matched. No real batch installation was tested.
 
 ## API and delivery
 
