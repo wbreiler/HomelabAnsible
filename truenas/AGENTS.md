@@ -82,10 +82,14 @@ edits to the appliance filesystem or database.
   See [query coverage](../proxmox/docs/maintenance-queries.md).
   The dedicated playbook also enables explicit app update proposals. Keep
   inspections read-only. Only an exact, unexpired owner-approved proposal may
-  start the separate transient executor. It can redeploy one custom app with
-  one new platform-pinned image, retaining all other images/configuration.
+  start the separate transient executor. A single-app request changes one
+  platform-pinned image. An approved batch can change multiple listed images
+  per app, retaining all other images/configuration and redeploying each app once.
+  Keep fleet execution sequential, stop pending work after failure/cancellation,
+  and publish exact version plans in the one channel summary's thread.
   Require recent successful backup evidence and preserve one-attempt semantics.
-  Catalog apps and local builds remain manual. Never broaden this into host,
+  Catalog apps, local builds, and appliance OS upgrades remain manual. Never
+  run APT on TrueNAS. Never broaden this into host,
   pool, network, account, or guest lifecycle maintenance.
 
 - Use the scoped playbooks under `playbooks/` for custom apps. Inspect their

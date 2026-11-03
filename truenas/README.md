@@ -17,6 +17,10 @@ An exact owner reaction authorizes one custom-app image update through a
 separate executor. The proposal states the backup age and complete app restart
 scope. Catalog apps and locally built images retain their manual workflows.
 See [app update approvals](../proxmox/docs/maintenance-queries.md#initiate-an-app-update).
+`update all on erebus` or `update the homelab` includes eligible custom apps
+in one approved batch. Each app redeploys once with its listed image changes.
+TrueNAS OS upgrades, catalog apps, and local builds require their separate
+maintenance workflows. See [batch coverage](../proxmox/docs/maintenance-queries.md#update-a-host-or-the-homelab).
 
 [ISO web server](files/iso-server/SETUP.md): a deployed read-only custom app
 with a dedicated macvlan address. HTTP, Proxmox downloads, and repeat-run
