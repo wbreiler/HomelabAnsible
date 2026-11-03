@@ -33,7 +33,8 @@ values live in ignored `group_vars/arista.yml`, copied from the tracked
 Ethernet2–11 and Ethernet43–48, SVI addresses, global routing, and static routes.
 Do not assume the historical hostname and Ethernet7 corrections are the only
 current differences. Confirm the actual device diff before applying. DHCP
-configuration is outside `site.yml`.
+configuration is outside `site.yml`; use the separately gated network boot
+workflow below when explicitly approved.
 
 Application is independently gated by `arista_apply_config`, which defaults to
 `false` in the tracked example. The playbook still validates the complete local
@@ -136,3 +137,39 @@ states: `arista_l2_interfaces` uses `state: replaced` for each listed port.
 Define every access/trunk attribute that must remain on those ports and review
 the check-mode `commands` output. Do not set `mode: access`; the EOS resource
 module cannot report that default idempotently.
+
+## Network boot
+
+`network-boot.yml` adds DHCP boot-server and boot-filename settings without
+changing links, routes, SVI addresses, accounts, or existing reservations.
+It can add explicitly reviewed DHCP scopes on VLANs 20 and 30. The existing
+VLAN 40 scope inherits the global boot options. Other DHCP owners must be
+configured separately; see [UniFi/PXE](../proxmox/docs/network-boot.md).
+
+Keep the real `arista_network_boot` values in ignored `group_vars/arista.yml`.
+The tracked example uses documentation addresses. Before enabling a new scope,
+confirm its SVI/subnet, static addresses, existing DHCP servers, and free range.
+Compare running and startup configurations before any save, because EOS saves
+the whole running configuration. A DHCP update may briefly interrupt new leases.
+EOS 4.28 uses DHCP options 66 and 67 here; it does not support the newer
+`next-server` command. Verify firmware support for these options.
+
+After explicit approval for the exact commands, run from `arista/`:
+
+```sh
+python3 -m unittest discover -s tests
+ansible-lint
+ansible-playbook network-boot.yml --syntax-check
+ansible-playbook network-boot.yml --check --diff -e '{"arista_apply_network_boot": true}'
+ansible-playbook network-boot.yml --diff -e '{"arista_apply_network_boot": true}'
+ansible-playbook network-boot.yml --check --diff -e '{"arista_apply_network_boot": true}'
+```
+
+Verify DHCP offers and a complete TFTP transfer from each affected VLAN.
+Do not infer firmware boot success from configuration readback. Recovery removes
+only the newly added boot options/scopes and DHCP interface activation using the
+protected pre-change snapshot; preserve pre-existing leases and reservations.
+
+When switching SSH-agent settings, use a fresh
+`ANSIBLE_PERSISTENT_CONTROL_PATH_DIR` so libssh does not reuse a connection with
+the old environment. Preserve host-key checking and the configured SSH agent.

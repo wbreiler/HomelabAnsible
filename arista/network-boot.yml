@@ -1,0 +1,30 @@
+---
+- name: Configure DHCP network boot without changing switch links or routing
+  hosts: arista
+  gather_facts: false
+  tasks:
+    - name: Validate the network boot application gate
+      ansible.builtin.assert:
+        that:
+          - arista_apply_network_boot | default(false) is boolean
+          - arista_network_boot is mapping
+
+    - name: Validate and render the limited DHCP configuration
+      ansible.builtin.set_fact:
+        arista_network_boot_rendered: "{{ arista_network_boot | network_boot_config }}"
+
+    - name: Show the complete intended DHCP additions
+      ansible.builtin.debug:
+        msg: "{{ arista_network_boot_rendered }}"
+
+    - name: Merge approved DHCP settings and preserve existing reservations
+      arista.eos.eos_config:
+        src: templates/network-boot.cfg.j2
+        save_when: changed
+      when: arista_apply_network_boot | default(false) | bool
+      register: arista_network_boot_result
+
+    - name: Show the exact changed commands
+      ansible.builtin.debug:
+        var: arista_network_boot_result.commands
+      when: arista_network_boot_result.commands is defined

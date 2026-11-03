@@ -36,3 +36,19 @@ arista_l3_interfaces: []
 
 # Static routes to ensure are present. Unlisted routes are not removed.
 arista_static_routes: []
+
+# Separate, explicitly approved network-boot.yml workflow. This gate is
+# independent of site.yml. Existing DHCP reservations are never replaced.
+arista_apply_network_boot: false
+arista_network_boot:
+  server: 192.0.2.10
+  filename: netboot.xyz.efi
+  new_scopes: []
+# Only VLANs 20 and 30 can receive new scopes. Confirm the existing SVI,
+# static addresses, and all running/startup differences before application.
+#  new_scopes:
+#    - vlan: 20
+#      subnet: 198.51.100.0/27
+#      range: [198.51.100.24, 198.51.100.30]
+#      gateway: 198.51.100.1
+#      dns: 192.0.2.1

@@ -14,11 +14,15 @@ is unused. Do not assume an out-of-band recovery path exists.
 and boot settings. Do not widen its allowlists or add a raw-command bypass
 to reach those targets. Changes to protected management paths require a
 confirmed out-of-band path and separate approval for the exact change.
-DHCP is outside this playbook.
+DHCP is outside `site.yml`. The separate `network-boot.yml` entry point
+manages only global DHCP boot options and explicitly reviewed new scopes on
+VLANs 20 and 30. It preserves the existing guest scope and reservations.
+Its independent `arista_apply_network_boot` gate defaults to false. Read the
+network boot section in the README before preview or application.
 
 ## Desired state and code boundaries
 
-The only convergence entry point is `site.yml`, targeting group `arista`.
+The general convergence entry point is `site.yml`, targeting group `arista`.
 Its pre-task validates the complete local schema. The tracked example sets
 `arista_apply_config: false`. With that gate false, configuration tasks skip,
 so a successful run does not show the intended switch diff.
