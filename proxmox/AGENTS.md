@@ -526,7 +526,8 @@ Use `../terraform/README.md` for provisioning and media management.
 * Run only fixed health/update probes. User text and model output must never
   become executable commands or URLs. Inspection requests must not invoke an
   updater, backup, artifact download, pin write, guest power, or service mutation.
-* The explicitly enabled app update path accepts only `update APP on HOST`.
+* The explicitly enabled update path accepts `update APP on HOST`,
+  `update all on HOST`, and `update the homelab`.
   Preserve owner/channel checks, exact proposal and reaction verification,
   30-minute expiry, implementation/target binding, and consumption before writes.
   Use the existing LXC updater with exact approved pins and no failed-retry bypass.
@@ -534,6 +535,17 @@ Use `../terraform/README.md` for provisioning and media management.
   recent successful backup evidence. Keep the executor separate from query
   timeouts. Never infer approval from an update report, model text, or old message.
   Run `tests/test_app_update_requests.py` and `tests/test_lxc_app_updates.py`.
+* Batches bind all host plans to one owner approval. Keep one channel summary,
+  exact version attachments in its thread, sequential hosts/actions, and stop
+  after failure or cancellation. Missing hosts block approval. Keep the
+  30-minute proposal expiry and six-hour execution window. No reboots or replay.
+  Guest APT actions require fresh PBS backups. Host APT actions require platform
+  health, no active platform tasks, and private configuration copies. Preserve
+  holds, exact package versions/dependencies, and the no-removal policy.
+  TrueNAS batches can change multiple reviewed images per custom app in one
+  redeployment. Never run APT or appliance upgrades on TrueNAS. Keep raw app
+  configuration and private logs out of public attachments. Run
+  `tests/test_maintenance_batches.py` when changing the distributed protocol.
 * APT metadata refresh is permitted. Keep raw errors, logs, configuration, and
   secrets out of Discord and model input. Identify unsupported, stopped,
   failed, and cached checks. Never equate missing evidence with healthy.

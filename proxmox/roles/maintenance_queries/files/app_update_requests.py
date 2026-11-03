@@ -26,12 +26,15 @@ def load(name, path):
 
 
 backend = load('app_update_backends', Path(__file__).with_name('app_update_backends.py'))
-SYNTAX = 'Use `@Homelab Repairs update APP on HOST` (or `APP/SERVICE` for one TrueNAS image). This prepares a proposal. Only your ✅ on that proposal can start the update.'
+batches = load('maintenance_batches', Path(__file__).with_name('maintenance_batches.py'))
+SYNTAX = 'Use `update APP on HOST`, `update all on HOST`, or `update the homelab`. Mention this bot. Review the exact proposal, then ✅ to approve or ❌ to cancel. Batch requests include apps and OS packages; no reboots.'
 UNIT = 'homelab-app-update'
 
 
 def parse(text):
     text = re.sub(r'<@!?[0-9]+>', '', text).strip().lower()
+    if text in ('update the homelab', 'upgrade the homelab', 'update homelab', 'upgrade homelab'):
+        return ('all', '*')
     match = re.fullmatch(r'(?:update|upgrade) ([a-z0-9][a-z0-9_-]{0,60}(?:/[a-z0-9][a-z0-9_-]{0,60})?) on ([a-z0-9][a-z0-9_-]{0,60})', text)
     return match.groups() if match else None
 
@@ -120,7 +123,13 @@ def valid(q, config, item):
 
 def request(q, config, message):
     selected = parse(message['content'])
+    if selected and selected[0] == 'all':
+        return batches.request(q, config, message, selected[1])
     if not selected or selected[1] != config['node']:
+        return
+    if batches.active(config):
+        q.discord(config, 'POST', payload={'content': 'A maintenance batch is active on ' + config['node'] + '. Finish or cancel it first.',
+                  'allowed_mentions': {'parse': []}, 'nonce': 'busy-' + message['id'], 'enforce_nonce': True})
         return
     with locked(config):
         previous = read(config)
@@ -162,6 +171,9 @@ def render(q, config, item):
                 q.discord(config, 'PUT', '/' + item['reply_id'] + '/reactions/' + urllib.parse.quote(emoji, safe='') + '/@me')
             item['reactions_added'] = True
             save(q, config, item)
+        if not item.get('armed') and not reacted(q, config, item, '✅'):
+            item['armed'] = True
+            save(q, config, item)
     elif status in ('approved', 'executing'):
         show(q, config, item, '⏳ **Working…**\n' + config['node'] + ' · ' + item['plan']['label'] + '\n' +
              item.get('stage', 'Approval received. Waiting for the app update worker.') +
@@ -186,7 +198,7 @@ def advance(q, config, item):
         render(q, config, item)
         if time.time() >= item['expires'] or reacted(q, config, item, '❌'):
             item.update(status='closed', outcome='The proposal expired or was canceled. No update started.')
-        elif reacted(q, config, item, '✅'):
+        elif item.get('armed') and reacted(q, config, item, '✅'):
             try:
                 valid(q, config, item)
                 item.update(status='approved', approved_at=time.time())

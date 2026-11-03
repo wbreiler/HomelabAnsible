@@ -51,7 +51,7 @@
     owner: root
     group: root
     mode: '0700'
-  loop: [app_update_requests.py, app_update_backends.py]
+  loop: [approved_apt.py, batch_backends.py, maintenance_batches.py, app_update_backends.py, app_update_requests.py]
 
 - name: Install approval-aware existing LXC updater
   ansible.builtin.copy:

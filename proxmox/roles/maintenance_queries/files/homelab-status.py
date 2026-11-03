@@ -32,7 +32,7 @@ _updates_spec = importlib.util.spec_from_file_location('app_update_requests', Pa
 app_updates = importlib.util.module_from_spec(_updates_spec)
 _updates_spec.loader.exec_module(app_updates)
 
-HELP = 'Mention me with “check for updates” or “how is the lab doing?”. One summary covers all hosts. To request an app update: “update APP on HOST”, then approve its proposal with ✅. Checks remain read-only.'
+HELP = 'Mention me with “check for updates”, “how is the lab doing?”, “update APP on HOST”, “update all on HOST”, or “update the homelab”. One summary, with details in its thread. Batches include apps and OS packages. Review the proposal, then ✅. No automatic reboots. Checks remain read-only.'
 ID = re.compile(r'[0-9]{17,20}')
 # Fixed code only. User text is never passed to a command, path, URL, or probe.
 PROBE = r'''
@@ -90,12 +90,22 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError('Redirect refused')
 
 
-def request(url, method='GET', payload=None, authorization=None):
+def request(url, method='GET', payload=None, authorization=None, attachment=None):
     headers = {'User-Agent': 'HomelabAnsible-status', 'Content-Type': 'application/json'}
     if authorization:
         headers['Authorization'] = authorization
-    req = urllib.request.Request(url, method=method, headers=headers,
-                                 data=json.dumps(payload).encode() if payload is not None else None)
+    data = json.dumps(payload).encode() if payload is not None else None
+    if attachment is not None:
+        filename, contents = attachment
+        if (not url.startswith('https://discord.com/api/v10/channels/') or
+                not re.fullmatch(r'[A-Za-z0-9_-]+\.txt', filename) or len(contents.encode()) > 900000):
+            raise ValueError('Invalid Discord attachment')
+        boundary = 'homelab-' + os.urandom(16).hex()
+        headers['Content-Type'] = 'multipart/form-data; boundary=' + boundary
+        data = (f'--{boundary}\r\nContent-Disposition: form-data; name="payload_json"\r\nContent-Type: application/json\r\n\r\n' +
+                json.dumps(payload) + f'\r\n--{boundary}\r\nContent-Disposition: form-data; name="files[0]"; filename="{filename}"\r\n' +
+                'Content-Type: text/plain; charset=utf-8\r\n\r\n' + contents + f'\r\n--{boundary}--\r\n').encode()
+    req = urllib.request.Request(url, method=method, headers=headers, data=data)
     for attempt in range(3):
         try:
             with urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open(req, timeout=60) as response:
@@ -113,15 +123,16 @@ def request(url, method='GET', payload=None, authorization=None):
     return json.loads(raw) if raw else None
 
 
-def discord(config, method='GET', suffix='', payload=None):
+def discord(config, method='GET', suffix='', payload=None, attachment=None):
     if not ID.fullmatch(config['channel_id']):
         raise ValueError('Invalid Discord channel')
     if suffix and not re.fullmatch(
             r'(?:/[0-9]{17,20}(?:/threads|/reactions/(?:%E2%9C%85|%E2%9D%8C)'
             r'(?:/@me|\?type=0&after=[0-9]{17,20}&limit=1))?|\?limit=100(?:&after=[0-9]{17,20})?)', suffix):
         raise ValueError('Invalid Discord route')
-    return request('https://discord.com/api/v10/channels/' + config['channel_id'] + '/messages' + suffix,
-                   method, payload, 'Bot ' + config['bot_token'])
+    args = ('https://discord.com/api/v10/channels/' + config['channel_id'] + '/messages' + suffix,
+            method, payload, 'Bot ' + config['bot_token'])
+    return request(*args, attachment=attachment) if attachment is not None else request(*args)
 
 
 def intent(message, config):
@@ -456,7 +467,7 @@ def group_payload(config, bundle, results):
     model = ', '.join(sorted(models)) or ('Model unavailable' if unknown else 'No API calls reported')
     return {'content': '', 'embeds': [{'title': 'Homelab · ' + bundle['kind'].title(),
             'description': f'{status} · {len(results)}/{len(nodes)} hosts reported. Details are in the thread below.' +
-                           ('\nTo update an app: `@Homelab Repairs update APP on HOST` → review → ✅.' if bundle['kind'] == 'updates' else ''),
+                           ('\nUpdate: `update APP on HOST`, `update all on HOST`, or `update the homelab`. Mention me, review, then ✅.' if bundle['kind'] == 'updates' else ''),
             'fields': fields, 'color': 0x3498DB if finished else 0xE67E22,
             'footer': {'text': (cost + '\n' + model)[:500]}}], 'allowed_mentions': {'parse': []}}
 
@@ -634,10 +645,11 @@ def poll(config, state, path):
     if state.get('day') != today:
         state.update(day=today, calls=0, checks=0)
     if config.get('app_updates_enabled'):
-        try:
-            app_updates.poll(types.SimpleNamespace(discord=discord, save=save, versions=versions, ID=ID), config)
-        except Exception as error:
-            print('App update interaction deferred (' + type(error).__name__ + '). Inspections remain available.')
+        for worker in (app_updates, app_updates.batches):
+            try:
+                worker.poll(types.SimpleNamespace(discord=discord, save=save, versions=versions, ID=ID), config)
+            except Exception as error:
+                print('Update interaction deferred (' + type(error).__name__ + '). Inspections remain available.')
     refresh_groups(config, state, path)
     if state.get('pending'):
         process(config, state, path)
@@ -660,7 +672,7 @@ def poll(config, state, path):
             if kind == 'app_update':
                 selected = app_updates.parse(message['content'])
                 nodes = config.get('query_nodes', [config['node']])
-                if config.get('app_updates_enabled') and selected and selected[1] in nodes:
+                if config.get('app_updates_enabled') and selected and selected[1] in [*nodes, '*']:
                     save(path, state)  # Never replay a command after an interrupted proposal.
                     app_updates.request(types.SimpleNamespace(discord=discord, save=save, versions=versions, ID=ID), config, message)
                     continue

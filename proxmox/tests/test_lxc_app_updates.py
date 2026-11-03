@@ -186,6 +186,19 @@ class Deployment(unittest.TestCase):
                 self.assertEqual(backup.call_count, 0 if dry_run else 1)
                 self.assertEqual(run.call_count, 0 if dry_run else 1)
 
+    def test_package_approval_rejects_changed_versions_before_backup(self):
+        self.config['packages'] = ['grafana']
+        with patch.object(updates, 'run', return_value='13.2.4-1'), \
+                patch.object(updates, 'guest', return_value='grafana | 13.3.1-1 | repo'), \
+                patch.object(updates, 'apt_candidate', return_value='13.3.1-1'), \
+                patch.object(updates, 'package_ready', return_value=True), \
+                patch.object(updates, 'backup') as backup, patch.object(updates.subprocess, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'changed after approval'):
+                updates.update_packages({'vmid': 100}, self.config, 'node', False, False,
+                                        approved_plan={'previous': {'grafana': '13.2.4-1'}, 'targets': {'grafana': '13.3.0-1'}})
+        backup.assert_not_called()
+        run.assert_not_called()
+
     @patch.object(updates, 'backup')
     @patch.object(updates.subprocess, 'run')
     def test_current_release_does_not_trigger_a_restart(self, run, backup):

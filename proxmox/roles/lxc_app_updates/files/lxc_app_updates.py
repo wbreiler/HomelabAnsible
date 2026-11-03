@@ -292,7 +292,7 @@ def install_native(app, target, pins, vmid):
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
 
 
-def update_packages(row, config, node, dry_run, retry_failed):
+def update_packages(row, config, node, dry_run, retry_failed, approved_plan=None):
     vmid = row['vmid']
     failure = PINS / f'packages-{vmid}.failed.json'
     if failure.exists() and not retry_failed:
@@ -312,6 +312,8 @@ def update_packages(row, config, node, dry_run, retry_failed):
             changes[package] = target
             previous[package] = current
             print(f'{"PLAN" if dry_run else "UPDATE"} {vmid} {package}: {current} -> {target}', flush=True)
+    if approved_plan is not None and approved_plan != {'previous': previous, 'targets': changes}:
+        raise RuntimeError('managed package versions changed after approval')
     if not changes or dry_run:
         return {'app': 'packages', 'vmid': vmid, 'status': 'planned' if changes else 'current', 'previous': previous, 'targets': changes}
     backup(vmid, config, node)

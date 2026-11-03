@@ -82,7 +82,8 @@ An explicit `update APP on HOST` request prepares a proposal on that host only.
 Review its version, backup requirement, and restart scope. React **✅** to
 authorize one attempt, or **❌** to cancel. Approval expires after 30 minutes.
 The bot edits **one message** from Working to approval, execution, and result.
-Missing host names, shell syntax, and bulk requests never become installations.
+Missing host names and shell syntax never become installations. Use the batch
+commands below for multiple targets.
 
 The fixed adapters select the target. Routine update requests need no model:
 their footer reports **Model: none · API cost: $0.000000**. Stronger-model repair
@@ -96,7 +97,7 @@ Supported execution paths:
 | Apps enabled in the existing LXC role/native catalog | Resolve exact artifacts, preserve the configured compatible-release and age guards, create a fresh PBS backup, run one existing installer, and verify its result. |
 | TrueNAS custom apps with running registry images | Select one verified stable image in the same release line. Pin its platform digest and all unchanged sidecar images. Save the original configuration privately, require a successful system/settings/appdata backup within 30 hours, then redeploy only that app through `app.update`. |
 | Multiple newer images in one TrueNAS app | Require `APP/SERVICE` to select one image. The complete app and its sidecars can restart. |
-| Catalog apps, locally built images, Minecraft packs, source-only apps, netboot Secure Boot, standalone package batches, host OS, or major upgrades | Explain the unsupported case and require the owning playbook or TrueNAS upgrade screen. Never invent an installer or replace local patches. |
+| Catalog apps, locally built images, Minecraft packs, source-only apps, netboot Secure Boot, or major upgrades | Explain the unsupported case and require the owning playbook or TrueNAS upgrade screen. Never invent an installer or replace local patches. |
 
 TrueNAS checks the resulting configuration, exact image identities, RUNNING
 state, and available container health checks. It blocks Tdarr during active
@@ -128,6 +129,70 @@ produced one Lidarr proposal; the owner's cancellation closed it without
 changing its configuration or image. No approved installation was performed
 as part of this validation. Guest uptime and storage/service baselines remained
 unchanged. These results are dated evidence, not a current health guarantee.
+
+## Update a host or the homelab
+
+```text
+@Homelab Repairs update all on atlas
+@Homelab Repairs update all on erebus
+@Homelab Repairs update the homelab
+```
+
+These commands prepare **applications and OS packages**. They do not authorize
+installation. The bot edits one channel message through preparation, approval,
+execution, and completion. Each host attaches its exact version plan inside
+that message's thread. Review those plans and their exclusions before reacting
+**✅**. React **❌** to cancel. An early approval must be removed and added again
+after the proposal appears.
+
+| Scope | Included | Explicit exclusions |
+| --- | --- | --- |
+| PVE host | Exact APT upgrades, after local guest work | Package removals, held host packages, reboots |
+| Running LXCs | Exact APT upgrades, eligible managed app packages, existing guarded role/native installers | Excluded/stopped guests, unsupported custom installers, Minecraft packs, Secure Boot replacement, incompatible/young releases |
+| PBS host | Exact APT upgrades | Removals, held packages, reboots |
+| TrueNAS | Eligible custom apps, with all reviewed image changes combined into one redeploy per app | Appliance OS, catalog apps, local builds, unsupported release lines |
+| QEMU guests | Report their exclusion | No guest OS/app executor configured |
+
+Each app retains its existing compatibility, release-age, backup, and health
+checks. APT plans list every simulated version change, including new dependencies.
+Execution rejects changed installed versions, dependencies, holds, or new failed
+services. Guest package actions require a fresh PBS backup. PVE/PBS host actions
+require healthy platform services, PVE quorum where applicable, and no active
+platform tasks. They save `/etc` and the dpkg status privately before installation.
+This host copy is **not a full system backup**. Package scripts can restart services.
+The bot reports reboot requirements but never reboots automatically.
+
+Fleet scope follows the configured `query_nodes` order. Every selected host must
+publish a plan before approval becomes available. Unavailable individual checks
+remain visible as exclusions. A proposal expires after 30 minutes. Approval
+binds all plans and opens a six-hour execution window. Hosts and local actions
+run sequentially. A failure stops all remaining actions. Cancellation or removal
+of ✅ stops pending work after the current transaction. No automatic retry or
+rollback occurs. Request a fresh plan after inspecting a failure.
+
+Preparation and execution use separate transient `homelab-batch-prepare` and
+`homelab-batch-execute` services. Query timeouts cannot terminate an approved
+package transaction. The bot consumes each action before execution and never
+replays an interrupted batch. Implementation, configuration, target hashes,
+owner reactions, and the visible summary are rechecked before each action.
+Batch and single-app requests cannot overlap on one host.
+
+Public `maintenance-plan-HOST.txt` and `maintenance-result-HOST.txt` attachments
+contain selected versions, effects, exclusions, and results. Private
+`maintenance-batch.json`, `batch-REQUEST.json`, and per-request directories/logs
+remain root-only. They can contain app configuration and secrets. Never publish
+them. The batch uses no model and costs **$0 in OpenAI API usage**.
+
+For a safe live delivery test, send a batch command, review its proposal, and
+react **❌**. Do not react ✅ unless the listed real updates are authorized.
+
+Batch validation on 2026-11-03: 185 focused tests passed, including a simulated
+two-host approval and sequential execution. Both project lint/syntax checks and
+deployment dry runs passed. All four deployed hosts matched the source hashes
+and file permissions. Repeat runs returned `changed=0`. Guest uptime, NAS
+app/pool states, PBS health, and API counters remained unchanged. A live PBS
+plan resolved nine package upgrades without installing them. The owner batch
+proposal/cancellation test is pending. No real batch installation was tested.
 
 ## API and delivery
 
@@ -182,8 +247,8 @@ Names must match the configured inventory names. For example:
 ```
 
 One to six unique hosts are supported. Omitting the list preserves standalone
-host replies. The bot also needs **Create Public Threads** and **Send Messages
-in Threads** in the maintenance channel. Existing owner-only routing still
+host replies. The bot also needs **Create Public Threads**, **Send Messages
+in Threads**, and **Attach Files** in the maintenance channel. Existing owner-only routing still
 applies. Only the coordinator answers help requests.
 
 From `proxmox/`:
@@ -191,6 +256,7 @@ From `proxmox/`:
 ```sh
 python3 tests/test_maintenance_queries.py
 python3 tests/test_maintenance_query_groups.py
+python3 tests/test_maintenance_batches.py
 python3 tests/test_app_versions.py
 python3 tests/test_app_update_requests.py
 python3 tests/test_lxc_app_updates.py
