@@ -69,6 +69,14 @@ edits to the appliance filesystem or database.
 
 ## Application and backup workflows
 
+- `playbooks/maintenance-queries.yml` installs the shared `maintenance_queries`
+  role from `../proxmox/roles` and reconciles only its named cron job through
+  middleware. Export a protected configuration backup first. Keep the worker
+  and credentials under `/root/homelab-status` with root-only permissions.
+  Preserve owner mentions, fixed read-only probes, and explicit cached/pinned
+  update limits. This workflow must not change SSH, accounts, pools, or network.
+  See [query coverage](../proxmox/docs/maintenance-queries.md).
+
 - Use the scoped playbooks under `playbooks/` for custom apps. Inspect their
   own gates before invocation. A `site.yml` tag does not deploy every custom app.
 - `playbooks/cloud-backup.yml` configures native encrypted backup tasks and

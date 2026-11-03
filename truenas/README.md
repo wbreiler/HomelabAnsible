@@ -4,6 +4,11 @@
 
 Ansible-managed desired state for the TrueNAS host `erebus`.
 
+[Discord health and update queries](../proxmox/docs/maintenance-queries.md)
+uses the scoped `playbooks/maintenance-queries.yml` entry point. It installs a
+local read-only worker and one middleware cron job after a protected config
+backup. It shares the Proxmox role without altering appliance management access.
+
 [ISO web server](files/iso-server/SETUP.md): a deployed read-only custom app
 with a dedicated macvlan address. HTTP, Proxmox downloads, and repeat-run
 idempotency passed verification.
