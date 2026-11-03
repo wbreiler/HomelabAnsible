@@ -303,3 +303,42 @@ with external actions mocked. Lint, syntax, check mode, timer validation, and
 repeat deployment (`changed=0`) passed. A labeled Discord display test updated
 one reply through all six stages and verified the final content. It used temporary
 state, left the OpenAI request counter unchanged, and performed no real repair.
+
+## Real repair drill on the disposable pilot
+
+The manual `maintenance-repair-drill.service` checks a backup prerequisite on
+the existing Terraform-owned `terraform-pilot` LXC. It has no timer and cannot
+create, start, stop, or delete a guest. Before enabling it, inspect the pilot
+for unexpected application workloads or data. The runner requires the configured
+VMID to be local, running, unprivileged, named `terraform-pilot`, unlocked, and
+free of external mounts or device passthrough. Ordinary updater exclusions apply.
+
+Set `maintenance_briefs_drill_vmid` to that VMID in the owning node's ignored
+host variables, then deploy `maintenance-briefs.yml`. Zero disables the drill.
+Run `systemctl start maintenance-repair-drill.service` on that node. Its expected
+failure means no usable backup meets the drill's stricter 15-minute requirement.
+It only reads metadata and writes its own report. It preserves existing backups,
+normal updater settings, and scheduled maintenance reports and journals.
+
+The brief is labeled **DRILL · Test container only**. React 🔍 to request a
+stronger-model proposal, then ✅ on that separate proposal. The only repair
+candidate is a fresh PBS snapshot followed by the existing guarded OS updater
+for the configured pilot alone. The executor rechecks the pilot identity and
+uses the stricter freshness requirement only for this attempt. This is a real
+backup and package-maintenance operation, not the synthetic no-op test.
+
+The test container's services can restart. Other guests are never update targets.
+The small snapshot adds ordinary backup I/O to the shared hosts and PBS.
+After the attempt finishes, rerun the read-only drill check while the backup is
+still fresh. A passing check clears the drill failure and produces its recovery
+brief. The report stays in `/var/lib/homelab-maintenance-repairs/drill-report.json`.
+No guest lifecycle or Terraform resource change is required for this workflow.
+
+On 2026-11-03, live inspection found only baseline operating-system services in
+Atlas's existing pilot, with no external mounts or failed services. The drill
+deployment passed 67 focused local tests, 41 mocked repair tests on each node,
+lint, syntax/check mode, and an idempotent repeat application. Its initial
+read-only check failed the 15-minute freshness rule as expected and delivered
+a labeled Discord brief. Guest uptime, packages, normal updater configuration,
+scheduled reports, and backup metadata were captured privately for comparison
+after the owner-approved repair.

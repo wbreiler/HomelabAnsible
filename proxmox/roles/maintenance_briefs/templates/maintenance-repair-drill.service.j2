@@ -1,0 +1,23 @@
+[Unit]
+Description=Read-only backup prerequisite drill for the configured test container
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/maintenance-repairs --drill
+User=root
+Group=root
+UMask=0077
+StateDirectory=homelab-maintenance-repairs
+StateDirectoryMode=0700
+TimeoutStartSec=120
+Nice=19
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/homelab-maintenance-repairs /run/lock
+# No timer or boot target. Starting this service only checks backup freshness.

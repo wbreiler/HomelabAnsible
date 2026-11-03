@@ -157,7 +157,9 @@ def progress(settings, incident, stage):
         'reviewing': '⏳ **Working…**\nThe attempt finished. The stronger model is reviewing the result.',
         'closed': '🏁 **Finished**\n' + briefs.plain(incident.get('outcome', 'See the result message.')),
     }
-    content = (('**TEST**\n' if incident.get('test') else '') + briefs.plain(incident['evidence']['node']) + '\n' +
+    scope = ('**TEST**\n' if incident.get('test') else
+             '**DRILL — test container only**\n' if incident['evidence'].get('job') == 'drill' else '')
+    content = (scope + briefs.plain(incident['evidence']['node']) + '\n' +
                labels[stage] + f'\nLast update: <t:{int(time.time())}:R>.')
     try:
         receipt = None
@@ -243,8 +245,10 @@ def candidates(incident):
         if row.get('status') != 'failed' or type(row.get('vmid')) is not int or row['vmid'] <= 0:
             continue
         vmid = row['vmid']
-        if evidence['job'] == 'os' and vmid not in os_config['skip_vmids']:
-            for action in ('retry_os', 'backup_retry_os'):
+        if evidence['job'] in ('os', 'drill') and vmid not in os_config['skip_vmids']:
+            if evidence['job'] == 'drill' and vmid != briefs.read_json(CONFIG).get('drill_vmid', 0):
+                continue
+            for action in (('backup_retry_os',) if evidence['job'] == 'drill' else ('retry_os', 'backup_retry_os')):
                 result[f'{action}:{vmid}'] = {'operation': action, 'vmid': vmid, 'app': ''}
         elif evidence['job'] == 'apps' and row.get('app') in configured and row['app'] not in app_config['exclude']:
             app = row['app']
@@ -265,7 +269,8 @@ def plan(settings, incident):
                     'Select one bounded repair attempt from the candidates. Prefer manual when evidence does not support a retry. '
                     'Choose backup_retry_os only for an unmet backup prerequisite. Retry an app or OS for a plausibly transient failure. '
                     'Disk exhaustion, signature problems, persistent configuration errors, and ambiguous failure causes usually require manual work. '
-                    'A test must select noop. Explain why the selected attempt is appropriate and what remains unknown.')
+                    'Only when the JSON test flag is true, select noop. A controlled drill with test=false is a real backup prerequisite check. '
+                    'Explain why the selected attempt is appropriate and what remains unknown.')
     if analysis['candidate'] not in choices:
         incident.update(status='closed', outcome='Manual investigation required. ' + briefs.plain(analysis['reason']))
         save(incident)
@@ -281,7 +286,10 @@ def proposal(incident):
     selected = incident['selected']
     title, effect = OPERATIONS[selected['operation']]
     target = 'No infrastructure target' if incident.get('test') else f"CT {selected['vmid']}" + (' · ' + selected['app'] if selected['app'] else '')
-    return (('**TEST — no infrastructure changes**\n' if incident.get('test') else '**Approve one repair attempt**\n') +
+    heading = ('**TEST — no infrastructure changes**\n' if incident.get('test') else
+               '**DRILL — approve one test-container repair**\n' if incident['evidence']['job'] == 'drill' else
+               '**Approve one repair attempt**\n')
+    return (heading +
             f"{incident['evidence']['node']} · {target}\n**Action:** {title}\n{effect}\n\n" +
             '**Reason:** ' + briefs.plain(incident['analysis']['reason']) + '\n' +
             '**Unknown:** ' + briefs.plain(incident['analysis']['unknowns']) + '\n\n' +
@@ -341,6 +349,10 @@ def perform(incident):
         if not original.get('name') or original['name'] != row.get('name'):
             raise ValueError('Guest identity changed after the failed run')
         os_config = briefs.read_json(OS_CONFIG)
+        if incident['evidence']['job'] == 'drill':
+            target, _, os_config = drill_guest()
+            if vmid != target or selected['operation'] != 'backup_retry_os':
+                raise ValueError('Drill repair must target the configured pilot only')
         if selected['operation'] == 'backup_retry_os':
             updater.backup(vmid, {'backup_storage': os_config['backup_storage']}, node)
         os_updater = load_module('guarded_os_updater', OS_SOURCE)
@@ -358,6 +370,44 @@ def perform(incident):
     catalog = updater.yaml.safe_load((APP_ROOT / 'catalog.yml').read_text())
     result = updater.update_one(app, catalog[app], row, app_config, node, False, retry_failed=True)
     return {'passed': result['status'] == 'updated', 'summary': 'Targeted application update: ' + result['status'] + '.'}
+
+
+def drill_guest():
+    """Pin the read-only drill and its repair to the existing disposable pilot."""
+    vmid = briefs.read_json(CONFIG).get('drill_vmid', 0)
+    if type(vmid) is not int or not 100 <= vmid <= 999999999:
+        raise ValueError('No drill guest configured')
+    updater = load_module('drill_os_updater', OS_SOURCE)
+    node = socket.gethostname().split('.')[0]
+    row = next((row for row in updater.api(f'/nodes/{node}/lxc') if row['vmid'] == vmid), None)
+    guest = updater.api(f'/nodes/{node}/lxc/{vmid}/config')
+    if (not row or row.get('name') != 'terraform-pilot' or row['status'] != 'running' or
+            guest.get('hostname') != 'terraform-pilot' or guest.get('unprivileged') != 1 or guest.get('lock') or
+            guest.get('lxc') or any(re.fullmatch(r'(mp|dev)\d+', key) for key in guest)):
+        raise ValueError('Drill requires the running unprivileged pilot without external mounts')
+    config = briefs.read_json(OS_CONFIG)
+    if vmid in config['skip_vmids']:
+        raise ValueError('Drill guest is excluded from maintenance')
+    return vmid, updater, {**config, 'backup_max_age_hours': 0.25}
+
+
+def drill():
+    """Check a stricter backup prerequisite without modifying any guest."""
+    invocation = os.environ.get('INVOCATION_ID', '')
+    if not briefs.INVOCATION.fullmatch(invocation):
+        raise ValueError('Start the drill through its dedicated systemd service')
+    with MAINTENANCE_LOCK.open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        vmid, updater, config = drill_guest()
+        node = socket.gethostname().split('.')[0]
+        backups = updater.api(f'/nodes/{node}/storage/{config["backup_storage"]}/content', '--content', 'backup')
+        passed = updater.recent_backup(backups, vmid, config['backup_max_age_hours'], time.time())
+        row = {'vmid': vmid, 'name': 'terraform-pilot', 'status': 'completed' if passed else 'failed'}
+        if not passed:
+            row['reason'] = 'no recent usable backup'
+        atomic(briefs.JOBS['drill'][1], {'invocation_id': invocation, 'results': [row]})
+        print(f'Controlled drill CT {vmid}: ' + ('backup prerequisite passed' if passed else 'no recent usable backup (15-minute drill requirement)'))
+        return int(not passed)
 
 
 @contextlib.contextmanager
@@ -512,7 +562,9 @@ def advance(settings, incident):
     if incident['status'] == 'closed':
         if 'progress_id_content' in incident:
             progress(settings, incident, 'closed')
-        publish(settings, incident, 'result_id', ('**TEST result**\n' if incident.get('test') else '**Repair result**\n') +
+        heading = ('**TEST result**\n' if incident.get('test') else
+                   '**DRILL repair result**\n' if incident['evidence']['job'] == 'drill' else '**Repair result**\n')
+        publish(settings, incident, 'result_id', heading +
                 incident['evidence']['node'] + '\n' + incident['outcome'] + '\nNo additional attempt is authorized.')
 
 
@@ -533,9 +585,12 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--execute', action='store_true')
     group.add_argument('--test-interaction', action='store_true')
+    group.add_argument('--drill', action='store_true', help='Check only the configured pilot backup prerequisite; never change guests')
     args = parser.parse_args()
     settings = config()
     ROOT.mkdir(mode=0o700, exist_ok=True)
+    if args.drill:
+        return drill()
     if args.execute:
         execute(settings)
     elif args.test_interaction:
@@ -547,7 +602,7 @@ def main():
 
 if __name__ == '__main__':
     try:
-        main()
+        raise SystemExit(main())
     except Exception as error:
         print(f'Repair worker stopped ({type(error).__name__}); credentials omitted.')
         raise SystemExit(1)

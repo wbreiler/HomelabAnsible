@@ -282,6 +282,9 @@ maintenance_briefs_daily_call_limit: 10  # Per node, per UTC day; attempted call
 maintenance_briefs_repairs_enabled: false
 maintenance_briefs_repairs_model: gpt-6.1-sol
 maintenance_briefs_repairs_daily_call_limit: 2  # Planning and result review share this cap.
+# Optional manual repair drill on the existing terraform-pilot LXC only.
+# Set its actual VMID in that node's ignored host variables after inspection.
+maintenance_briefs_drill_vmid: 0
 lxc_app_updates_native_guests: {}  # Optional existing guest hostnames, for example:
 #  nginx_proxy_manager: npm-example
 #  sabnzbd: sabnzbd-example

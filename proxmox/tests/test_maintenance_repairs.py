@@ -379,6 +379,81 @@ class Repairs(unittest.TestCase):
             value['evidence']['job'] = 'apps'
             self.assertEqual(list(repairs.candidates(value)), ['retry_app:100:sonarr'])
 
+    def test_drill_candidates_are_only_the_configured_guest_and_backup_retry(self):
+        value = {**incident(), 'test': False}
+        value['evidence']['job'] = 'drill'
+        report = {'results': [{'vmid': vmid, 'status': 'failed'} for vmid in [114, 999]]}
+        config = {'roles': [], 'exclude': [], 'skip_vmids': [], 'drill_vmid': 114}
+        with patch.object(repairs, 'source_state', return_value=(report, 'hash')), \
+                patch.object(repairs.briefs, 'read_json', return_value=config):
+            self.assertEqual(repairs.candidates(value), {'backup_retry_os:114': {'operation': 'backup_retry_os', 'vmid': 114, 'app': ''}})
+
+    def test_drill_guard_rejects_service_guests_mounts_privilege_and_locks(self):
+        updater = MagicMock()
+        config = {'skip_vmids': [], 'backup_storage': 'test-pbs', 'backup_max_age_hours': 8}
+        row = {'vmid': 114, 'name': 'terraform-pilot', 'status': 'running'}
+        guest = {'hostname': 'terraform-pilot', 'unprivileged': 1}
+        def read(path):
+            return {'drill_vmid': 114} if path == repairs.CONFIG else config
+        for changes in [{'hostname': 'production'}, {'unprivileged': 0}, {'mp0': 'shared'}, {'dev0': 'device'},
+                        {'lock': 'backup'}, {'lxc': ['mount.entry: shared']}]:
+            updater.api.side_effect = lambda path: [row] if path.endswith('/lxc') else {**guest, **changes}
+            with patch.object(repairs, 'load_module', return_value=updater), \
+                    patch.object(repairs.briefs, 'read_json', side_effect=read), self.assertRaises(ValueError):
+                repairs.drill_guest()
+        updater.api.side_effect = lambda path: [row] if path.endswith('/lxc') else guest
+        with patch.object(repairs, 'load_module', return_value=updater), patch.object(repairs.briefs, 'read_json', side_effect=read):
+            vmid, _, result = repairs.drill_guest()
+        self.assertEqual(vmid, 114)
+        self.assertEqual(result['backup_max_age_hours'], 0.25)
+        self.assertEqual(config['backup_max_age_hours'], 8)
+        updater.update_guests.assert_not_called()
+
+    def test_disabled_drill_refuses_before_guest_access(self):
+        with patch.object(repairs.briefs, 'read_json', return_value={'drill_vmid': 0}), \
+                patch.object(repairs, 'load_module') as load, self.assertRaises(ValueError):
+            repairs.drill_guest()
+        load.assert_not_called()
+
+    def test_drill_reports_real_backup_check_without_mutation(self):
+        updater = MagicMock()
+        updater.api.return_value = []
+        report_path = self.root / 'drill-report.json'
+        for passed in [False, True]:
+            updater.recent_backup.return_value = passed
+            with patch.object(repairs, 'drill_guest', return_value=(114, updater, {'backup_storage': 'test-pbs', 'backup_max_age_hours': 0.25})), \
+                    patch.dict(repairs.os.environ, {'INVOCATION_ID': 'b' * 32}), \
+                    patch.dict(repairs.briefs.JOBS, {'drill': ('maintenance-repair-drill.service', report_path)}), \
+                    patch.object(repairs.subprocess, 'run') as run, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(repairs.drill(), int(not passed))
+            report = json.loads(report_path.read_text())
+            self.assertEqual(report['invocation_id'], 'b' * 32)
+            self.assertEqual(report['results'][0]['vmid'], 114)
+            self.assertEqual(report['results'][0]['status'], 'completed' if passed else 'failed')
+            updater.update_guests.assert_not_called()
+            run.assert_not_called()
+
+    def test_drill_requires_systemd_invocation(self):
+        with patch.dict(repairs.os.environ, {'INVOCATION_ID': ''}), \
+                patch.object(repairs, 'drill_guest') as guest, self.assertRaises(ValueError):
+            repairs.drill()
+        guest.assert_not_called()
+
+    def test_drill_repair_applies_stricter_backup_guard_only_to_test_target(self):
+        value, updater, os_updater = self.updater_fixture('backup_retry_os')
+        value['evidence']['job'] = 'drill'
+        config_path = self.root / 'config.json'
+        repairs.atomic(config_path, {'backup_storage': 'test-pbs', 'backup_max_age_hours': 8})
+        strict = {'backup_storage': 'test-pbs', 'backup_max_age_hours': 0.25}
+        with patch.object(repairs, 'load_module', side_effect=[updater, os_updater]), \
+                patch.object(repairs, 'APP_ROOT', self.root), patch.object(repairs, 'OS_CONFIG', config_path), \
+                patch.object(repairs, 'drill_guest', return_value=(100, os_updater, strict)), \
+                patch.object(repairs, 'source_state', return_value=({'results': [{'vmid': 100, 'name': 'guest', 'status': 'failed'}]}, 'hash')):
+            self.assertTrue(repairs.perform(value)['passed'])
+        updater.backup.assert_called_once()
+        self.assertEqual(updater.backup.call_args.args[0], 100)
+        os_updater.update_guests.assert_called_once_with(strict, requested=(100,))
+
     def test_model_failures_consume_bounded_budget_and_do_not_retry(self):
         with patch.object(repairs.briefs, 'post', side_effect=RuntimeError('secret')) as post:
             for _ in range(3):

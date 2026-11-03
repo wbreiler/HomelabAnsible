@@ -755,6 +755,8 @@ reuses guarded single-guest maintenance, retains backup/version checks, and neve
 runs generated commands. See the same guide for credentials, limits, and tests.
 One status reply shows proposal preparation, approval, execution, review, and
 completion. Idle reaction checks run about every ten seconds.
+The same guide covers a real backup-prerequisite drill on the existing disposable
+Terraform pilot, with separate reports and Discord approval before any repair.
 
 Set `lxc_update_discord_webhook_url` in ignored group variables or Vault.
 It can reference an existing webhook, such as `"{{ diun_discord_webhook_url }}"`.

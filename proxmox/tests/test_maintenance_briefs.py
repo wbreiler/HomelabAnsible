@@ -33,6 +33,13 @@ def evidence(failed=True, invocation=INVOCATION):
 
 
 class Collection(unittest.TestCase):
+    def test_unused_drill_is_quiet_without_querying_missing_unit(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.dict(briefs.JOBS, {'drill': ('maintenance-repair-drill.service', Path(directory) / 'absent.json')}), \
+                patch.object(briefs, 'unit_status') as status:
+            self.assertIsNone(briefs.collect('drill'))
+        status.assert_not_called()
+
     def collect(self, report, journal='', states=None):
         with patch.object(briefs, 'unit_status', side_effect=states or [status(), status()]), \
                 patch.object(briefs, 'read_json', return_value=report), \
@@ -213,6 +220,13 @@ class Lifecycle(unittest.TestCase):
 
 
 class Transport(unittest.TestCase):
+    def test_real_drill_is_labeled_separately_from_synthetic_tests(self):
+        value = evidence()
+        value['job'] = 'drill'
+        title = briefs.message(value)['embeds'][0]['title']
+        self.assertIn('DRILL', title)
+        self.assertNotIn('Synthetic', title)
+
     def test_no_redirect(self):
         with self.assertRaises(ValueError):
             briefs.NoRedirect().redirect_request(None)

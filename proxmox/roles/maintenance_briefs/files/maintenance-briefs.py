@@ -19,6 +19,7 @@ STATE = Path('/var/lib/homelab-maintenance-briefs')
 JOBS = {
     'os': ('lxc-auto-update.service', Path('/var/lib/lxc-auto-update/last-run.json')),
     'apps': ('lxc-app-updates.service', Path('/var/lib/homelab-app-updates/last-run.json')),
+    'drill': ('maintenance-repair-drill.service', Path('/var/lib/homelab-maintenance-repairs/drill-report.json')),
 }
 WEBHOOK = re.compile(r'https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+')
 INVOCATION = re.compile(r'[0-9a-f]{32}')
@@ -74,6 +75,8 @@ def signals(text):
 
 def collect(kind):
     unit, path = JOBS[kind]
+    if kind == 'drill' and not path.exists():
+        return None
     status = unit_status(unit)
     invocation = status.get('InvocationID', '')
     if status.get('ActiveState') not in ('inactive', 'failed') or not INVOCATION.fullmatch(invocation):
@@ -112,6 +115,8 @@ def collect(kind):
         except (subprocess.SubprocessError, OSError, ValueError):
             evidence['journal_available'] = False
         evidence['observations'] = sorted(observations)
+    if kind == 'drill':
+        evidence['observations'].append('Controlled test-container drill: require a backup less than 15 minutes old. Existing backups are preserved.')
     # A new run must not be paired with the previous run's report or journal.
     if unit_status(unit) != status:
         return None
@@ -194,6 +199,8 @@ def message(evidence, analysis=None, note='', test=False):
     fields.append({'name': 'Evidence on ' + plain(evidence['node']),
                    'value': f"```sh\njournalctl _SYSTEMD_INVOCATION_ID={evidence['invocation']} -n 200\n```"})
     title = 'Maintenance succeeded on the next run' if recovered else 'Maintenance failure brief'
+    if evidence['job'] == 'drill':
+        title = 'DRILL · Test container only · ' + title
     return {'embeds': [{
         'title': ('TEST · Synthetic example · ' if test else '') + title,
         'description': plain(evidence['node']) + ' · ' + evidence['unit'] + '\n' + plain(evidence['finished']),

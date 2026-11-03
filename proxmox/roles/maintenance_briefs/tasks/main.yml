@@ -7,6 +7,7 @@
       - maintenance_briefs_model is match('^[a-zA-Z0-9._-]+$')
       - maintenance_briefs_discord_webhook_url is match('^https://(canary\.|ptb\.)?discord(app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$')
       - maintenance_briefs_openai_api_key is string
+      - maintenance_briefs_drill_vmid | int == 0 or (maintenance_briefs_drill_vmid | int >= 100 and maintenance_briefs_drill_vmid | int <= 999999999)
   no_log: true
 
 - name: Validate interactive repair settings
@@ -88,6 +89,7 @@
       {{ (maintenance_briefs_repairs_discord if maintenance_briefs_repairs_enabled | bool else {}) |
          combine({'repairs_enabled': maintenance_briefs_repairs_enabled | bool,
                   'repair_model': maintenance_briefs_repairs_model,
+                  'drill_vmid': maintenance_briefs_drill_vmid | int,
                   'repair_daily_call_limit': maintenance_briefs_repairs_daily_call_limit | int}) | to_nice_json }}
     dest: /etc/homelab-maintenance-repairs.json
     owner: root
@@ -115,6 +117,7 @@
     - maintenance-repairs.service
     - maintenance-repairs.timer
     - maintenance-repair-execute.service
+    - maintenance-repair-drill.service
   notify: Reload maintenance brief units
 
 - name: Enable interactive repair timer

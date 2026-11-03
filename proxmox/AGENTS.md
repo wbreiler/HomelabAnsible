@@ -487,6 +487,11 @@ Use `../terraform/README.md` for provisioning and media management.
   proposal, disabled mentions, and terminal-state updates. Status delivery failures
   must not interrupt approved transactions. Merge controller progress changes
   when the executor saves its result under the shared state lock.
+* The manual backup drill is gated by `maintenance_briefs_drill_vmid` and the
+  existing unprivileged `terraform-pilot` identity without external mounts.
+  Its 15-minute backup check is read-only and uses a separate unit/report.
+  The only approved drill repair is fresh backup plus targeted OS maintenance.
+  Preserve normal scheduled reports, updater settings, and all existing backups.
 * The separate privileged executor may call only the existing guarded updater
   for one approved guest/application. No generated commands, automatic repeats,
   guest lifecycle operations, or infrastructure configuration repairs. Interrupted
