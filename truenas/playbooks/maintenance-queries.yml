@@ -4,6 +4,7 @@
   become: true
   gather_facts: false
   vars:
+    maintenance_queries_app_updates_enabled: true
     maintenance_queries_platform: truenas
     maintenance_queries_secret_dir: "{{ playbook_dir }}/../../proxmox"
     maintenance_queries_state: /root/homelab-status

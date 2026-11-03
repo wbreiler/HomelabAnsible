@@ -80,6 +80,13 @@ edits to the appliance filesystem or database.
   Preserve the shared `query_nodes` order. Only its first host writes the main
   Discord summary; other hosts publish details inside the associated thread.
   See [query coverage](../proxmox/docs/maintenance-queries.md).
+  The dedicated playbook also enables explicit app update proposals. Keep
+  inspections read-only. Only an exact, unexpired owner-approved proposal may
+  start the separate transient executor. It can redeploy one custom app with
+  one new platform-pinned image, retaining all other images/configuration.
+  Require recent successful backup evidence and preserve one-attempt semantics.
+  Catalog apps and local builds remain manual. Never broaden this into host,
+  pool, network, account, or guest lifecycle maintenance.
 
 - Use the scoped playbooks under `playbooks/` for custom apps. Inspect their
   own gates before invocation. A `site.yml` tag does not deploy every custom app.

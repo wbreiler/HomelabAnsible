@@ -12,6 +12,11 @@ Custom containers get live upstream image/source comparisons, including pinned
 images, local builds, and sidecars. Checks never pull layers or deploy updates.
 The configured host group shares one channel summary, with optional details in
 its thread and combined API cost accounting.
+Owner commands such as `update APP on HOST` now prepare app update proposals.
+An exact owner reaction authorizes one custom-app image update through a
+separate executor. The proposal states the backup age and complete app restart
+scope. Catalog apps and locally built images retain their manual workflows.
+See [app update approvals](../proxmox/docs/maintenance-queries.md#initiate-an-app-update).
 
 [ISO web server](files/iso-server/SETUP.md): a deployed read-only custom app
 with a dedicated macvlan address. HTTP, Proxmox downloads, and repeat-run
