@@ -233,6 +233,7 @@ def hub_update(image, target, row):
                 same, known_platform = old_digest == digest, True
                 break
     row.update(latest=text(label), checked_image=target, source='Docker Hub tag/platform metadata',
+               target_digest=digest,
                installed_digest=image['image_id'][:19], upstream_digest=digest[:19])
     if same:
         if re.match(r'^v?\d', row['current']):
@@ -319,6 +320,7 @@ def image_update(image, run=command):
         elif latest.lstrip('v') == row['current'].lstrip('v'):
             latest += ' (image rebuild)'
         row.update(latest=latest, available=latest if not same else None, checked_image=target,
+                   target_digest=digest,
                    installed_digest=image['image_id'][:19], upstream_digest=digest[:19])
         if row['current'] in ('latest', 'stable', 'plexpass'):
             row['current'] += ' ' + image['image_id'][:19]

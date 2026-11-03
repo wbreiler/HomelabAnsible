@@ -50,6 +50,14 @@ class Routing(unittest.TestCase):
                 q.discord(CONFIG, suffix='/../../users/@me')
             request.assert_not_called()
 
+    def test_only_fixed_update_reaction_routes_are_accepted(self):
+        with patch.object(q, 'request') as request:
+            q.discord(CONFIG, 'PUT', '/' + CONFIG['owner_user_id'] + '/reactions/%E2%9C%85/@me')
+            q.discord(CONFIG, suffix='/' + CONFIG['owner_user_id'] + '/reactions/%E2%9D%8C?type=0&after=' + CONFIG['owner_user_id'] + '&limit=1')
+            self.assertEqual(request.call_count, 2)
+            with self.assertRaises(ValueError):
+                q.discord(CONFIG, suffix='/' + CONFIG['owner_user_id'] + '/reactions/../../users/@me')
+
     def test_discord_rate_limit_waits_then_retries_but_openai_does_not(self):
         error = urllib.error.HTTPError('https://discord.com/api/v10/test', 429, 'limited', {}, io.BytesIO(b'{"retry_after":2}'))
         self.addCleanup(error.close)

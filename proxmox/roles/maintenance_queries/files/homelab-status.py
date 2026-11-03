@@ -15,6 +15,7 @@ import socket
 import subprocess
 from textwrap import shorten
 import time
+import types
 import urllib.error
 import urllib.request
 
@@ -27,8 +28,11 @@ _usage_spec.loader.exec_module(ai)
 _versions_spec = importlib.util.spec_from_file_location('app_versions', Path(__file__).with_name('app_versions.py'))
 versions = importlib.util.module_from_spec(_versions_spec)
 _versions_spec.loader.exec_module(versions)
+_updates_spec = importlib.util.spec_from_file_location('app_update_requests', Path(__file__).with_name('app_update_requests.py'))
+app_updates = importlib.util.module_from_spec(_updates_spec)
+_updates_spec.loader.exec_module(app_updates)
 
-HELP = 'Mention me with “check for updates” or “how is the lab doing?”. One summary covers all hosts, with optional details in its thread. Checks never install updates or restart services. Repairs still require the separate proposal approval.'
+HELP = 'Mention me with “check for updates” or “how is the lab doing?”. One summary covers all hosts. To request an app update: “update APP on HOST”, then approve its proposal with ✅. Checks remain read-only.'
 ID = re.compile(r'[0-9]{17,20}')
 # Fixed code only. User text is never passed to a command, path, URL, or probe.
 PROBE = r'''
@@ -112,7 +116,9 @@ def request(url, method='GET', payload=None, authorization=None):
 def discord(config, method='GET', suffix='', payload=None):
     if not ID.fullmatch(config['channel_id']):
         raise ValueError('Invalid Discord channel')
-    if suffix and not re.fullmatch(r'(?:/[0-9]{17,20}(?:/threads)?|\?limit=100(?:&after=[0-9]{17,20})?)', suffix):
+    if suffix and not re.fullmatch(
+            r'(?:/[0-9]{17,20}(?:/threads|/reactions/(?:%E2%9C%85|%E2%9D%8C)'
+            r'(?:/@me|\?type=0&after=[0-9]{17,20}&limit=1))?|\?limit=100(?:&after=[0-9]{17,20})?)', suffix):
         raise ValueError('Invalid Discord route')
     return request('https://discord.com/api/v10/channels/' + config['channel_id'] + '/messages' + suffix,
                    method, payload, 'Bot ' + config['bot_token'])
@@ -125,6 +131,8 @@ def intent(message, config):
             not any(user.get('id') == config['bot_user_id'] for user in message.get('mentions', []))):
         return None
     text = re.sub(r'<@!?[0-9]+>', '', message.get('content', '')).lower()[:2000]
+    if re.match(r'^\s*(?:update|upgrade)\b', text):
+        return 'app_update'
     if re.search(r'\b(updates?|upgrades?|outdated|versions?)\b', text):
         return 'updates'
     if re.search(r'\b(health|healthy|status|doing|issues?|problems?|broken|running)\b', text):
@@ -447,7 +455,8 @@ def group_payload(config, bundle, results):
         cost += f' · {unknown} host cost unavailable'
     model = ', '.join(sorted(models)) or ('Model unavailable' if unknown else 'No API calls reported')
     return {'content': '', 'embeds': [{'title': 'Homelab · ' + bundle['kind'].title(),
-            'description': f'{status} · {len(results)}/{len(nodes)} hosts reported. Details are in the thread below.',
+            'description': f'{status} · {len(results)}/{len(nodes)} hosts reported. Details are in the thread below.' +
+                           ('\nTo update an app: `@Homelab Repairs update APP on HOST` → review → ✅.' if bundle['kind'] == 'updates' else ''),
             'fields': fields, 'color': 0x3498DB if finished else 0xE67E22,
             'footer': {'text': (cost + '\n' + model)[:500]}}], 'allowed_mentions': {'parse': []}}
 
@@ -624,6 +633,11 @@ def poll(config, state, path):
     today = time.strftime('%Y-%m-%d', time.gmtime())
     if state.get('day') != today:
         state.update(day=today, calls=0, checks=0)
+    if config.get('app_updates_enabled'):
+        try:
+            app_updates.poll(types.SimpleNamespace(discord=discord, save=save, versions=versions, ID=ID), config)
+        except Exception as error:
+            print('App update interaction deferred (' + type(error).__name__ + '). Inspections remain available.')
     refresh_groups(config, state, path)
     if state.get('pending'):
         process(config, state, path)
@@ -643,6 +657,21 @@ def poll(config, state, path):
         kind = intent(message, config)
         timestamp = ((int(message['id']) >> 22) + 1420070400000) / 1000
         if kind and 0 <= time.time() - timestamp < 900:
+            if kind == 'app_update':
+                selected = app_updates.parse(message['content'])
+                nodes = config.get('query_nodes', [config['node']])
+                if config.get('app_updates_enabled') and selected and selected[1] in nodes:
+                    save(path, state)  # Never replay a command after an interrupted proposal.
+                    app_updates.request(types.SimpleNamespace(discord=discord, save=save, versions=versions, ID=ID), config, message)
+                    continue
+                if config['node'] != nodes[0]:
+                    save(path, state)
+                    continue
+                state['pending'] = {'message_id': message['id'], 'kind': 'help', 'payload': {
+                    'content': app_updates.SYNTAX + '\nHosts: ' + ', '.join(nodes), 'embeds': [], 'allowed_mentions': {'parse': []}}}
+                save(path, state)
+                process(config, state, path)
+                continue
             if kind == 'help' and config.get('query_nodes') and config['node'] != config['query_nodes'][0]:
                 save(path, state)
                 continue
@@ -669,6 +698,7 @@ def main():
     parser.add_argument('--inspect', choices=['health', 'updates'], help='Print normalized evidence without Discord or OpenAI')
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
+    config['_config_path'] = str(args.config.resolve())
     if config['platform'] not in ('pve', 'pbs', 'truenas') or not 1 <= config['daily_call_limit'] <= 20:
         raise ValueError('Invalid settings')
     for key in ['channel_id', 'bot_user_id', 'owner_user_id']:

@@ -524,8 +524,16 @@ Use `../terraform/README.md` for provisioning and media management.
   per-host cost accounting. Keep the ordered host list in the ignored bot JSON.
   Run `tests/test_maintenance_query_groups.py` for delivery changes.
 * Run only fixed health/update probes. User text and model output must never
-  become commands, URLs, or repair authorization. No updater entry point,
-  backup, artifact resolution, pin writes, guest power, or service mutation.
+  become executable commands or URLs. Inspection requests must not invoke an
+  updater, backup, artifact download, pin write, guest power, or service mutation.
+* The explicitly enabled app update path accepts only `update APP on HOST`.
+  Preserve owner/channel checks, exact proposal and reaction verification,
+  30-minute expiry, implementation/target binding, and consumption before writes.
+  Use the existing LXC updater with exact approved pins and no failed-retry bypass.
+  TrueNAS permits one custom-app image, pins unchanged sidecars, and requires
+  recent successful backup evidence. Keep the executor separate from query
+  timeouts. Never infer approval from an update report, model text, or old message.
+  Run `tests/test_app_update_requests.py` and `tests/test_lxc_app_updates.py`.
 * APT metadata refresh is permitted. Keep raw errors, logs, configuration, and
   secrets out of Discord and model input. Identify unsupported, stopped,
   failed, and cached checks. Never equate missing evidence with healthy.

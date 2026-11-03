@@ -44,6 +44,26 @@
     group: root
     mode: '0700'
 
+- name: Install owner-approved app update workers
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ maintenance_queries_script | dirname }}/{{ item }}"
+    owner: root
+    group: root
+    mode: '0700'
+  loop: [app_update_requests.py, app_update_backends.py]
+
+- name: Install approval-aware existing LXC updater
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../lxc_app_updates/files/lxc_app_updates.py"
+    dest: /opt/homelab-app-updates/lxc_app_updates.py
+    owner: root
+    group: root
+    mode: '0700'
+  when:
+    - maintenance_queries_platform == 'pve'
+    - maintenance_queries_app_updates_enabled | bool
+
 - name: Install read-only query worker
   ansible.builtin.copy:
     src: homelab-status.py
@@ -58,6 +78,7 @@
       {{ maintenance_queries_discord | combine({
            'node': maintenance_queries_node,
            'platform': maintenance_queries_platform,
+           'app_updates_enabled': maintenance_queries_app_updates_enabled | bool,
            'state_dir': maintenance_queries_state,
            'model': maintenance_queries_model,
            'daily_call_limit': maintenance_queries_daily_call_limit | int,

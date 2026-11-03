@@ -338,18 +338,24 @@ def update_packages(row, config, node, dry_run, retry_failed):
     return {'app': 'packages', 'vmid': vmid, 'status': 'updated', 'previous': previous, 'targets': changes}
 
 
-def update_one(app, spec, row, config, node, dry_run, retry_failed=False):
+def resolve_update(app, spec, row, config, observe=True):
+    """Resolve immutable pins without changing a guest; proposals do not start age clocks."""
     vmid = row['vmid']
-    failure = PINS / f'{app}-{vmid}.failed.json'
-    if failure.exists() and not retry_failed:
-        raise RuntimeError('previous deployment failed; inspect the log before --retry-failed')
     current = current_version(app, spec, vmid)
     if 'package' in spec:
         versions = guest(vmid, 'apt-cache', 'madison', spec['package']).splitlines()
         candidates = [line.split('|')[1].strip() for line in versions if '|' in line]
         target = apt_candidate(current, candidates)
-        if target and not package_ready(vmid, spec['package'], target, config):
-            target = None
+        if target:
+            if observe:
+                ready = package_ready(vmid, spec['package'], target, config)
+            else:
+                path = PINS / f'candidate-{vmid}-{spec["package"]}.json'
+                seen = json.loads(path.read_text()) if path.exists() else {}
+                ready = (seen.get('version') == target and
+                         time.time() - seen['first_seen'] >= config['minimum_age_hours'] * 3600)
+            if not ready:
+                target = None
         pins = {app + '_version': target} if target else None
     else:
         endpoint = spec.get('api', 'https://api.github.com')
@@ -357,6 +363,18 @@ def update_one(app, spec, row, config, node, dry_run, retry_failed=False):
         release = choose_release(releases, current, config['minimum_age_hours'], time.time())
         target = release['tag_name'].removeprefix('v') if release else None
         pins = resolve_pins(app, spec, app_variables(app, config), release) if release else None
+    return {'current': current, 'target': target, 'pins': pins}
+
+
+def update_one(app, spec, row, config, node, dry_run, retry_failed=False, approved_plan=None):
+    vmid = row['vmid']
+    failure = PINS / f'{app}-{vmid}.failed.json'
+    if failure.exists() and not retry_failed:
+        raise RuntimeError('previous deployment failed; inspect the log before --retry-failed')
+    resolved = resolve_update(app, spec, row, config, observe=approved_plan is None)
+    if approved_plan is not None and resolved != approved_plan:
+        raise RuntimeError('release, installed version, or artifact changed after approval')
+    current, target, pins = (resolved[key] for key in ('current', 'target', 'pins'))
     if not pins:
         if failure.exists():
             raise RuntimeError('failed deployment has no newer candidate; repair and verify health before removing its failure marker')

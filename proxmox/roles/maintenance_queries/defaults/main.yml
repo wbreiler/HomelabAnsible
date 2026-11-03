@@ -1,5 +1,6 @@
 ---
 maintenance_queries_enabled: true
+maintenance_queries_app_updates_enabled: false
 maintenance_queries_platform: pve
 maintenance_queries_node: "{{ inventory_hostname }}"
 maintenance_queries_secret_dir: "{{ playbook_dir }}"

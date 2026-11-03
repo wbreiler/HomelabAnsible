@@ -12,6 +12,9 @@ shows host sections, custom-app version comparisons, and the total estimated
 API cost. Optional thread replies retain each host's details and model.
 Image/source checks include pinned containers,
 native LXC apps, and Minecraft packs.
+Explicit `update APP on HOST` commands prepare one app update proposal.
+Owner approval starts a separate guarded executor. See
+[supported update paths](docs/maintenance-queries.md#initiate-an-app-update).
 
 ## Provisioning ownership
 

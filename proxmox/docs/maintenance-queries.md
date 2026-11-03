@@ -68,6 +68,67 @@ routes to fixed `updates`, `health`, or `help` checks. Neither user text nor mod
 output becomes a command, URL, or repair authorization. Existing maintenance
 reports, schedules, and separate reaction-approved repairs remain independent.
 
+## Initiate an app update
+
+```text
+@Homelab Repairs update sonarr on atlas
+@Homelab Repairs update lidarr on erebus
+@Homelab Repairs update deluge/gluetun on erebus
+```
+
+Use the host and app/service name from the update report. These examples are
+command syntax, not verified placement or authorization to install anything.
+An explicit `update APP on HOST` request prepares a proposal on that host only.
+Review its version, backup requirement, and restart scope. React **✅** to
+authorize one attempt, or **❌** to cancel. Approval expires after 30 minutes.
+The bot edits **one message** from Working to approval, execution, and result.
+Missing host names, shell syntax, and bulk requests never become installations.
+
+The fixed adapters select the target. Routine update requests need no model:
+their footer reports **Model: none · API cost: $0.000000**. Stronger-model repair
+proposals and reviews remain separate. Update requests do not consume ordinary
+inspection or AI budgets.
+
+Supported execution paths:
+
+| Target | Behavior |
+| --- | --- |
+| Apps enabled in the existing LXC role/native catalog | Resolve exact artifacts, preserve the configured compatible-release and age guards, create a fresh PBS backup, run one existing installer, and verify its result. |
+| TrueNAS custom apps with running registry images | Select one verified stable image in the same release line. Pin its platform digest and all unchanged sidecar images. Save the original configuration privately, require a successful system/settings/appdata backup within 30 hours, then redeploy only that app through `app.update`. |
+| Multiple newer images in one TrueNAS app | Require `APP/SERVICE` to select one image. The complete app and its sidecars can restart. |
+| Catalog apps, locally built images, Minecraft packs, source-only apps, netboot Secure Boot, standalone package batches, host OS, or major upgrades | Explain the unsupported case and require the owning playbook or TrueNAS upgrade screen. Never invent an installer or replace local patches. |
+
+TrueNAS checks the resulting configuration, exact image identities, RUNNING
+state, and available container health checks. It blocks Tdarr during active
+transcodes. It does not prove logins, playback, database recovery, or full user
+workflows. Its backup can precede the update by up to 30 hours; recovery can
+lose later changes. There is no automatic retry or rollback. The original
+Compose configuration is a configuration copy, not a fresh application-data
+backup. The adapter uses the supported
+[TrueNAS app.update API](https://api.truenas.com/v25.10/api_methods_app.update.html).
+
+The executor verifies the owner reaction, exact displayed proposal, expiry,
+target hash, code/configuration hash, current guest/app identity, and existing
+maintenance lock. It persists approval consumption before any mutation.
+Interrupted execution never repeats. Each host permits one active app update
+request. The executor runs as a separate transient `homelab-app-update.service`
+without a restart policy or execution timeout; query timeouts cannot kill an
+approved package transaction. It does not change guest hardware or power,
+storage datasets, networking, SSH, or accounts.
+
+`app-update.json`, archived `app-update-REQUEST.json`, and per-request logs stay
+root-only in the existing query state directory. They can contain app secrets.
+Never print or publish their contents. No new credentials are required.
+
+Validation on 2026-11-03: 164 focused tests, both project lint/syntax checks,
+dry runs, deployments, and repeat runs passed. All four hosts matched the
+source hashes and returned `changed=0`. Both execution platforms started with
+isolated empty approval state and performed no action. A real owner request
+produced one Lidarr proposal; the owner's cancellation closed it without
+changing its configuration or image. No approved installation was performed
+as part of this validation. Guest uptime and storage/service baselines remained
+unchanged. These results are dated evidence, not a current health guarantee.
+
 ## API and delivery
 
 Each completed host inspection uses one `gpt-4.1-mini` Responses request with
@@ -131,6 +192,8 @@ From `proxmox/`:
 python3 tests/test_maintenance_queries.py
 python3 tests/test_maintenance_query_groups.py
 python3 tests/test_app_versions.py
+python3 tests/test_app_update_requests.py
+python3 tests/test_lxc_app_updates.py
 python3 tests/test_openai_usage.py
 ansible-lint
 ansible-playbook maintenance-queries.yml --syntax-check
@@ -146,6 +209,12 @@ private state is `/var/lib/homelab-status`, and its timer is `homelab-status.tim
 Fixed LXC probes need namespace privileges. The service protects `/etc`, `/usr`,
 and `/boot` from writes and has a 15-minute timeout. It cannot time out a
 separate repair worker.
+
+The dedicated Linux and TrueNAS query playbooks enable
+`maintenance_queries_app_updates_enabled`. The shared role defaults this gate
+to false. Enabling it on PVE also installs the approval-aware existing app
+updater; its catalog/configuration must already exist. Deployment does not
+initiate an app update. A new owner command and proposal reaction are required.
 
 For TrueNAS, first export a protected configuration backup through its existing
 `playbooks/backup.yml`. Then run from `truenas/`:

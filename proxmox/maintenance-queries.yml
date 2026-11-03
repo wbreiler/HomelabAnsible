@@ -4,6 +4,7 @@
   become: true
   gather_facts: false
   vars:
+    maintenance_queries_app_updates_enabled: true
     maintenance_queries_platform: "{{ 'pve' if inventory_hostname in groups['proxmox_cluster'] else 'pbs' }}"
   roles:
     - maintenance_queries

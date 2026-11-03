@@ -98,6 +98,20 @@ class Deployment(unittest.TestCase):
             self.assertTrue(updates.package_ready(100, 'alloy', '1.2.3', self.config))
             self.assertFalse(updates.package_ready(100, 'alloy', '1.2.4', self.config))
 
+    def test_changed_approved_release_or_checksum_blocks_before_backup(self):
+        plan = updates.resolve_update('app', self.spec, {'vmid': 100}, self.config, observe=False)
+        for key, value in [('current', '0.9.0'), ('target', '1.3.0'), ('pins', {'app_version': '1.2.0'})]:
+            with self.subTest(key=key), patch.object(updates, 'backup') as backup, self.assertRaisesRegex(RuntimeError, 'changed after approval'):
+                self.update(dry_run=False, approved_plan={**plan, key: value})
+            backup.assert_not_called()
+
+    def test_read_only_package_resolution_does_not_write_age_pin(self):
+        self.guest.return_value = 'app | 1.2.0 | repo'
+        with patch.object(updates, 'apt_candidate', return_value='1.2.0'):
+            plan = updates.resolve_update('app', {'package': 'app'}, {'vmid': 100}, self.config, observe=False)
+        self.assertIsNone(plan['target'])
+        self.assertEqual(list(self.state.iterdir()), [])
+
     @patch.object(updates, 'backup')
     @patch.object(updates.subprocess, 'run')
     def test_dry_run_does_not_back_up_or_deploy(self, run, backup):
