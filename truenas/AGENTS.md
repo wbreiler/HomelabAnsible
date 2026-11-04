@@ -73,6 +73,9 @@ edits to the appliance filesystem or database.
   role from `../proxmox/roles` and reconciles only its named cron job through
   middleware. Export a protected configuration backup first. Keep the worker
   and credentials under `/root/homelab-status` with root-only permissions.
+  The minute cron worker polls every ten seconds within a bounded 50-second
+  window under its existing exclusive lock. Long checks finish normally and
+  overlap attempts exit without replay. Do not create another scheduler.
   Preserve owner mentions and fixed read-only probes. Custom apps use live
   platform-aware registry/source comparisons; only OS availability is cached.
   Never pull image layers or rebuild/deploy apps during inspection. This
@@ -87,6 +90,9 @@ edits to the appliance filesystem or database.
   per app, retaining all other images/configuration and redeploying each app once.
   Keep fleet execution sequential, stop pending work after failure/cancellation,
   and publish exact version plans in the one channel summary's thread.
+  Preparation may compare three images concurrently and reuse one fresh Docker
+  inventory for that request. Execution must read current configuration and
+  image identities again. Never share that snapshot across requests or writes.
   Require recent successful backup evidence and preserve one-attempt semantics.
   Catalog apps, local builds, and appliance OS upgrades remain manual. Never
   run APT on TrueNAS. Never broaden this into host,

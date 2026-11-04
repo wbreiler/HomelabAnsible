@@ -21,6 +21,9 @@ See [app update approvals](../proxmox/docs/maintenance-queries.md#initiate-an-ap
 in one approved batch. Each app redeploys once with its listed image changes.
 TrueNAS OS upgrades, catalog apps, and local builds require their separate
 maintenance workflows. See [batch coverage](../proxmox/docs/maintenance-queries.md#update-a-host-or-the-homelab).
+The existing minute cron worker polls Discord about every ten seconds while
+idle. Image checks run three at a time and reuse fresh observations within the
+same batch. Approved app changes remain sequential.
 
 [ISO web server](files/iso-server/SETUP.md): a deployed read-only custom app
 with a dedicated macvlan address. HTTP, Proxmox downloads, and repeat-run
