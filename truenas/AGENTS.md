@@ -92,6 +92,9 @@ edits to the appliance filesystem or database.
   per app, retaining all other images/configuration and redeploying each app once.
   Keep fleet execution sequential, stop pending work after failure/cancellation,
   and publish exact version plans in the one channel summary's thread.
+  `update apps on HOST` uses that flow for custom apps only. `update os on HOST`
+  must explain the appliance-upgrade exclusion and produce no update actions.
+  Show the chosen scope and bind it to the sealed plan and approval record.
   Preparation may compare three images concurrently and reuse one fresh Docker
   inventory for that request. Execution must read current configuration and
   image identities again. Never share that snapshot across requests or writes.

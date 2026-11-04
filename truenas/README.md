@@ -19,6 +19,9 @@ scope. Catalog apps and locally built images retain their manual workflows.
 See [app update approvals](../proxmox/docs/maintenance-queries.md#initiate-an-app-update).
 `update all on erebus` or `update the homelab` includes eligible custom apps
 in one approved batch. Each app redeploys once with its listed image changes.
+`update apps on erebus` prepares the same eligible custom apps with an explicit
+applications-only scope. `update os on erebus` explains the appliance exclusion
+and starts no updates. Both commands use the existing batch message and thread.
 TrueNAS OS upgrades, catalog apps, and local builds require their separate
 maintenance workflows. See [batch coverage](../proxmox/docs/maintenance-queries.md#update-a-host-or-the-homelab).
 The existing minute cron worker polls Discord about every ten seconds while
