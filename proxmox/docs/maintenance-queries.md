@@ -304,7 +304,13 @@ versions, and TrueNAS five custom-app actions. PBS apps and TrueNAS OS requests
 returned their explicit exclusions without probing the other category.
 These were read-only plans, not installations. No backup or executor started.
 Guest uptime, NAS app/pool states, PBS health, query cursors, and API counters
-remained unchanged. The owner Discord cancellation check is pending.
+remained unchanged during read-only preparation. The owner then tested
+`update apps on erebus` and `update os on mnemosyne` through Discord. Each
+command produced one channel reply with the correct scope. Both attached plans
+matched their private prepared manifests. The owner's ❌ closed both requests,
+with no action started, no execution results, and both executors inactive.
+The service baseline still matched after cancellation. No real installation
+was performed as part of this validation.
 
 ## API and delivery
 
