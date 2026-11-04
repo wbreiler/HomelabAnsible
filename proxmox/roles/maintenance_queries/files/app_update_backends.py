@@ -85,7 +85,7 @@ def nas_call(method, *args, job=False):
 def same_release_line(current, target):
     def number(value):
         match = re.match(r'^v?(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?', value)
-        if not match or re.search(r'(?i)(alpha|beta|rc\d|nightly|dev)', value):
+        if not match or re.search(r'(?i)(alpha|beta|rc(?:[0-9._-]|$)|pre(?:view)?(?:[0-9._-]|$)|nightly|dev)', value):
             raise Refused('The image version is not a stable numbered release. Use its managed playbook.')
         return tuple(int(part or 0) for part in match.groups())
     old, new = number(current), number(target)

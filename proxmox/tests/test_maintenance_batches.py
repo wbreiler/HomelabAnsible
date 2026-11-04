@@ -36,6 +36,27 @@ def hosts(value):
 
 
 class Apt(unittest.TestCase):
+    def test_auto_marks_keep_package_architectures_separate(self):
+        changes = [{'package': name, 'from': None if name == 'newdep' else '1', 'to': '2'}
+                   for name in ['libexample:amd64', 'libexample:i386', 'newdep']]
+        plan = {'held': [], 'failed': [], 'packages': changes}
+        simulation = '\n'.join('Inst ' + row['package'] + (' [1]' if row['from'] else '') + ' (2 repo)' for row in changes)
+        for automatic, expected in [('libexample:i386', ['libexample:i386', 'newdep']),
+                                    ('libexample', ['libexample:amd64', 'newdep']), ('', ['newdep'])]:
+            with self.subTest(automatic=automatic):
+                def read(args):
+                    if args == ['dpkg', '--print-architecture']: return 'amd64'
+                    if args == ['apt-mark', 'showauto']: return automatic
+                    if '--simulate' in args: return simulation
+                    return ''
+                with patch.object(apt, 'before', return_value={'held': [], 'failed': []}), \
+                        patch.object(apt, 'installed', side_effect=[{'libexample:amd64': '1', 'libexample:i386': '1'},
+                            {row['package']: '2' for row in changes}]), \
+                        patch.object(apt, 'read', side_effect=read) as reads, patch.object(apt.subprocess, 'run'):
+                    apt.execute(plan)
+                marked = [call.args[0][2:] for call in reads.call_args_list if call.args[0][:2] == ['apt-mark', 'auto']]
+                self.assertEqual(marked, [expected])
+
     def test_host_health_requires_every_service(self):
         updater = MagicMock()
         updater.api.side_effect = [[{'type': 'cluster', 'quorate': 1}], []]
@@ -84,7 +105,7 @@ class Apt(unittest.TestCase):
         plan = {'held': [], 'failed': [], 'packages': [{'package': 'app', 'from': '1', 'to': '2'}]}
         with patch.object(apt, 'before', return_value={'held': [], 'failed': []}), \
                 patch.object(apt, 'installed', return_value={'app': '1'}), \
-                patch.object(apt, 'read', side_effect=['', 'Inst app [1] (2 repo)\nInst other (3 repo)']), \
+                patch.object(apt, 'read', side_effect=['amd64', '', 'Inst app [1] (2 repo)\nInst other (3 repo)']), \
                 patch.object(apt.subprocess, 'run') as run, self.assertRaises(ValueError):
             apt.execute(plan)
         run.assert_not_called()
@@ -97,7 +118,7 @@ class Apt(unittest.TestCase):
         plan = {'held': ['held'], 'failed': [], 'packages': [{'package': 'app', 'from': '1', 'to': '2'}]}
         with patch.object(apt, 'before', return_value={'held': ['held'], 'failed': []}), \
                 patch.object(apt, 'installed', side_effect=[{'app': '1'}, {'app': '2'}]), \
-                patch.object(apt, 'read', side_effect=['app', 'Inst app [1] (2 repo)', '']) as read, \
+                patch.object(apt, 'read', side_effect=['amd64', 'app', 'Inst app [1] (2 repo)', '']) as read, \
                 patch.object(apt.subprocess, 'run') as run:
             self.assertEqual(apt.execute(plan)['packages'], 1)
         args = run.call_args

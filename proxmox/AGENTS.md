@@ -518,6 +518,9 @@ Use `../terraform/README.md` for provisioning and media management.
 * Accept only the configured human owner's mentions in the configured channel.
   Preserve cursors, stale-message rejection, budgets, and saved reply retries.
   Never replay an interrupted inspection automatically.
+  Deleted report messages/threads must release pending work without another
+  inspection or API call. Missing threads expire after 20 minutes even when
+  their parent summary exists. Retry transient delivery errors normally.
 * With `query_nodes`, only the first configured host writes the shared channel
   summary. Workers write independent details inside its thread. Preserve this
   single-writer rule, bot-author validation, explicit missing-host state, and
@@ -535,6 +538,10 @@ Use `../terraform/README.md` for provisioning and media management.
   recent successful backup evidence. Keep the executor separate from query
   timeouts. Never infer approval from an update report, model text, or old message.
   Run `tests/test_app_update_requests.py` and `tests/test_lxc_app_updates.py`.
+  Hash the implementation before and after single-app plan preparation. Reject
+  a changed implementation. Explain early approval reactions and require their
+  removal before arming. Executors must merge current delivery state under the
+  lock, preserving deleted-message flags and rejecting a different request ID.
 * Batches bind all host plans to one owner approval. Keep one channel summary,
   exact version attachments in its thread, sequential hosts/actions, and stop
   after failure or cancellation. Missing hosts block approval. Keep the
@@ -542,6 +549,8 @@ Use `../terraform/README.md` for provisioning and media management.
   Guest APT actions require fresh PBS backups. Host APT actions require platform
   health, no active platform tasks, and private configuration copies. Preserve
   holds, exact package versions/dependencies, and the no-removal policy.
+  Preserve APT automatic/manual marks per package architecture. An automatic
+  foreign-architecture package must not change its manually installed sibling.
   TrueNAS batches can change multiple reviewed images per custom app in one
   redeployment. Never run APT or appliance upgrades on TrueNAS. Keep raw app
   configuration and private logs out of public attachments. Run

@@ -49,6 +49,10 @@ def lookup(versions, package):
     return matches[0] if matches else None
 
 
+def qualified(package, architecture):
+    return package if ':' in package else package + ':' + architecture
+
+
 def before():
     if not Path('/run/systemd/system').is_dir() or read(['dpkg', '--audit']):
         raise ValueError('A healthy systemd/APT installation is required')
@@ -71,7 +75,8 @@ def execute(plan):
     if not changes or len(changes) > 2000:
         raise ValueError('Empty or oversized transaction')
     versions = installed()
-    automatic = set(read(['apt-mark', 'showauto']).splitlines())
+    architecture = read(['dpkg', '--print-architecture'])
+    automatic = {qualified(package, architecture) for package in read(['apt-mark', 'showauto']).splitlines()}
     for row in changes:
         if (set(row) != {'package', 'from', 'to'} or not PACKAGE.fullmatch(row['package']) or
                 not VERSION.fullmatch(row['to']) or row['package'].split(':')[0] in {p.split(':')[0] for p in plan['held']}):
@@ -92,7 +97,7 @@ def execute(plan):
     if any(lookup(actual, row['package']) != row['to'] for row in changes):
         raise ValueError('Installed packages do not match the approved versions')
     restore_auto = [row['package'] for row in changes if row['from'] is None or
-                    row['package'].split(':')[0] in {p.split(':')[0] for p in automatic}]
+                    qualified(row['package'], architecture) in automatic]
     if restore_auto:
         read(['apt-mark', 'auto', *restore_auto])
     after = before()

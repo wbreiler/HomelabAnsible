@@ -102,6 +102,41 @@ class Groups(unittest.TestCase):
         self.assertEqual(len(self.bus.channels[CONFIG['channel_id']]), 1)
         self.assertEqual(len(self.bus.posts), 2)
 
+    def test_deleted_details_reply_does_not_block_the_next_request(self):
+        self.bus.fail_result = True
+        with self.assertRaises(OSError):
+            self.process(0)
+        job = self.states[0]['pending']
+        reply_id = job['reply_id']
+        def discord(config, method='GET', suffix='', payload=None):
+            if config['channel_id'] == job['thread_id'] and suffix == '/' + reply_id:
+                raise urllib.error.HTTPError('https://discord.com', 404, 'Deleted', {}, None)
+            return self.bus(config, method, suffix, payload)
+        with patch.object(q, 'discord', side_effect=discord):
+            self.process(0)
+            self.assertNotIn('pending', self.states[0])
+            self.assertTrue(self.states[0]['last_result']['delivery_failed'])
+            self.collect.assert_called_once()
+            self.summary.assert_called_once()
+            self.bus.channels[CONFIG['channel_id']].append(message('how is the lab doing?'))
+            q.poll(self.configs[0], self.states[0], self.paths[0])
+        self.assertEqual(self.states[0]['last_result']['kind'], 'health')
+        self.assertEqual(self.collect.call_count, 2)
+        self.assertEqual(self.summary.call_count, 2)
+
+    def test_deleted_thread_before_reply_does_not_leave_pending_work(self):
+        self.process(0)
+        parent_id = self.states[0]['last_result']['parent_id']
+        def discord(config, method='GET', suffix='', payload=None):
+            if config['channel_id'] == parent_id and method == 'POST':
+                raise urllib.error.HTTPError('https://discord.com', 404, 'Deleted', {}, None)
+            return self.bus(config, method, suffix, payload)
+        with patch.object(q, 'discord', side_effect=discord):
+            self.process(1)
+        self.assertNotIn('pending', self.states[1])
+        self.assertTrue(self.states[1]['last_result']['delivery_failed'])
+        self.assertEqual(self.collect.call_count, 1)
+
     def test_existing_parent_is_recovered_without_a_duplicate(self):
         self.process(0)
         previous = self.states[0]['last_result']
@@ -144,6 +179,15 @@ class Groups(unittest.TestCase):
         self.process(1)
         self.assertNotIn('pending', self.states[1])
         self.collect.assert_not_called()
+
+    def test_missing_thread_expires_even_if_the_parent_was_found(self):
+        self.process(0)
+        parent = self.bus.channels[CONFIG['channel_id']][0]
+        parent.pop('thread')
+        self.states[1]['pending'].update(message_id=message(seconds_ago=1201)['id'], parent_id=parent['id'])
+        self.process(1)
+        self.assertNotIn('pending', self.states[1])
+        self.assertEqual(self.collect.call_count, 1)
 
     def test_pending_follower_does_not_consume_the_next_request(self):
         cursor = self.states[1]['cursor']

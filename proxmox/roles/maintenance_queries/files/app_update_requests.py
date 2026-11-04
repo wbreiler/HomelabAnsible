@@ -104,7 +104,8 @@ def reacted(q, config, item, emoji):
 
 def proposal(config, item):
     return ('⏸ **Approve one app update**\n' + config['node'] + ' · ' + item['plan']['label'] + '\n' +
-            item['plan']['effect'] + f'\nExpires <t:{int(item["expires"])}:R>.\n✅ Approve once · ❌ Cancel')
+            item['plan']['effect'] + f'\nExpires <t:{int(item["expires"])}:R>.\n✅ Approve once · ❌ Cancel' +
+            ('\nRemove your early ✅, review this proposal, then react ✅ again.' if item.get('early_approval') else ''))
 
 
 def valid(q, config, item):
@@ -147,8 +148,11 @@ def request(q, config, message):
         save(q, config, item)
         show(q, config, item, '⏳ **Working…**\nPreparing an app update proposal. No update is authorized. This can take 2–5 minutes.')
         try:
+            code = implementation(config)
             plan = backend.prepare(config, selected[0], q.versions)
-            item.update(plan=plan, plan_hash=backend.digest(plan), code_hash=implementation(config),
+            if implementation(config) != code:
+                raise backend.Refused('The implementation changed during preparation. No update started. Request a fresh proposal.')
+            item.update(plan=plan, plan_hash=backend.digest(plan), code_hash=code,
                         expires=time.time() + 1800, status='proposed')
         except Exception as error:
             with (Path(config['state_dir']) / ('app-update-' + item['id'] + '.log')).open('a') as output:
@@ -171,9 +175,14 @@ def render(q, config, item):
                 q.discord(config, 'PUT', '/' + item['reply_id'] + '/reactions/' + urllib.parse.quote(emoji, safe='') + '/@me')
             item['reactions_added'] = True
             save(q, config, item)
-        if not item.get('armed') and not reacted(q, config, item, '✅'):
-            item['armed'] = True
-            save(q, config, item)
+        if not item.get('armed'):
+            early = reacted(q, config, item, '✅')
+            if early != item.get('early_approval', False):
+                item['early_approval'] = early
+                show(q, config, item, proposal(config, item))
+            if not early:
+                item['armed'] = True
+                save(q, config, item)
     elif status in ('approved', 'executing'):
         show(q, config, item, '⏳ **Working…**\n' + config['node'] + ' · ' + item['plan']['label'] + '\n' +
              item.get('stage', 'Approval received. Waiting for the app update worker.') +
@@ -250,10 +259,13 @@ def execute(q, config):
         save(q, config, item)
     def progress(stage):
         with locked(config):
-            item['stage'] = stage
-            save(q, config, item)
+            current = read(config)
+            if current.get('id') != item['id']:
+                raise backend.Refused('The app update request changed. Inspect the app before another attempt.')
+            current['stage'] = stage
+            save(q, config, current)
             try:
-                render(q, config, item)
+                render(q, config, current)
             except Exception:
                 pass  # Discord failure must not interrupt an approved transaction.
     lock_path = Path('/run/lock/lxc-auto-update.lock') if config['platform'] == 'pve' else backend.BACKUP_ROOT / 'run.lock'
@@ -282,9 +294,12 @@ def execute(q, config):
             traceback.print_exc(file=output)
         outcome = str(error) if isinstance(error, backend.Refused) else 'Update stopped (' + type(error).__name__ + '). Inspect the private update log and app health. No automatic retry.'
     with locked(config):
-        item.update(status='closed', outcome=outcome)
-        save(q, config, item)
-        render(q, config, item)
+        current = read(config)
+        if current.get('id') != item['id']:
+            raise backend.Refused('The app update request changed. Inspect the app before another attempt.')
+        current.update(status='closed', outcome=outcome)
+        save(q, config, current)
+        render(q, config, current)
 
 
 def main():

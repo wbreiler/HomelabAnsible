@@ -111,6 +111,13 @@ backup. The adapter uses the supported
 The executor verifies the owner reaction, exact displayed proposal, expiry,
 target hash, code/configuration hash, current guest/app identity, and existing
 maintenance lock. It persists approval consumption before any mutation.
+Preparation compares implementation hashes before and after resolving a plan.
+A changed implementation requires a new proposal. If ✅ arrives before the
+proposal is ready, the bot explains how to remove it, review, and approve again.
+The executor preserves the controller's current delivery state under the lock.
+Progress and final results cannot overwrite another request or forget that the
+approval message was deleted. RC, pre-release, and preview tags are excluded
+from TrueNAS stable-image proposals, including dotted forms such as `-rc.1`.
 Interrupted execution never repeats. Each host permits one active app update
 request. The executor runs as a separate transient `homelab-app-update.service`
 without a restart policy or execution timeout; query timeouts cannot kill an
@@ -155,6 +162,8 @@ after the proposal appears.
 
 Each app retains its existing compatibility, release-age, backup, and health
 checks. APT plans list every simulated version change, including new dependencies.
+APT automatic/manual retention flags remain separate for each architecture.
+An automatic `:i386` dependency cannot mark a manual `:amd64` package automatic.
 Execution rejects changed installed versions, dependencies, holds, or new failed
 services. Guest package actions require a fresh PBS backup. PVE/PBS host actions
 require healthy platform services, PVE quorum where applicable, and no active
@@ -248,6 +257,19 @@ the cursor stayed unchanged. Guest uptime, NAS app/pool states, and PBS health
 matched the baseline. Discord failures were simulated in tests. No new owner
 reaction round trip or real app/OS installation was performed for these fixes.
 
+Recovery review on 2026-11-04: 206 focused tests passed. Regression tests first
+reproduced deleted-reply queue blocking, missing-thread waits, stale executor
+delivery state, unexplained early approvals, implementation drift during plan
+preparation, cross-architecture APT retention changes, and accepted prerelease
+image tags. Tests also verify that an executor cannot overwrite a different
+request, valid stable image suffixes remain eligible, and transient delivery
+errors still retry without another inspection or API call.
+Both project lint/syntax checks, scoped previews, and deployments passed.
+All four hosts matched source hashes and private modes. Repeat deployments
+returned `changed=0`. Fresh service baselines and API counters stayed unchanged,
+with all update executors inactive. Execution and Discord failure cases used
+isolated tests. No real update or new owner-reaction round trip was performed.
+
 ## API and delivery
 
 Each completed host inspection uses one `gpt-4.1-mini` Responses request with
@@ -268,6 +290,11 @@ default AI limit is 10 attempted calls per host per UTC day. A four-host request
 can therefore use four ordinary-model calls. These counters are separate from
 repair budgets. Completed results survive Discord delivery retries without
 another check or model request. Interrupted checks require a new request.
+Deleting a report reply or details thread ends that delivery attempt and frees
+the queue for later requests. It does not repeat the inspection or model call.
+A missing details thread expires after 20 minutes even if its parent summary
+was already created. Transient network/API errors still retain saved replies
+for retry.
 First activation ignores historical messages. Requests older than 15 minutes
 are ignored. No user text or credentials are stored in query state.
 

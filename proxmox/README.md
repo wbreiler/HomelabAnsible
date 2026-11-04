@@ -24,6 +24,8 @@ fresh image observations within each batch and polls Discord between cron starts
 Approved updates remain sequential.
 Stopped or missing TrueNAS containers remain visible as unavailable checks.
 Canceled batches retry failed result delivery without repeating updates.
+Deleted reports release pending requests. Early approval reactions show how to
+review and approve again. Package retention flags remain architecture-specific.
 
 ## Provisioning ownership
 

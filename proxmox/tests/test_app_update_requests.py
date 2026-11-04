@@ -110,9 +110,77 @@ class Requests(unittest.TestCase):
         start.assert_not_called()
         self.assertEqual(u.read(self.config)['status'], 'closed')
 
+    def test_early_approval_explains_how_to_rearm_without_starting(self):
+        self.reactions.add('✅')
+        self.prepare_proposal()
+        with patch.object(u, 'start') as start:
+            u.poll(q, self.config)
+            self.assertIn('Remove your early ✅', self.display)
+            self.assertFalse(u.read(self.config).get('armed'))
+            start.assert_not_called()
+            self.reactions.clear()
+            u.poll(q, self.config)
+            self.assertTrue(u.read(self.config)['armed'])
+            self.assertNotIn('Remove your early ✅', self.display)
+            self.reactions.add('✅')
+            u.poll(q, self.config)
+        start.assert_called_once()
+
+    def test_code_change_during_preparation_never_proposes_an_update(self):
+        with patch.object(u, 'implementation', side_effect=['before', 'after']), patch.object(u, 'start') as start:
+            u.request(q, self.config, self.message)
+        self.assertEqual(u.read(self.config)['status'], 'closed')
+        self.assertIn('changed', self.display)
+        self.assertNotIn('Approve one app update', self.display)
+        start.assert_not_called()
+
+    def test_executor_preserves_controller_delivery_state(self):
+        self.approve()
+        self.config['platform'] = 'truenas'
+        observations = []
+        def perform(config, plan, versions, progress):
+            current = u.read(config)
+            current['notification_lost'] = True
+            u.save(q, config, current)
+            self.discord.reset_mock()
+            progress('Verifying this one attempt.')
+            observations.append(u.read(config).get('notification_lost'))
+            return 'Completed exactly once.'
+        with patch.object(b, 'BACKUP_ROOT', self.root), patch.object(b, 'perform', side_effect=perform) as work:
+            u.execute(q, self.config)
+            u.execute(q, self.config)
+        self.assertEqual(observations, [True])
+        self.assertTrue(u.read(self.config)['notification_lost'])
+        self.assertEqual(u.read(self.config)['outcome'], 'Completed exactly once.')
+        work.assert_called_once()
+        self.discord.assert_not_called()
+
+    def test_executor_never_overwrites_a_different_request(self):
+        for notify in [False, True]:
+            with self.subTest(progress=notify):
+                u.state_path(self.config).unlink(missing_ok=True)
+                self.reactions.clear()
+                self.approve()
+                self.config['platform'] = 'truenas'
+                replacement = {'id': '9' * 18, 'status': 'preparing'}
+                continued = []
+                def perform(config, plan, versions, progress):
+                    u.save(q, config, replacement)
+                    if notify:
+                        progress('Must not edit the replacement request.')
+                    continued.append(True)
+                    return 'Finished old attempt.'
+                with patch.object(b, 'BACKUP_ROOT', self.root), patch.object(b, 'perform', side_effect=perform), \
+                        self.assertRaisesRegex(b.Refused, 'request changed'):
+                    u.execute(q, self.config)
+                self.assertEqual(u.read(self.config), replacement)
+                self.assertEqual(continued, [] if notify else [True])
+
     def test_deleted_proposal_closes_without_replacement_or_execution(self):
         self.prepare_proposal()
-        self.discord.side_effect = u.urllib.error.HTTPError('https://discord.com', 404, 'deleted', {}, None)
+        error = u.urllib.error.HTTPError('https://discord.com', 404, 'deleted', {}, None)
+        self.addCleanup(error.close)
+        self.discord.side_effect = error
         with patch.object(u, 'start') as start:
             u.poll(q, self.config)
         start.assert_not_called()
@@ -211,9 +279,14 @@ class TrueNAS(unittest.TestCase):
                 self.versions.docker_inventory.return_value = self.images
 
     def test_major_prerelease_and_downgrade_refuse(self):
-        for current, target in [('1.0.0', '2.0.0'), ('1.0.0', '1.1.0-beta1'), ('2.0.0', '1.0.0'), ('0.1.0', '0.2.0')]:
-            with self.assertRaises(b.Refused):
+        for current, target in [('1.0.0', '2.0.0'), ('1.0.0', '1.1.0-beta1'), ('2.0.0', '1.0.0'), ('0.1.0', '0.2.0'),
+                                ('1.0.0', '1.1.0-rc.1'), ('1.0.0', '1.1.0-RC'), ('1.0.0', '1.1.0-preview.1'),
+                                ('1.0.0', '1.1.0-rc_1'), ('1.0.0', '1.1.0-pre.1')]:
+            with self.subTest(current=current, target=target), self.assertRaises(b.Refused):
                 b.same_release_line(current, target)
+
+    def test_stable_image_packaging_suffix_is_allowed(self):
+        b.same_release_line('1.0.0-ls1', '1.1.0-ls2')
 
     def test_config_change_blocks_nas_mutation(self):
         plan = b.prepare_nas({}, 'app/main', self.versions)

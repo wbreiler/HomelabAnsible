@@ -488,7 +488,7 @@ def prepare_group(config, state, path):
     coordinator = config['node'] == config['query_nodes'][0]
     title = 'Homelab · ' + job['kind'].title()
     requested = ((int(job['message_id']) >> 22) + 1420070400000) / 1000
-    if not job.get('parent_id') and time.time() - requested >= 1200:
+    if not job.get('thread_id') and time.time() - requested >= 1200:
         del state['pending']
         save(path, state)
         return False
@@ -515,16 +515,7 @@ def prepare_group(config, state, path):
         bundles = state.setdefault('bundles', {})
         bundles.setdefault(job['parent_id'], {'kind': job['kind'], 'created': time.time(), 'results': {}})
         save(path, state)
-    try:
-        parent = discord(config, suffix='/' + job['parent_id'])
-    except urllib.error.HTTPError as error:
-        if error.code != 404:
-            raise
-        state['last_result'] = {'request_id': job['message_id'], 'kind': job['kind'],
-                                'ai_usage': job['ai_usage'], 'delivery_failed': True}
-        del state['pending']
-        save(path, state)
-        return False
+    parent = discord(config, suffix='/' + job['parent_id'])
     thread = parent.get('thread')
     if not thread:
         if not coordinator:
@@ -585,6 +576,19 @@ def refresh_groups(config, state, path):
 
 
 def process(config, state, path):
+    try:
+        process_pending(config, state, path)
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+        error.close()
+        job = state.pop('pending')
+        state['last_result'] = {'request_id': job['message_id'], 'reply_id': job.get('reply_id'), 'kind': job['kind'],
+                                'ai_usage': job['ai_usage'], 'parent_id': job.get('parent_id'), 'delivery_failed': True}
+        save(path, state)
+
+
+def process_pending(config, state, path):
     job = state['pending']
     job.setdefault('ai_usage', None if job.get('started') else ai.record())
     target = config
