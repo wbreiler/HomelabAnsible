@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import time
 import unittest
@@ -320,6 +321,49 @@ class TrueNAS(unittest.TestCase):
         mutations = [call for call in self.nas.call_args_list if call.args[0] == 'app.update']
         self.assertEqual(len(mutations), 1)
         self.assertEqual(mutations[0].args, ('app.update', 'app', {'custom_compose_config': plan['desired']}))
+
+    def test_tdarr_process_check_allows_idle_and_blocks_busy_or_missing_evidence(self):
+        plan = b.prepare_nas({}, 'app/main', self.versions)
+        plan['app'] = 'tdarr'
+        before = copy.deepcopy(self.images)
+        for i, image in enumerate(before):
+            image.update(app='tdarr', container=str(i + 1) * 12)
+        updated = copy.deepcopy(before)
+        updated[0]['image_id'] = plan['expected']['main']
+        cases = [
+            ('idle', 'PID COMMAND\n123 Tdarr_Server\n124 Tdarr_Node', None),
+            ('ffmpeg', 'PID COMMAND\n123 ffmpeg', b.Refused),
+            ('handbrake', 'PID COMMAND\n123 HandBrakeCLI', b.Refused),
+            ('empty', 'PID COMMAND', b.Refused),
+            ('malformed', 'PID COMMAND\nnot-a-pid ffmpeg', b.Refused),
+            ('failed', subprocess.CalledProcessError(1, ['docker', 'top']), subprocess.CalledProcessError),
+        ]
+        for name, output, error in cases:
+            with self.subTest(name=name):
+                self.versions.docker_inventory.side_effect = [before, updated]
+                self.versions.command.reset_mock()
+                def command(args):
+                    if args[:2] == ['docker', 'top']:
+                        self.assertEqual(args[3:], ['-eo', 'pid,comm'])
+                        # The second service must also block a redeploy while busy.
+                        if args[2] == before[0]['container']:
+                            return 'PID COMMAND\n123 Tdarr_Server'
+                        if isinstance(output, Exception):
+                            raise output
+                        return output
+                    self.assertEqual(args[:2], ['docker', 'inspect'])
+                    return json.dumps({'Running': True, 'Health': {'Status': 'healthy'}})
+                self.versions.command.side_effect = command
+                configs = iter([plan['original'], plan['desired']])
+                self.nas.reset_mock()
+                self.nas.side_effect = lambda method, *a, **k: next(configs) if method == 'app.config' else {'state': 'RUNNING'}
+                if error:
+                    with self.assertRaises(error):
+                        b.perform({'platform': 'truenas'}, plan, self.versions, MagicMock())
+                else:
+                    self.assertIn('Updated.', b.perform({'platform': 'truenas'}, plan, self.versions, MagicMock()))
+                mutations = [call for call in self.nas.call_args_list if call.args[0] == 'app.update']
+                self.assertEqual(len(mutations), 0 if error else 1)
 
 
 class Backups(unittest.TestCase):

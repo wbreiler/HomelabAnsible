@@ -539,6 +539,8 @@ Use `../terraform/README.md` for provisioning and media management.
   recent successful backup evidence. Keep the executor separate from query
   timeouts. Never infer approval from an update report, model text, or old message.
   Run `tests/test_app_update_requests.py` and `tests/test_lxc_app_updates.py`.
+  Tdarr's process check must include Docker's required PID column and block
+  redeployment for active ffmpeg/HandBrakeCLI processes or missing evidence.
   Hash the implementation before and after single-app plan preparation. Reject
   a changed implementation. Explain early approval reactions and require their
   removal before arming. Executors must merge current delivery state under the

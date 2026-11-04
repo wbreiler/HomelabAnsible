@@ -101,7 +101,9 @@ Supported execution paths:
 
 TrueNAS checks the resulting configuration, exact image identities, RUNNING
 state, and available container health checks. It blocks Tdarr during active
-transcodes. It does not prove logins, playback, database recovery, or full user
+transcodes or when its process check fails. The check includes Docker's required
+PID column and examines process names in every app container. It does not prove
+logins, playback, database recovery, or full user
 workflows. Its backup can precede the update by up to 30 hours; recovery can
 lose later changes. There is no automatic retry or rollback. The original
 Compose configuration is a configuration copy, not a fresh application-data
@@ -311,6 +313,21 @@ matched their private prepared manifests. The owner's ❌ closed both requests,
 with no action started, no execution results, and both executors inactive.
 The service baseline still matched after cancellation. No real installation
 was performed as part of this validation.
+
+Tdarr process-check correction on 2026-11-04: a later owner-approved app batch
+updated FastChannels and Lidarr, then stopped before changing Tdarr. Docker
+rejected the process-name-only check because its output omitted the required
+PID column. Deluge and spotDL were not attempted. The shared adapter now includes
+PID and process name, preserves the active-transcode guard, and rejects empty or
+malformed process rows. All 217 focused tests passed, including idle Tdarr,
+ffmpeg/HandBrakeCLI in another app service, and failed or incomplete probes.
+Both project lint/syntax checks and deployment previews passed. Installed hashes
+and private modes matched on all four hosts; repeat deployments returned
+`changed=0`. The deployed Tdarr preflight reached the mutation boundary with `app.update` blocked by the
+test. Fresh reads verified both completed updates and the original images and
+configuration of all three unfinished apps. All 13 apps were RUNNING and pools
+were healthy. The failed batch remained closed and was not replayed. A new
+proposal and owner approval are required for another update attempt.
 
 ## API and delivery
 

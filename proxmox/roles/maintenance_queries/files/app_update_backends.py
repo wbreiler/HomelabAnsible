@@ -183,8 +183,11 @@ def perform(config, plan, versions, progress):
         raise Refused('The running app changed after the proposal. No update started.')
     if plan['app'] == 'tdarr':
         for image in images:
-            processes = versions.command(['docker', 'top', image['container'], '-eo', 'comm']).splitlines()
-            if any(name.strip() in ('ffmpeg', 'HandBrakeCLI') for name in processes):
+            # Docker needs the PID column to select this container's processes.
+            processes = versions.command(['docker', 'top', image['container'], '-eo', 'pid,comm']).splitlines()[1:]
+            if not processes or any(len(line.split()) != 2 or not line.split()[0].isdigit() for line in processes):
+                raise Refused('Tdarr process inventory is incomplete. No Tdarr update started.')
+            if any(line.split()[1] in ('ffmpeg', 'HandBrakeCLI') for line in processes):
                 raise Refused('Tdarr is transcoding. Wait for the work to finish, then request a new proposal.')
     progress('Redeploying the approved image. This app and its sidecars may restart.')
     nas_call('app.update', plan['app'], {'custom_compose_config': plan['desired']}, job=True)
