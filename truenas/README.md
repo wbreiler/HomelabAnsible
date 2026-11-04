@@ -24,6 +24,8 @@ maintenance workflows. See [batch coverage](../proxmox/docs/maintenance-queries.
 The existing minute cron worker polls Discord about every ten seconds while
 idle. Image checks run three at a time and reuse fresh observations within the
 same batch. Approved app changes remain sequential.
+Stopped apps and missing container inventory remain explicit unavailable checks.
+Direct `--inspect` diagnostics also work while the cron worker holds its lock.
 
 [ISO web server](files/iso-server/SETUP.md): a deployed read-only custom app
 with a dedicated macvlan address. HTTP, Proxmox downloads, and repeat-run

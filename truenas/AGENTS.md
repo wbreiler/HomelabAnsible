@@ -76,6 +76,8 @@ edits to the appliance filesystem or database.
   The minute cron worker polls every ten seconds within a bounded 50-second
   window under its existing exclusive lock. Long checks finish normally and
   overlap attempts exit without replay. Do not create another scheduler.
+  Direct `--inspect` diagnostics must still return evidence while that polling
+  lock is held. They must not change query state, cursors, or API counters.
   Preserve owner mentions and fixed read-only probes. Custom apps use live
   platform-aware registry/source comparisons; only OS availability is cached.
   Never pull image layers or rebuild/deploy apps during inspection. This
@@ -93,6 +95,9 @@ edits to the appliance filesystem or database.
   Preparation may compare three images concurrently and reuse one fresh Docker
   inventory for that request. Execution must read current configuration and
   image identities again. Never share that snapshot across requests or writes.
+  Keep apps absent from running-container inventory visible as unavailable in
+  reports. Exclude stopped or unchecked apps explicitly instead of calling them
+  current. Persist terminal delivery before closing local batch state.
   Require recent successful backup evidence and preserve one-attempt semantics.
   Catalog apps, local builds, and appliance OS upgrades remain manual. Never
   run APT on TrueNAS. Never broaden this into host,
