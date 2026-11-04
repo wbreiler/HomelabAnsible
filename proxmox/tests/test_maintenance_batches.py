@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import MagicMock, patch
@@ -233,6 +234,34 @@ class Coordination(unittest.TestCase):
 
 
 class FleetRoundTrip(unittest.TestCase):
+    def test_pve_prepares_three_apps_at_once_in_stable_order(self):
+        backend = MagicMock()
+        backend.Refused = b.backend.Refused
+        updater = backend.load_updater.return_value
+        names = ['first', 'second', 'third', 'fourth']
+        guests = [{'vmid': i, 'name': app, 'status': 'running'} for i, app in enumerate(names, 100)]
+        updater.api.side_effect = lambda path: guests if path.endswith('/lxc') else []
+        updater.app_variables.side_effect = lambda app, settings: {app + '_hostname': app}
+        barrier = threading.Barrier(3, timeout=5)
+        def prepare(config, app):
+            if app != 'fourth':
+                barrier.wait()
+            if app == 'second':
+                raise backend.Refused('Unsupported app remains excluded.')
+            return {'label': app}
+        backend.prepare_lxc.side_effect = prepare
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            backend.APP_ROOT = updater.PINS = root
+            (root / 'config.json').write_text(json.dumps({'roles': names, 'packages': []}))
+            (root / 'os.json').write_text(json.dumps({'skip_vmids': []}))
+            with patch.object(b.adapters, 'OS_CONFIG', root / 'os.json'), \
+                    patch.object(b.adapters, 'apt', return_value={'packages': [], 'held': [], 'reboot_required': False}):
+                result = b.adapters.prepare(CONFIG, backend, MagicMock(), lambda _: None)
+        self.assertEqual([action['label'] for action in result['actions']], ['first', 'third', 'fourth'])
+        self.assertTrue(any('Unsupported app remains excluded' in note for note in result['notes']))
+        backend.perform.assert_not_called()
+
     def test_multiple_nas_images_merge_into_one_redeployment(self):
         backend = MagicMock()
         backend.Refused = b.backend.Refused
@@ -249,7 +278,7 @@ class FleetRoundTrip(unittest.TestCase):
         backend.prepare_nas.side_effect = [first, second]
         versions = MagicMock()
         versions.docker_inventory.return_value = [{'app': 'app', 'service': name} for name in ('first', 'second')]
-        versions.image_update.return_value = {'available': True}
+        versions.image_updates.return_value = [{'available': True}, {'available': True}]
         plan = b.adapters.prepare({'platform': 'truenas'}, backend, versions, lambda _: None)
         self.assertEqual(len(plan['actions']), 1)
         action = plan['actions'][0]
@@ -257,6 +286,12 @@ class FleetRoundTrip(unittest.TestCase):
         self.assertEqual(action['expected'], {'first': 'newid1', 'second': 'newid2'})
         self.assertEqual(action['original'], original)
         self.assertTrue(any('TrueNAS OS' in note and 'excluded' in note for note in plan['notes']))
+        versions.docker_inventory.assert_called_once()
+        versions.image_updates.assert_called_once()
+        versions.image_update.assert_not_called()
+        snapshot = backend.prepare_nas.call_args.args[2]
+        self.assertEqual(snapshot.docker_inventory(), versions.docker_inventory.return_value)
+        self.assertEqual(snapshot.image_update(versions.docker_inventory.return_value[0]), {'available': True})
         backend.perform.assert_not_called()
 
     def test_one_parent_one_approval_two_sequential_hosts(self):

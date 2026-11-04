@@ -183,6 +183,21 @@ contain selected versions, effects, exclusions, and results. Private
 remain root-only. They can contain app configuration and secrets. Never publish
 them. The batch uses no model and costs **$0 in OpenAI API usage**.
 
+Read-only preparation checks at most three guests/apps concurrently and retains
+stable plan order and per-target exclusions. TrueNAS scans Docker once per
+batch, compares images three at a time, and reuses those observations only
+within that preparation. Runtime execution still rechecks live configuration,
+image identities, approved versions, and owner authorization before each action.
+Ordinary release reports also use parallel catalog checks and bulk
+[formatted Docker inspection](https://docs.docker.com/reference/cli/docker/inspect/).
+Each report clears its upstream metadata cache first.
+No approval or installation is cached or parallelized.
+
+TrueNAS retains its minute cron entry. Each invocation holds the existing
+exclusive worker lock and polls Discord about every ten seconds for up to
+50 seconds. A long inspection can finish beyond that window. Overlapping cron
+invocations exit without replay. Linux continues to use its ten-second timer.
+
 For a safe live delivery test, send a batch command, review its proposal, and
 react **❌**. Do not react ✅ unless the listed real updates are authorized.
 
@@ -199,6 +214,21 @@ Each attachment matched its host's prepared manifest. The proposal covered
 no action started. All planned package versions, app versions/configuration,
 and NAS image identities remained unchanged. API counters and service baselines
 also matched. No real batch installation was tested.
+
+Performance validation on 2026-11-03 measured complete read-only plan preparation
+on the two slowest hosts. Prometheus improved from 187.53 to 85.71 seconds (54%).
+TrueNAS improved from 68.72 to 27.52 seconds (60%). Proposed actions and sorted
+notices matched the earlier owner-reviewed plans. TrueNAS inventory calls fell
+from 19 to one per batch. Bulk inspection returned identical metadata for all
+18 containers and a single-container case. These are worker timings from one
+before/after sample, excluding Discord delivery. Upstream latency can vary.
+Ordinary update collection then completed in 54.0 seconds on Prometheus,
+29.8 on Atlas, 12.8 on TrueNAS, and 1.0 on PBS, with no unavailable app probes.
+Those measurements exclude AI summaries and Discord delivery. All 191 focused
+tests, both project lint/syntax checks, deployment dry runs, and live source
+verification passed. All four repeat deployments returned `changed=0`.
+Guest uptime and NAS/PBS service baselines remained unchanged. No app or OS
+updates ran during performance validation.
 
 ## API and delivery
 

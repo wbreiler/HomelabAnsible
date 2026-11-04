@@ -4,6 +4,7 @@ import io
 import json
 from pathlib import Path
 import tempfile
+import threading
 import time
 import types
 import unittest
@@ -134,29 +135,54 @@ class Probes(unittest.TestCase):
         self.assertIn('ZFS cache: 60%', q.describe({'memory_used_pct': 80, 'zfs_arc_pct': 60}, 'health'))
 
     def test_app_inspection_never_uses_deployment_or_candidate_writes(self):
+        apps = ['first', 'second', 'third']
+        barrier = threading.Barrier(3, timeout=5)
         updater = types.SimpleNamespace()
         updater.yaml = MagicMock()
-        updater.yaml.safe_load.return_value = {'example': {'package': 'example'}}
-        updater.app_variables = MagicMock(return_value={'example_hostname': 'app'})
-        updater.current_version = MagicMock(return_value='1.0.0')
+        updater.yaml.safe_load.return_value = {app: {'package': 'example'} for app in apps}
+        updater.app_variables = MagicMock(side_effect=lambda app, config: {app + '_hostname': app})
+        updater.current_version = MagicMock(side_effect=lambda *args: (barrier.wait(), '1.0.0')[1])
         updater.guest = MagicMock(return_value='example | 1.0.1 | repo')
         updater.apt_candidate = MagicMock(return_value='1.0.1')
         updater.update_one = MagicMock(side_effect=AssertionError('mutation'))
         updater.package_ready = MagicMock(side_effect=AssertionError('writes pins'))
         updater.backup = MagicMock(side_effect=AssertionError('backup'))
         spec = MagicMock()
-        config = {'roles': ['example'], 'native_guests': {}, 'minimum_age_hours': 72}
+        config = {'roles': apps, 'native_guests': {}, 'minimum_age_hours': 72}
         with patch.object(q.Path, 'exists', return_value=True), patch.object(q.Path, 'read_text', return_value=json.dumps(config)), \
                 patch.object(q.importlib.util, 'spec_from_file_location', return_value=spec), \
                 patch.object(q.importlib.util, 'module_from_spec', return_value=updater):
-            rows, limits = q.application_updates([{'vmid': 100, 'name': 'app', 'status': 'running'}])
-        self.assertEqual(rows[0]['available'], '1.0.1')
+            rows, limits = q.application_updates([{'vmid': i, 'name': app, 'status': 'running'} for i, app in enumerate(apps, 100)])
+        self.assertEqual([row['app'] for row in rows], apps)
+        self.assertEqual([row['available'] for row in rows], ['1.0.1'] * 3)
         updater.update_one.assert_not_called()
         updater.package_ready.assert_not_called()
         updater.backup.assert_not_called()
 
 
 class Workflow(unittest.TestCase):
+    def test_cron_polls_every_ten_seconds_and_linux_polls_once(self):
+        now = [100.0]
+        with patch.object(q.time, 'monotonic', side_effect=lambda: now[0]), \
+                patch.object(q.time, 'sleep', side_effect=lambda seconds: now.__setitem__(0, now[0] + seconds)) as sleep, \
+                patch.object(q, 'poll') as poll:
+            q.poll_window({**CONFIG, 'platform': 'truenas'}, {}, Path('/unused'))
+            self.assertEqual(poll.call_count, 6)
+            self.assertEqual([call.args[0] for call in sleep.call_args_list], [10] * 5)
+            poll.reset_mock(); sleep.reset_mock()
+            q.poll_window(CONFIG, {}, Path('/unused'))
+            poll.assert_called_once()
+            sleep.assert_not_called()
+
+    def test_long_inspection_does_not_extend_cron_poll_window(self):
+        now = [100.0]
+        with patch.object(q.time, 'monotonic', side_effect=lambda: now[0]), \
+                patch.object(q.time, 'sleep') as sleep, \
+                patch.object(q, 'poll', side_effect=lambda *args: now.__setitem__(0, 200)) as poll:
+            q.poll_window({**CONFIG, 'platform': 'truenas'}, {}, Path('/unused'))
+        poll.assert_called_once()
+        sleep.assert_not_called()
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

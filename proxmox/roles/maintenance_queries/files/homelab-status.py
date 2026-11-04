@@ -189,7 +189,7 @@ def application_updates(guests):
     config = json.loads((root / 'config.json').read_text())
     catalog = updater.yaml.safe_load((root / 'catalog.yml').read_text())
     by_name = {row['name']: row for row in guests if row['status'] == 'running'}
-    rows, covered = [], set()
+    selected, covered = [], set()
     for app in dict.fromkeys(config['roles'] + list(config.get('native_guests', {}))):
         values = updater.app_variables(app, config)
         guest = by_name.get(values[app + '_hostname'])
@@ -198,6 +198,9 @@ def application_updates(guests):
         covered.add(guest['vmid'])
         if app == 'netboot_xyz':
             continue  # Secure Boot shim and netboot payload need separate identity checks.
+        selected.append((app, guest))
+    def inspect(selected):
+        app, guest = selected
         row = {'app': app, 'vmid': guest['vmid']}
         try:
             current = updater.current_version(app, catalog[app], guest['vmid'])
@@ -229,7 +232,9 @@ def application_updates(guests):
                 row['latest'] = row['latest_stable'] or row['current']
         except Exception:
             row['unavailable'] = 'Release check unavailable'
-        rows.append(row)
+        return row
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        rows = list(pool.map(inspect, selected))
     extra = versions.lxc_updates(guests, covered)
     images = {(row['vmid'], row['app'].rsplit('/', 1)[-1]) for row in extra if row.get('kind') == 'image'}
     rows = [row for row in rows if (row['vmid'], catalog.get(row['app'], {}).get('service')) not in images]
@@ -283,6 +288,7 @@ def truenas(kind):
 def collect(kind, platform, progress=lambda value: None):
     if kind not in ('updates', 'health'):
         raise ValueError('Unknown inspection')
+    versions.public_json.cache_clear()
     if platform == 'truenas':
         return truenas(kind)
     result = {'host': probe(kind), 'guests': [], 'apps': [], 'limits': []}
@@ -703,6 +709,17 @@ def poll(config, state, path):
     refresh_groups(config, state, path)
 
 
+def poll_window(config, state, path):
+    # TrueNAS cron starts once a minute; keep its existing lock between short polls.
+    deadline = time.monotonic() + 50 if config['platform'] == 'truenas' else 0
+    while True:
+        poll(config, state, path)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(10, remaining))
+
+
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
@@ -734,7 +751,7 @@ def main():
             print(json.dumps(collect(args.inspect, config['platform']), indent=2))
             return
         state = json.loads(path.read_text()) if path.exists() else {}
-        poll(config, state, path)
+        poll_window(config, state, path)
 
 
 if __name__ == '__main__':

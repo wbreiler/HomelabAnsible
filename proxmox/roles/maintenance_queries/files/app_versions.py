@@ -64,16 +64,29 @@ def pack_config():
 
 def docker_inventory(run=command):
     rows = []
-    for cid in run(['docker', 'ps', '-q']).split()[:50]:
-        if not re.fullmatch(r'[0-9a-f]{12,64}', cid):
-            continue
-        fmt = '[{{json .Config.Image}},{{json .Image}},{{json .Name}},{{json (index .Config.Labels "com.docker.compose.project")}},{{json (index .Config.Labels "com.docker.compose.service")}}]'
-        ref, image_id, name, project, service = json.loads(run(['docker', 'inspect', '--format', fmt, cid]))
-        fmt = '[{{json .RepoDigests}},{{json .Os}},{{json .Architecture}},{{json .Variant}},{{json (index .Config.Labels "org.opencontainers.image.version")}},{{json (index .Config.Labels "org.opencontainers.image.source")}},{{json (index .Config.Labels "org.opencontainers.image.revision")}}]'
-        digests, os_name, arch, variant, version, source, revision = json.loads(run(['docker', 'image', 'inspect', '--format', fmt, image_id]))
+    ids = [cid for cid in run(['docker', 'ps', '-q']).split()[:50] if re.fullmatch(r'[0-9a-f]{12,64}', cid)]
+    if not ids:
+        return rows
+    # Inspect selected fields in bulk; full Docker objects can contain credentials.
+    fmt = '[{{json .Id}},{{json .Config.Image}},{{json .Image}},{{json .Name}},{{with (index .Config "Labels")}}{{json (index . "com.docker.compose.project")}}{{else}}null{{end}},{{with (index .Config "Labels")}}{{json (index . "com.docker.compose.service")}}{{else}}null{{end}}]'
+    containers = [json.loads(line) for line in run(['docker', 'container', 'inspect', '--format', fmt, *ids]).splitlines()]
+    image_ids = list(dict.fromkeys(row[2] for row in containers))
+    if len(containers) != len(ids) or any(not re.fullmatch(r'sha256:[0-9a-f]{64}', value) for value in image_ids):
+        raise ValueError('Incomplete Docker inventory')
+    fmt = '[{{json .Id}},{{json .RepoDigests}},{{json .Os}},{{json .Architecture}},{{json (index . "Variant")}},{{with (index .Config "Labels")}}{{json (index . "org.opencontainers.image.version")}}{{else}}null{{end}},{{with (index .Config "Labels")}}{{json (index . "org.opencontainers.image.source")}}{{else}}null{{end}},{{with (index .Config "Labels")}}{{json (index . "org.opencontainers.image.revision")}}{{else}}null{{end}}]'
+    images = [json.loads(line) for line in run(['docker', 'image', 'inspect', '--format', fmt, *image_ids]).splitlines()]
+    by_image = {row[0]: row[1:] for row in images}
+    if len(images) != len(image_ids) or set(by_image) != set(image_ids):
+        raise ValueError('Incomplete Docker image inventory')
+    for cid in ids:
+        matches = [row for row in containers if row[0].startswith(cid)]
+        if len(matches) != 1:
+            raise ValueError('Ambiguous Docker container identity')
+        _, ref, image_id, name, project, service = matches[0]
+        digests, os_name, arch, variant, version, source, revision = by_image[image_id]
         rows.append({'ref': ref, 'image_id': image_id, 'container': cid, 'app': text((project or name).removeprefix('ix-').strip('/')),
                      'service': text(service or name.strip('/')), 'digests': digests or [], 'os': os_name, 'arch': arch,
-                     'variant': variant, 'version': version, 'source': source, 'revision': revision})
+                     'variant': variant or '', 'version': version or '', 'source': source or '', 'revision': revision or ''})
     return rows
 
 

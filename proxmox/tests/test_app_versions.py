@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import unittest
 import urllib.error
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 SPEC = importlib.util.spec_from_file_location('versions', Path(__file__).resolve().parents[1] / 'roles/maintenance_queries/files/app_versions.py')
 v = importlib.util.module_from_spec(SPEC)
@@ -20,6 +20,41 @@ def image(**values):
 
 
 class Versions(unittest.TestCase):
+    def test_docker_inventory_batches_and_matches_ids_without_secret_fields(self):
+        ids = ['1' * 12, '2' * 12]
+        containers = [[ids[1] * 5 + '2222', 'repo:2', CONFIG, '/second', 'ix-app', 'sidecar'],
+                      [ids[0] * 5 + '1111', 'repo:1', CONFIG, '/first', 'ix-app', 'main']]
+        images = [[CONFIG, ['repo@' + DIGEST], 'linux', 'amd64', None, '1.0.0', None, None]]
+        run = MagicMock(side_effect=['\n'.join(ids), '\n'.join(map(json.dumps, containers)), json.dumps(images[0])])
+        rows = v.docker_inventory(run)
+        self.assertEqual([(r['container'], r['service']) for r in rows], [(ids[0], 'main'), (ids[1], 'sidecar')])
+        self.assertEqual(run.call_count, 3)
+        self.assertEqual(run.call_args_list[1].args[0][-2:], ids)
+        self.assertEqual(run.call_args.args[0][-1:], [CONFIG])
+        self.assertNotIn('.Config.Env', ' '.join(arg for call in run.call_args_list for arg in call.args[0]))
+        self.assertEqual(rows[0]['digests'], ['repo@' + DIGEST])
+        self.assertEqual([rows[0][key] for key in ('variant', 'source', 'revision')], ['', '', ''])
+
+    def test_empty_or_incomplete_docker_inventory_never_becomes_current(self):
+        run = MagicMock(return_value='')
+        self.assertEqual(v.docker_inventory(run), [])
+        self.assertEqual(run.call_count, 1)
+        cid = '1' * 12
+        container = [cid + '1' * 52, 'repo:1', CONFIG, '/app', 'ix-app', 'main']
+        for output in ['', json.dumps([OTHER, [], 'linux', 'amd64', '', '', '', ''])]:
+            run = MagicMock(side_effect=[cid, json.dumps(container), output])
+            with self.assertRaises(ValueError):
+                v.docker_inventory(run)
+
+    def test_unlabeled_container_uses_name_without_missing_field_errors(self):
+        cid = '1' * 12
+        run = MagicMock(side_effect=[cid, json.dumps([cid + '1' * 52, 'repo:1', CONFIG, '/standalone', None, None]),
+                                    json.dumps([CONFIG, None, 'linux', 'amd64', None, None, None, None])])
+        row = v.docker_inventory(run)[0]
+        self.assertEqual((row['app'], row['service']), ('standalone', 'standalone'))
+        self.assertEqual(row['digests'], [])
+        self.assertEqual(row['version'], '')
+
     def test_channel_is_preserved_but_numeric_pin_checks_latest(self):
         self.assertEqual(v.image_target(image()), 'ghcr.io/example/app:latest')
         self.assertEqual(v.image_target(image(ref='nginx:stable-alpine@'+DIGEST)), 'nginx:stable-alpine')

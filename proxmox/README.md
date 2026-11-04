@@ -19,6 +19,9 @@ Owner approval starts a separate guarded executor. See
 One approval starts sequential work, with one channel summary and exact plans
 in its thread. Failures stop pending work. Batches never reboot hosts or guests.
 See [batch coverage and exclusions](docs/maintenance-queries.md#update-a-host-or-the-homelab).
+Read-only app/package planning checks three targets at a time. TrueNAS reuses
+fresh image observations within each batch and polls Discord between cron starts.
+Approved updates remain sequential.
 
 ## Provisioning ownership
 
