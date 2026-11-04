@@ -16,6 +16,9 @@ Explicit `update APP on HOST` commands prepare one app update proposal.
 Owner approval starts a separate guarded executor. See
 [supported update paths](docs/maintenance-queries.md#initiate-an-app-update).
 `update all on HOST` and `update the homelab` prepare app and OS batches.
+`update apps on HOST` selects guarded apps and managed app packages.
+`update os on HOST` selects host and eligible guest APT updates, preserving holds.
+Both use the same proposal, owner approval, cancellation, and backup checks.
 One approval starts sequential work, with one channel summary and exact plans
 in its thread. Failures stop pending work. Batches never reboot hosts or guests.
 See [batch coverage and exclusions](docs/maintenance-queries.md#update-a-host-or-the-homelab).

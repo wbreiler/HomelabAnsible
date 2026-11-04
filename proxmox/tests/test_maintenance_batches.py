@@ -163,11 +163,74 @@ class Coordination(unittest.TestCase):
 
     def test_batch_commands_keep_read_only_check_separate(self):
         self.assertEqual(q.app_updates.parse('update all on a'), ('all', 'a'))
+        self.assertEqual(q.app_updates.parse('update apps on a'), ('apps', 'a'))
+        self.assertEqual(q.app_updates.parse('update os on b'), ('os', 'b'))
         self.assertEqual(q.app_updates.parse('update the homelab'), ('all', '*'))
         self.assertIsNone(q.app_updates.parse('update the homelab; reboot'))
         message = {'channel_id': CHANNEL, 'type': 0, 'author': {'id': OWNER}, 'mentions': [{'id': BOT}],
                    'content': '<@' + BOT + '> check for updates'}
         self.assertEqual(q.intent(message, self.config), 'updates')
+
+    def test_request_scope_reaches_preparation_and_the_visible_plan(self):
+        for scope in ('apps', 'os'):
+            with self.subTest(scope=scope):
+                (Path(self.config['state_dir']) / 'maintenance-batch.json').unlink(missing_ok=True)
+                plan = {'scope': scope, 'actions': [], 'notes': []}
+                with patch.object(b, 'unit_active', return_value=False), patch.object(b, 'poll_locked'):
+                    b.request(q, self.config, {'id': REQUEST}, 'a', scope=scope)
+                value = b.read(self.config)
+                self.assertEqual(value['nodes'], ['a'])
+                self.assertEqual(value['scope'], scope)
+                value['local']['phase'] = 'queued'
+                b.save(q, self.config, value)
+                with patch.object(b.adapters, 'prepare', return_value=plan) as prepare:
+                    b.prepare(q, self.config)
+                self.assertEqual(prepare.call_args.kwargs['scope'], scope)
+                value = b.read(self.config)
+                self.assertEqual(value['local']['phase'], 'prepared')
+                self.assertIn(b.SCOPES[scope], value['local']['manifest'])
+                self.assertIn(b.SCOPES[scope], b.summary(value, {'phase': 'proposed', 'expires': time.time()+60}, {}))
+
+    def test_scope_changes_and_out_of_scope_actions_cannot_execute(self):
+        self.value['scope'] = self.value['local']['plan']['scope'] = 'apps'
+        self.value['local']['seal'] = b.backend.digest({'plan': self.value['local']['plan'], 'code': 'code',
+                    'batch': REQUEST, 'nodes': self.value['nodes'], 'owner': OWNER})
+        self.rows = hosts(self.value)
+        control = self.approve()
+        b.approved(q, self.config, self.value, control)
+        for mutation in ('request', 'control', 'plan', 'action', 'os_action'):
+            value, changed_control = copy.deepcopy(self.value), copy.deepcopy(control)
+            if mutation == 'request': value['scope'] = 'all'
+            if mutation == 'control': changed_control['scope'] = 'all'
+            if mutation == 'plan': value['local']['plan']['scope'] = 'all'
+            if mutation == 'action': value['local']['plan']['actions'][0]['backend'] = 'apt'
+            if mutation == 'os_action': value['scope'] = value['local']['plan']['scope'] = changed_control['scope'] = 'os'
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(b.backend.Refused, 'scope'):
+                b.approved(q, self.config, value, changed_control)
+
+    def test_scoped_request_ignores_other_hosts(self):
+        for scope in ('apps', 'os'):
+            with self.subTest(scope=scope), patch.object(b, 'unit_active') as active, patch.object(b, 'poll_locked') as poll:
+                b.request(q, self.config, {'id': REQUEST}, 'b', scope=scope)
+                active.assert_not_called()
+                poll.assert_not_called()
+                self.assertEqual(b.read(self.config), {})
+
+    def test_mismatched_host_scope_blocks_proposal(self):
+        self.rows['b']['scope'] = 'os'
+        control = b.coordinate(q, self.config, self.value, self.rows)
+        self.assertEqual(control['phase'], 'failed')
+        self.assertNotIn('roster', control)
+
+    def test_unsupported_scope_is_explained_in_main_summary(self):
+        for platform, scope in [('truenas', 'os'), ('pbs', 'apps')]:
+            value = item()
+            value.update(nodes=['a'], scope=scope)
+            value['local']['plan'] = {'scope': scope, 'actions': [], 'notes': []}
+            rows = {'a': hosts(value)['a']}
+            control = b.coordinate(q, {**self.config, 'platform': platform}, value, rows)
+            self.assertEqual(control['phase'], 'completed')
+            self.assertIn(b.adapters.UNSUPPORTED_SCOPES[(platform, scope)], self.display)
 
     def test_missing_host_prevents_proposal(self):
         control = b.coordinate(q, self.config, self.value, {'a': self.rows['a']})
@@ -285,6 +348,63 @@ class Coordination(unittest.TestCase):
 
 
 class FleetRoundTrip(unittest.TestCase):
+    def test_pve_scopes_separate_apps_managed_packages_and_os_actions(self):
+        for scope, expected in [('apps', ['managed_packages', 'lxc']), ('os', ['apt', 'apt']),
+                                ('all', ['apt', 'managed_packages', 'lxc', 'apt'])]:
+            with self.subTest(scope=scope), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                backend, versions = MagicMock(), MagicMock()
+                backend.Refused = b.backend.Refused
+                backend.APP_ROOT = root
+                updater = backend.load_updater.return_value
+                updater.PINS = root
+                updater.api.side_effect = lambda path: [{'vmid': 101, 'name': 'app', 'status': 'running'}] if path.endswith('/lxc') else []
+                updater.app_variables.return_value = {'app_hostname': 'app'}
+                updater.guest.side_effect = lambda vmid, command, *args: '1' if command == 'dpkg-query' else 'managed | 2 | repo'
+                updater.apt_candidate.return_value = '2'
+                backend.prepare_lxc.return_value = {'backend': 'lxc', 'label': 'app 1 -> 2', 'effect': 'Update app.'}
+                settings = {'roles': ['app'], 'packages': ['managed'], 'minimum_age_hours': 1}
+                if scope != 'os':
+                    (root / 'config.json').write_text(json.dumps(settings))
+                (root / 'os.json').write_text(json.dumps({'skip_vmids': []}))
+                (root / 'candidate-101-managed.json').write_text(json.dumps({'version': '2', 'first_seen': time.time()-7200}))
+                os_plan = {'packages': [{'package': 'base-files', 'from': '1', 'to': '2'}],
+                           'held': ['managed'], 'failed': [], 'reboot_required': False}
+                with patch.object(b.adapters, 'OS_CONFIG', root / 'os.json'), patch.object(b.adapters, 'apt', return_value=os_plan) as apt:
+                    plan = b.adapters.prepare(CONFIG, backend, versions, lambda _: None, scope=scope)
+                    self.assertEqual([action['backend'] for action in plan['actions']], expected)
+                    self.assertEqual(plan['scope'], scope)
+                    self.assertEqual([call.args for call in apt.call_args_list],
+                                     [('prepare', 101)] if scope == 'apps' else [('prepare', 101), ('prepare', None)])
+                    if scope == 'os':
+                        backend.prepare_lxc.assert_not_called()
+                        updater.guest.assert_not_called()
+                    if scope == 'apps':
+                        settings['packages'] = []
+                        (root / 'config.json').write_text(json.dumps(settings))
+                        apt.reset_mock()
+                        plan = b.adapters.prepare(CONFIG, backend, versions, lambda _: None, scope=scope)
+                        self.assertEqual([action['backend'] for action in plan['actions']], ['lxc'])
+                        apt.assert_not_called()
+
+    def test_unsupported_scopes_do_not_probe_or_update_the_other_scope(self):
+        for platform, scope in [('truenas', 'os'), ('pbs', 'apps')]:
+            with self.subTest(platform=platform), patch.object(b.adapters, 'apt') as apt:
+                backend, versions = MagicMock(), MagicMock()
+                plan = b.adapters.prepare({'platform': platform}, backend, versions, lambda _: None, scope=scope)
+                self.assertEqual(plan['actions'], [])
+                self.assertIn('No updates started', plan['notes'][0])
+                self.assertEqual(backend.method_calls, [])
+                self.assertEqual(versions.method_calls, [])
+                apt.assert_not_called()
+
+    def test_unknown_scope_is_refused_before_any_probe(self):
+        backend, versions = MagicMock(), MagicMock()
+        with self.assertRaisesRegex(ValueError, 'scope'):
+            b.adapters.prepare(CONFIG, backend, versions, lambda _: None, scope='everything')
+        self.assertEqual(backend.method_calls, [])
+        self.assertEqual(versions.method_calls, [])
+
     def test_nas_checked_current_image_remains_current(self):
         backend, versions = MagicMock(), MagicMock()
         backend.Refused = b.backend.Refused
@@ -373,15 +493,25 @@ class FleetRoundTrip(unittest.TestCase):
         backend.perform.assert_not_called()
 
     def test_one_parent_one_approval_two_sequential_hosts(self):
+        self.batch_round_trip('all')
+
+    def test_scoped_batches_approve_or_cancel_through_the_same_flow(self):
+        for scope in ('apps', 'os'):
+            for cancel in (False, True):
+                with self.subTest(scope=scope, cancel=cancel):
+                    self.batch_round_trip(scope, cancel)
+
+    def batch_round_trip(self, scope, cancel=False):
         with tempfile.TemporaryDirectory() as directory:
             configs = []
-            for node in ('a', 'b'):
+            for node in (('a', 'b') if scope == 'all' else ('a',)):
                 root = Path(directory) / node
                 root.mkdir()
-                configs.append({**CONFIG, 'node': node, 'state_dir': str(root), 'platform': 'truenas'})
+                configs.append({**CONFIG, 'node': node, 'state_dir': str(root), 'platform': 'pve' if scope == 'os' else 'truenas'})
             messages = {CHANNEL: {}}
             sequence = [int(PARENT)]
             green = [False]
+            red = [False]
             def discord(config, method='GET', suffix='', payload=None, attachment=None):
                 if payload and 'nonce' in payload:
                     self.assertLessEqual(len(str(payload['nonce'])), 25)
@@ -389,7 +519,7 @@ class FleetRoundTrip(unittest.TestCase):
                 rows = messages.setdefault(channel, {})
                 if '/reactions/' in suffix:
                     if method == 'PUT': return None
-                    return [{'id': OWNER}] if '%E2%9C%85' in suffix and green[0] else []
+                    return [{'id': OWNER}] if ('%E2%9C%85' in suffix and green[0]) or ('%E2%9D%8C' in suffix and red[0]) else []
                 if suffix.endswith('/threads'):
                     message_id = suffix.split('/')[1]
                     rows[message_id]['thread'] = {'id': message_id, 'parent_id': channel, 'type': 11}
@@ -412,37 +542,51 @@ class FleetRoundTrip(unittest.TestCase):
                     sequence[0] += 1
                     row['attachments'] = retained + [{'id': str(sequence[0]), 'filename': attachment[0], 'size': len(attachment[1])}]
                 return copy.deepcopy(row)
-            plan = {'actions': [{'backend': 'lxc', 'label': 'app 1 -> 2', 'effect': 'Restart app.'}], 'notes': ['Excluded example.']}
-            message = {'id': REQUEST}
+            action = {'backend': 'apt' if scope == 'os' else 'truenas', 'label': 'target 1 -> 2', 'effect': 'Service may restart.'}
+            if scope == 'os':
+                action['apt'] = {'packages': [{'package': 'base-files', 'from': '1', 'to': '2'}]}
+            plan = {'scope': scope, 'actions': [action], 'notes': ['Excluded example.']}
+            message = {'id': REQUEST, 'content': 'update the homelab' if scope == 'all' else 'update ' + scope + ' on a'}
             with patch.object(q, 'discord', side_effect=discord), patch.object(b, 'implementation', return_value='code'), \
                     patch.object(b, 'unit_active', return_value=False), patch.object(b, 'start') as start, \
                     patch.object(b.adapters, 'prepare', return_value=plan), patch.object(b.adapters, 'perform', return_value='Version verified.') as perform, \
+                    patch.object(b, 'Path', side_effect=lambda path: Path(directory) / 'os.lock' if str(path) == '/run/lock/lxc-auto-update.lock' else Path(path)), \
                     patch.object(b.backend, 'BACKUP_ROOT', Path(directory)):
                 for config in configs:
-                    b.request(q, config, message, '*')
+                    q.app_updates.request(q, config, message)
                     b.prepare(q, config)
-                b.poll(q, configs[1])
+                b.poll(q, configs[-1])
                 b.poll(q, configs[0])
                 self.assertEqual(b.read(configs[0])['control']['phase'], 'proposed')
+                self.assertEqual(b.read(configs[0])['control']['scope'], scope)
+                self.assertIn(b.SCOPES[scope], next(iter(messages[CHANNEL].values()))['content'])
                 self.assertEqual(len(messages[CHANNEL]), 1)
                 perform.assert_not_called()
+                if cancel:
+                    red[0] = True
+                    for config in configs:
+                        b.poll(q, config)
+                        self.assertEqual(b.read(config)['status'], 'closed')
+                    perform.assert_not_called()
+                    self.assertIn('Canceled', next(iter(messages[CHANNEL].values()))['content'])
+                    return
                 green[0] = True
                 b.poll(q, configs[0])
-                b.poll(q, configs[1])
+                b.poll(q, configs[-1])
                 self.assertEqual(b.read(configs[0])['local']['phase'], 'approved')
-                self.assertEqual(b.read(configs[1])['local']['phase'], 'prepared')
-                b.execute(q, configs[0])
-                b.poll(q, configs[0])
-                b.poll(q, configs[1])
-                self.assertEqual(b.read(configs[1])['local']['phase'], 'approved')
-                b.execute(q, configs[1])
-                b.poll(q, configs[1])
-                b.poll(q, configs[0])
-                self.assertEqual(perform.call_count, 2)
+                if len(configs) > 1:
+                    self.assertEqual(b.read(configs[1])['local']['phase'], 'prepared')
+                for config in configs:
+                    b.poll(q, config)
+                    self.assertEqual(b.read(config)['local']['phase'], 'approved')
+                    b.execute(q, config)
+                    b.poll(q, config)
+                    b.poll(q, configs[0])
+                self.assertEqual(perform.call_count, len(configs))
                 self.assertEqual(b.read(configs[0])['control']['phase'], 'completed')
                 self.assertEqual(len(messages[CHANNEL]), 1)
                 self.assertIn('Batch finished', next(iter(messages[CHANNEL].values()))['content'])
-                self.assertEqual([call.args[0]['node'] for call in perform.call_args_list], ['a', 'b'])
+                self.assertEqual([call.args[0]['node'] for call in perform.call_args_list], [config['node'] for config in configs])
 
 
 if __name__ == '__main__':

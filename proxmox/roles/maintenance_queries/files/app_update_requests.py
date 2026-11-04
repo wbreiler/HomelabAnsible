@@ -27,7 +27,7 @@ def load(name, path):
 
 backend = load('app_update_backends', Path(__file__).with_name('app_update_backends.py'))
 batches = load('maintenance_batches', Path(__file__).with_name('maintenance_batches.py'))
-SYNTAX = 'Use `update APP on HOST`, `update all on HOST`, or `update the homelab`. Mention this bot. Review the exact proposal, then ✅ to approve or ❌ to cancel. Batch requests include apps and OS packages; no reboots.'
+SYNTAX = 'Use `update APP on HOST`, `update apps on HOST`, `update os on HOST`, `update all on HOST`, or `update the homelab`. Mention this bot. Review the exact proposal, then ✅ to approve or ❌ to cancel. All/homelab includes apps and OS packages; no reboots.'
 UNIT = 'homelab-app-update'
 
 
@@ -124,8 +124,8 @@ def valid(q, config, item):
 
 def request(q, config, message):
     selected = parse(message['content'])
-    if selected and selected[0] == 'all':
-        return batches.request(q, config, message, selected[1])
+    if selected and selected[0] in ('all', 'apps', 'os'):
+        return batches.request(q, config, message, selected[1], scope=selected[0])
     if not selected or selected[1] != config['node']:
         return
     if batches.active(config):

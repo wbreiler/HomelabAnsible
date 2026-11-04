@@ -11,6 +11,10 @@ import types
 
 OS_CONFIG = Path('/etc/lxc-auto-update.json')
 APT_SOURCE = Path(__file__).with_name('approved_apt.py')
+UNSUPPORTED_SCOPES = {
+    ('truenas', 'os'): 'TrueNAS OS upgrades require a separate maintenance/reboot plan. No updates started.',
+    ('pbs', 'apps'): 'PBS applications are maintained through OS packages. Use update os on this host. No updates started.',
+}
 
 
 def apt(mode, vmid=None, plan=None):
@@ -22,7 +26,12 @@ def apt(mode, vmid=None, plan=None):
     return json.loads(result.stdout)
 
 
-def prepare(config, backend, versions, progress):
+def prepare(config, backend, versions, progress, scope='all'):
+    if scope not in ('all', 'apps', 'os'):
+        raise ValueError('Unsupported maintenance scope')
+    unsupported = UNSUPPORTED_SCOPES.get((config['platform'], scope))
+    if unsupported:
+        return {'scope': scope, 'actions': [], 'notes': [unsupported]}
     actions, notes = [], []
     def add(label, factory):
         progress('Checking ' + label)
@@ -51,7 +60,7 @@ def prepare(config, backend, versions, progress):
     if config['platform'] in ('pve', 'pbs'):
         if config['platform'] == 'pve':
             updater = backend.load_updater()
-            settings = json.loads((backend.APP_ROOT / 'config.json').read_text())
+            settings = json.loads((backend.APP_ROOT / 'config.json').read_text()) if scope != 'os' else {}
             os_settings = json.loads(OS_CONFIG.read_text())
             guests = updater.api('/nodes/' + config['node'] + '/lxc')
             def probe_guest(row):
@@ -62,10 +71,12 @@ def prepare(config, backend, versions, progress):
             eligible = []
             for row in guests:
                 if row['status'] != 'running' or row['vmid'] in os_settings['skip_vmids']:
-                    notes.append('CT ' + str(row['vmid']) + ': stopped or excluded from OS maintenance.')
+                    notes.append('CT ' + str(row['vmid']) + ': stopped or excluded from package maintenance.')
                 else:
                     eligible.append(row)
-            progress('Checking guest package plans (three guests at a time).')
+            if scope == 'apps' and not settings.get('packages'):
+                eligible = []
+            progress('Checking guest package metadata (three guests at a time).')
             package_plans = []
             with ThreadPoolExecutor(max_workers=3) as pool:
                 for row, result, error in pool.map(probe_guest, eligible):
@@ -73,65 +84,68 @@ def prepare(config, backend, versions, progress):
                         package_plans.append((row, result))
                     label = 'CT ' + str(row['vmid']) + ' ' + row['name']
                     if error:
-                        notes.append(label + ': OS check unavailable (' + error + '); excluded.')
-                    elif result['packages']:
+                        notes.append(label + ': package check unavailable (' + error + '); excluded.')
+                    elif scope != 'apps' and result['packages']:
                         actions.append({'backend': 'apt', 'vmid': row['vmid'], 'hostname': row['name'], 'apt': result,
                                         'label': label + ': ' + str(len(result['packages'])) + ' OS/package updates',
                                         'effect': 'Fresh PBS guest backup, exact package versions, no removals, holds preserved. Services may restart; no reboot.'})
-                    if result and result['held']:
+                    if scope != 'apps' and result and result['held']:
                         notes.append(label + ': held packages retained: ' + ', '.join(result['held']))
-                    if result and result['reboot_required']:
+                    if scope != 'apps' and result and result['reboot_required']:
                         notes.append(label + ': reboot already required; no reboot will run.')
-            def managed(row, os_result, warnings):
-                if (updater.PINS / f'packages-{row["vmid"]}.failed.json').exists():
-                    raise backend.Refused('Previous managed package update failed; inspect its failure brief first.')
-                targets, previous = {}, {}
-                for package in settings.get('packages', []):
-                    if package not in os_result['held']:
-                        continue
-                    current = updater.guest(row['vmid'], 'dpkg-query', '-W', '-f=${Version}', package)
-                    candidates = [line.split('|')[1].strip() for line in updater.guest(row['vmid'], 'apt-cache', 'madison', package).splitlines() if '|' in line]
-                    target = updater.apt_candidate(current, candidates)
-                    observed_path = updater.PINS / f'candidate-{row["vmid"]}-{package}.json'
-                    observed = json.loads(observed_path.read_text()) if observed_path.exists() else {}
-                    if target and observed.get('version') == target and time.time() - observed['first_seen'] >= settings['minimum_age_hours'] * 3600:
-                        targets[package], previous[package] = target, current
-                    elif target:
-                        warnings.append('CT ' + str(row['vmid']) + ' ' + package + ': release-age guard not yet met; excluded.')
-                if targets:
-                    return {'backend': 'managed_packages', 'vmid': row['vmid'], 'hostname': row['name'],
-                            'targets': targets, 'previous': previous,
-                            'label': 'CT ' + str(row['vmid']) + ': ' + ', '.join(targets) + ' managed app packages',
-                            'effect': 'Fresh PBS backup, existing app compatibility/age guards, exact listed versions. Temporarily update only these managed held packages, then restore their holds.',
-                            'package_changes': [{'package': p, 'from': previous[p], 'to': target} for p, target in targets.items()]}
-            with ThreadPoolExecutor(max_workers=3) as pool:
-                pending = []
-                for row, os_result in package_plans:
-                    warnings = []
-                    pending.append((row, warnings, pool.submit(managed, row, os_result, warnings)))
-                for row, warnings, future in pending:
-                    def result():
-                        try:
-                            return future.result()
-                        finally:
-                            notes.extend(warnings)
-                    add('CT ' + str(row['vmid']) + ' managed packages', result)
-            names = {row['name'] for row in guests}
-            with ThreadPoolExecutor(max_workers=3) as pool:
-                pending = [(app, pool.submit(backend.prepare_lxc, config, app))
-                           for app in dict.fromkeys(settings['roles'] + list(settings.get('native_guests', {})))
-                           if updater.app_variables(app, settings)[app + '_hostname'] in names]
-                for app, future in pending:
-                    add(app, future.result)
+            if scope != 'os':
+                def managed(row, os_result, warnings):
+                    if (updater.PINS / f'packages-{row["vmid"]}.failed.json').exists():
+                        raise backend.Refused('Previous managed package update failed; inspect its failure brief first.')
+                    targets, previous = {}, {}
+                    for package in settings.get('packages', []):
+                        if package not in os_result['held']:
+                            continue
+                        current = updater.guest(row['vmid'], 'dpkg-query', '-W', '-f=${Version}', package)
+                        candidates = [line.split('|')[1].strip() for line in updater.guest(row['vmid'], 'apt-cache', 'madison', package).splitlines() if '|' in line]
+                        target = updater.apt_candidate(current, candidates)
+                        observed_path = updater.PINS / f'candidate-{row["vmid"]}-{package}.json'
+                        observed = json.loads(observed_path.read_text()) if observed_path.exists() else {}
+                        if target and observed.get('version') == target and time.time() - observed['first_seen'] >= settings['minimum_age_hours'] * 3600:
+                            targets[package], previous[package] = target, current
+                        elif target:
+                            warnings.append('CT ' + str(row['vmid']) + ' ' + package + ': release-age guard not yet met; excluded.')
+                    if targets:
+                        return {'backend': 'managed_packages', 'vmid': row['vmid'], 'hostname': row['name'],
+                                'targets': targets, 'previous': previous,
+                                'label': 'CT ' + str(row['vmid']) + ': ' + ', '.join(targets) + ' managed app packages',
+                                'effect': 'Fresh PBS backup, existing app compatibility/age guards, exact listed versions. Temporarily update only these managed held packages, then restore their holds.',
+                                'package_changes': [{'package': p, 'from': previous[p], 'to': target} for p, target in targets.items()]}
+                with ThreadPoolExecutor(max_workers=3) as pool:
+                    pending = []
+                    for row, os_result in package_plans:
+                        warnings = []
+                        pending.append((row, warnings, pool.submit(managed, row, os_result, warnings)))
+                    for row, warnings, future in pending:
+                        def result():
+                            try:
+                                return future.result()
+                            finally:
+                                notes.extend(warnings)
+                        add('CT ' + str(row['vmid']) + ' managed packages', result)
+                names = {row['name'] for row in guests}
+                with ThreadPoolExecutor(max_workers=3) as pool:
+                    pending = [(app, pool.submit(backend.prepare_lxc, config, app))
+                               for app in dict.fromkeys(settings['roles'] + list(settings.get('native_guests', {})))
+                               if updater.app_variables(app, settings)[app + '_hostname'] in names]
+                    for app, future in pending:
+                        add(app, future.result)
             for row in updater.api('/nodes/' + config['node'] + '/qemu'):
                 notes.append('VM ' + str(row['vmid']) + ': OS/app executor is not configured; excluded.')
-            covered = {updater.app_variables(app, settings)[app + '_hostname'] for app in
-                       settings['roles'] + list(settings.get('native_guests', {}))}
-            for row in guests:
-                if row['name'] not in covered:
-                    notes.append('CT ' + str(row['vmid']) + ' ' + row['name'] + ': custom app installer unavailable; OS coverage is listed separately.')
+            if scope != 'os':
+                covered = {updater.app_variables(app, settings)[app + '_hostname'] for app in
+                           settings['roles'] + list(settings.get('native_guests', {}))}
+                for row in guests:
+                    if row['name'] not in covered:
+                        notes.append('CT ' + str(row['vmid']) + ' ' + row['name'] + ': custom app installer unavailable; excluded from app updates.')
         # Host packages go last, after that host's guest backups and app work.
-        add(config['node'] + ' host OS', os_plan)
+        if scope != 'apps':
+            add(config['node'] + ' host OS', os_plan)
     elif config['platform'] == 'truenas':
         progress('Checking app images (three at a time).')
         apps = backend.nas_call('app.query')
@@ -176,8 +190,9 @@ def prepare(config, backend, versions, progress):
                 merged['effect'] = 'Redeploy this app once with all listed image changes. ' + merged['effect'].replace('with one new image. ', '')
                 return merged
             add(app['id'], all_images)
-        notes.append('TrueNAS OS: appliance upgrades require a separate maintenance/reboot plan; excluded. Never run APT on TrueNAS.')
-    return {'actions': actions, 'notes': notes}
+        if scope == 'all':
+            notes.append('TrueNAS OS: appliance upgrades require a separate maintenance/reboot plan; excluded. Never run APT on TrueNAS.')
+    return {'scope': scope, 'actions': actions, 'notes': notes}
 
 
 def host_health(config, backend):

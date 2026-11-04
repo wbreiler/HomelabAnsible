@@ -77,6 +77,15 @@ class Requests(unittest.TestCase):
         self.prepare.assert_not_called()
         self.discord.assert_not_called()
 
+    def test_apps_and_os_use_the_existing_batch_approval_flow(self):
+        for scope in ('apps', 'os', 'all'):
+            with self.subTest(scope=scope), patch.object(u.batches, 'request') as request:
+                message = {**self.message, 'content': '<@' + BOT + '> update ' + scope + ' on node'}
+                self.assertEqual(q.intent(message, self.config), 'app_update')
+                u.request(q, self.config, message)
+                request.assert_called_once_with(q, self.config, message, 'node', scope=scope)
+        self.prepare.assert_not_called()
+
     def test_update_request_bypasses_inspection_and_ai_counters(self):
         now_id = str((int(time.time() * 1000) - 1420070400000) << 22)
         message = {**self.message, 'id': now_id}

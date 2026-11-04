@@ -32,7 +32,7 @@ _updates_spec = importlib.util.spec_from_file_location('app_update_requests', Pa
 app_updates = importlib.util.module_from_spec(_updates_spec)
 _updates_spec.loader.exec_module(app_updates)
 
-HELP = 'Mention me with “check for updates”, “how is the lab doing?”, “update APP on HOST”, “update all on HOST”, or “update the homelab”. One summary, with details in its thread. Batches include apps and OS packages. Review the proposal, then ✅. No automatic reboots. Checks remain read-only.'
+HELP = 'Mention me with “check for updates”, “how is the lab doing?”, “update APP on HOST”, “update apps on HOST”, “update os on HOST”, “update all on HOST”, or “update the homelab”. One summary, with details in its thread. All/homelab includes apps and OS packages. Review the proposal, then ✅. No automatic reboots. Checks remain read-only.'
 ID = re.compile(r'[0-9]{17,20}')
 # Fixed code only. User text is never passed to a command, path, URL, or probe.
 PROBE = r'''
@@ -478,7 +478,7 @@ def group_payload(config, bundle, results):
     model = ', '.join(sorted(models)) or ('Model unavailable' if unknown else 'No API calls reported')
     return {'content': '', 'embeds': [{'title': 'Homelab · ' + bundle['kind'].title(),
             'description': f'{status} · {len(results)}/{len(nodes)} hosts reported. Details are in the thread below.' +
-                           ('\nUpdate: `update APP on HOST`, `update all on HOST`, or `update the homelab`. Mention me, review, then ✅.' if bundle['kind'] == 'updates' else ''),
+                           ('\nUpdate: `update apps on HOST`, `update os on HOST`, or `update all on HOST`. You can also name one app. Mention me, review, then ✅.' if bundle['kind'] == 'updates' else ''),
             'fields': fields, 'color': 0x3498DB if finished else 0xE67E22,
             'footer': {'text': (cost + '\n' + model)[:500]}}], 'allowed_mentions': {'parse': []}}
 

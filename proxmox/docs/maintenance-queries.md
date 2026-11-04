@@ -140,17 +140,39 @@ unchanged. These results are dated evidence, not a current health guarantee.
 ## Update a host or the homelab
 
 ```text
+@Homelab Repairs update apps on atlas
+@Homelab Repairs update os on atlas
 @Homelab Repairs update all on atlas
 @Homelab Repairs update all on erebus
 @Homelab Repairs update the homelab
 ```
 
-These commands prepare **applications and OS packages**. They do not authorize
+`update all on HOST` and `update the homelab` prepare **applications and OS packages**.
+The two scoped commands select one category:
+
+| Command | Selected actions |
+| --- | --- |
+| `update apps on HOST` | Guarded LXC role/native apps, eligible managed held app packages, or supported TrueNAS custom images. |
+| `update os on HOST` | Exact APT updates on the PVE/PBS host and eligible running LXCs on that host. Existing holds remain active. |
+
+App installers can still install or update their required dependencies. Apps-only
+requests skip general OS upgrades and host APT planning. They can refresh guest
+APT metadata for managed app package comparisons. OS-only requests skip app
+release probes and guarded app installers. Ordinary APT updates can include
+distribution-packaged services, while managed app package holds stay in place.
+`update os on erebus` explains that TrueNAS needs its separate appliance upgrade
+workflow. `update apps on mnemosyne` directs the user to its OS package workflow.
+These unsupported combinations produce no actions or approval request.
+
+All these commands prepare plans. They do not authorize
 installation. The bot edits one channel message through preparation, approval,
 execution, and completion. Each host attaches its exact version plan inside
 that message's thread. Review those plans and their exclusions before reacting
 **✅**. React **❌** to cancel. An early approval must be removed and added again
 after the proposal appears.
+The scope appears in the channel summary and each attached plan. The approval
+binds that scope to the exact actions. Changing the scope or adding an action
+from another category prevents execution and requires a new proposal.
 
 | Scope | Included | Explicit exclusions |
 | --- | --- | --- |
@@ -269,6 +291,20 @@ All four hosts matched source hashes and private modes. Repeat deployments
 returned `changed=0`. Fresh service baselines and API counters stayed unchanged,
 with all update executors inactive. Execution and Discord failure cases used
 isolated tests. No real update or new owner-reaction round trip was performed.
+
+Scope selection validation on 2026-11-04: 216 focused tests passed, including
+approval and cancellation for both new selectors, scope tampering, host routing,
+and unsupported platform/scope combinations. Both project lint/syntax checks
+and deployment previews passed. All four deployed hosts matched source hashes
+and private modes, and repeat deployments returned `changed=0`.
+Live preparation produced only app actions for `apps` and only APT actions for
+`os`, with no unavailable checks. Prometheus prepared two app actions and 103
+OS package versions, Atlas one app action and 69 package versions, PBS 12 package
+versions, and TrueNAS five custom-app actions. PBS apps and TrueNAS OS requests
+returned their explicit exclusions without probing the other category.
+These were read-only plans, not installations. No backup or executor started.
+Guest uptime, NAS app/pool states, PBS health, query cursors, and API counters
+remained unchanged. The owner Discord cancellation check is pending.
 
 ## API and delivery
 

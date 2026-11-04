@@ -530,7 +530,8 @@ Use `../terraform/README.md` for provisioning and media management.
   become executable commands or URLs. Inspection requests must not invoke an
   updater, backup, artifact download, pin write, guest power, or service mutation.
 * The explicitly enabled update path accepts `update APP on HOST`,
-  `update all on HOST`, and `update the homelab`.
+  `update apps on HOST`, `update os on HOST`, `update all on HOST`, and
+  `update the homelab`.
   Preserve owner/channel checks, exact proposal and reaction verification,
   30-minute expiry, implementation/target binding, and consumption before writes.
   Use the existing LXC updater with exact approved pins and no failed-retry bypass.
@@ -546,6 +547,13 @@ Use `../terraform/README.md` for provisioning and media management.
   exact version attachments in its thread, sequential hosts/actions, and stop
   after failure or cancellation. Missing hosts block approval. Keep the
   30-minute proposal expiry and six-hour execution window. No reboots or replay.
+  Persist the selected apps/os/all scope, show it in the summary and manifest,
+  and bind it to the sealed plan and control record. Reject cross-scope actions
+  before execution. Apps selects guarded app installers and managed held app
+  packages. OS selects host/guest APT actions with holds preserved. Do not run
+  app release probes for OS-only requests or host OS checks for apps-only requests.
+  App installers may still update their dependencies. TrueNAS OS and PBS apps
+  scopes return explicit exclusions without probing the other category.
   Guest APT actions require fresh PBS backups. Host APT actions require platform
   health, no active platform tasks, and private configuration copies. Preserve
   holds, exact package versions/dependencies, and the no-removal policy.
