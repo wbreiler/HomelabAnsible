@@ -105,6 +105,8 @@ edits to the appliance filesystem or database.
   Preserve delivery state during execution. A deleted reply must not block later
   report requests, recreate approval, or replay an update.
   Require recent successful backup evidence and preserve one-attempt semantics.
+  Tdarr's pre-update process check must include Docker's required PID column.
+  Block redeployment for active ffmpeg/HandBrakeCLI processes or missing evidence.
   Catalog apps, local builds, and appliance OS upgrades remain manual. Never
   run APT on TrueNAS. Never broaden this into host,
   pool, network, account, or guest lifecycle maintenance.

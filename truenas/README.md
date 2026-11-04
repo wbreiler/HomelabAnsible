@@ -31,6 +31,8 @@ Stopped apps and missing container inventory remain explicit unavailable checks.
 Direct `--inspect` diagnostics also work while the cron worker holds its lock.
 Deleted report replies do not block later commands. Single-app proposals reject
 implementation changes during preparation and RC, pre-release, or preview images.
+Tdarr updates require a successful process check with no active ffmpeg or
+HandBrakeCLI transcodes. The check includes Docker's required PID column.
 
 [ISO web server](files/iso-server/SETUP.md): a deployed read-only custom app
 with a dedicated macvlan address. HTTP, Proxmox downloads, and repeat-run
