@@ -22,6 +22,8 @@ See [batch coverage and exclusions](docs/maintenance-queries.md#update-a-host-or
 Read-only app/package planning checks three targets at a time. TrueNAS reuses
 fresh image observations within each batch and polls Discord between cron starts.
 Approved updates remain sequential.
+Stopped or missing TrueNAS containers remain visible as unavailable checks.
+Canceled batches retry failed result delivery without repeating updates.
 
 ## Provisioning ownership
 

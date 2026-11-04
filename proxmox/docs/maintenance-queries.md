@@ -169,6 +169,10 @@ binds all plans and opens a six-hour execution window. Hosts and local actions
 run sequentially. A failure stops all remaining actions. Cancellation or removal
 of ✅ stops pending work after the current transaction. No automatic retry or
 rollback occurs. Request a fresh plan after inspecting a failure.
+Cancellation before approval marks prepared hosts as not started. After approval,
+stale host observations remain labeled as last reported until a terminal result
+arrives. Failed final-result delivery is retried before closing local batch state.
+Delivery retries never repeat an update.
 
 Preparation and execution use separate transient `homelab-batch-prepare` and
 `homelab-batch-execute` services. Query timeouts cannot terminate an approved
@@ -191,6 +195,9 @@ image identities, approved versions, and owner authorization before each action.
 Ordinary release reports also use parallel catalog checks and bulk
 [formatted Docker inspection](https://docs.docker.com/reference/cli/docker/inspect/).
 Each report clears its upstream metadata cache first.
+Apps missing from the running-container inventory remain visible as unavailable.
+Batch plans exclude stopped apps, missing images, and unavailable/manual checks
+explicitly. These exclusions do not count as evidence that an app is current.
 No approval or installation is cached or parallelized.
 
 TrueNAS retains its minute cron entry. Each invocation holds the existing
@@ -229,6 +236,17 @@ tests, both project lint/syntax checks, deployment dry runs, and live source
 verification passed. All four repeat deployments returned `changed=0`.
 Guest uptime and NAS/PBS service baselines remained unchanged. No app or OS
 updates ran during performance validation.
+
+Bug-fix validation on 2026-11-03: 197 focused tests passed. New regressions
+cover absent/stopped NAS containers, unavailable/manual image checks, canceled
+summary labels, final-delivery retries, and diagnostics under an occupied lock.
+Both project lint/syntax checks and deployment previews passed. All four hosts
+matched deployed source hashes and private modes, with repeat `changed=0`.
+Live TrueNAS `--inspect health` and `--inspect updates` returned evidence in
+1.7 and 12.9 seconds while the existing worker held its lock. API budgets and
+the cursor stayed unchanged. Guest uptime, NAS app/pool states, and PBS health
+matched the baseline. Discord failures were simulated in tests. No new owner
+reaction round trip or real app/OS installation was performed for these fixes.
 
 ## API and delivery
 
@@ -343,6 +361,8 @@ homelab-status --inspect updates
 
 On TrueNAS, use `/usr/bin/python3 /root/homelab-status/homelab-status.py
 --config /root/homelab-status/config.json --inspect health` as one command.
+Direct inspections bypass the polling-state lock, so an idle cron worker cannot
+silently suppress their output. They do not change query state or API counters.
 `last-report.json` holds the last normalized evidence. `state.json` holds the
 cursor, counters, pending reply, last result identifiers, and token usage. Do not print the
 private configuration, reset budgets, or alter cursors to simulate a request.

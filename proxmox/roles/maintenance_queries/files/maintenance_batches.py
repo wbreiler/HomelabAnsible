@@ -249,7 +249,10 @@ def summary(item, control, hosts):
     for node in item['nodes']:
         row = hosts.get(node)
         if row:
-            lines.append('**' + node + '**: ' + str(row['done']) + '/' + str(row['count']) + ' actions · ' + row['phase'] +
+            status = row['phase']
+            if phase in ('stopped', 'failed') and status in ('waiting', 'queued', 'prepared'):
+                status = 'last reported: ' + status if control.get('approved') else 'not started'
+            lines.append('**' + node + '**: ' + str(row['done']) + '/' + str(row['count']) + ' actions · ' + status +
                          ' · ' + str(row['notices']) + ' notices/exclusions')
         else:
             lines.append('**' + node + '**: waiting for this host')
@@ -398,10 +401,11 @@ def poll_locked(q, config, item):
                 local.update(phase='stopped', stage='No further work authorized.')
             busy = any(row['phase'] in ('preparing', 'executing', 'approved', 'queued') and
                        int(time.time()) // 60 - row['heartbeat'] < 5 for row in hosts.values())
-            if config['node'] != item['nodes'][0] or not busy:
-                item['status'] = 'closed'
             save(q, config, item)
             publish_local(q, config, item)
+            if config['node'] != item['nodes'][0] or not busy:
+                item['status'] = 'closed'
+                save(q, config, item)
     elif control and local['phase'] == 'prepared' and control.get('active') == config['node']:
         try:
             approved(q, config, item, control)

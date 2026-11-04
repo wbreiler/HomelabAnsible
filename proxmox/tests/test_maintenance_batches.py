@@ -153,6 +153,36 @@ class Coordination(unittest.TestCase):
         self.assertEqual(control['phase'], 'collecting')
         self.assertNotIn('roster', control)
 
+    def test_canceled_summary_does_not_leave_unstarted_hosts_prepared(self):
+        self.rows['b']['phase'] = 'executing'
+        content = b.summary(self.value, {'phase': 'stopped'}, self.rows)
+        self.assertNotIn('prepared', content)
+        self.assertIn('not started', content)
+        self.assertIn('executing', content)
+        content = b.summary(self.value, {'phase': 'stopped', 'approved': time.time()}, self.rows)
+        self.assertNotIn('not started', content)
+        self.assertIn('last reported: prepared', content)
+
+    def test_failed_cancellation_delivery_retries_before_closing(self):
+        config = {**self.config, 'node': 'b'}
+        control = {'phase': 'stopped'}
+        failed = []
+        def publish(q, config, value):
+            if value['local']['phase'] == 'stopped' and not failed:
+                failed.append(True)
+                raise OSError('Temporary Discord failure')
+        b.save(q, config, self.value)
+        with patch.object(b, 'parent', return_value=True), patch.object(b, 'publish_local', side_effect=publish) as delivery, \
+                patch.object(b, 'records', return_value=(self.rows, control)), patch.object(b, 'start') as start:
+            with self.assertRaises(OSError):
+                b.poll(q, config)
+            self.assertEqual(b.read(config)['status'], 'active')
+            self.assertEqual(b.read(config)['local']['phase'], 'stopped')
+            b.poll(q, config)
+            self.assertEqual(b.read(config)['status'], 'closed')
+            self.assertGreaterEqual(delivery.call_count, 3)
+        start.assert_not_called()
+
     def test_early_reaction_does_not_approve_unseen_plan(self):
         self.green = True
         for _ in range(3):
@@ -234,6 +264,33 @@ class Coordination(unittest.TestCase):
 
 
 class FleetRoundTrip(unittest.TestCase):
+    def test_nas_checked_current_image_remains_current(self):
+        backend, versions = MagicMock(), MagicMock()
+        backend.Refused = b.backend.Refused
+        backend.nas_call.return_value = [{'id': 'app', 'custom_app': True, 'state': 'RUNNING'}]
+        versions.docker_inventory.return_value = [{'app': 'app', 'service': 'web'}]
+        versions.image_updates.return_value = [{'current': '1', 'available': None}]
+        result = b.adapters.prepare({'platform': 'truenas'}, backend, versions, lambda _: None)
+        self.assertEqual(result['actions'], [])
+        self.assertIn('app: current; no eligible changes.', result['notes'])
+        backend.prepare_nas.assert_not_called()
+
+    def test_nas_missing_or_unchecked_images_are_not_reported_current(self):
+        for state, images, comparisons in [('STOPPED', [], []), ('RUNNING', [], []),
+                ('RUNNING', [{'app': 'app', 'service': 'web'}], [{'unavailable': 'Registry timeout'}]),
+                ('RUNNING', [{'app': 'app', 'service': 'web'}], [{'manual': True}])]:
+            with self.subTest(state=state, comparisons=comparisons):
+                backend, versions = MagicMock(), MagicMock()
+                backend.Refused = b.backend.Refused
+                backend.nas_call.return_value = [{'id': 'app', 'custom_app': True, 'state': state}]
+                versions.docker_inventory.return_value = images
+                versions.image_updates.return_value = comparisons
+                result = b.adapters.prepare({'platform': 'truenas'}, backend, versions, lambda _: None)
+                self.assertEqual(result['actions'], [])
+                self.assertNotIn('current', ' '.join(result['notes']))
+                self.assertTrue(any(note.startswith('app:') and 'excluded' in note for note in result['notes']))
+                backend.prepare_nas.assert_not_called()
+
     def test_pve_prepares_three_apps_at_once_in_stable_order(self):
         backend = MagicMock()
         backend.Refused = b.backend.Refused
@@ -265,7 +322,7 @@ class FleetRoundTrip(unittest.TestCase):
     def test_multiple_nas_images_merge_into_one_redeployment(self):
         backend = MagicMock()
         backend.Refused = b.backend.Refused
-        backend.nas_call.return_value = [{'id': 'app', 'custom_app': True}]
+        backend.nas_call.return_value = [{'id': 'app', 'custom_app': True, 'state': 'RUNNING'}]
         original = {'services': {'first': {'image': 'old1'}, 'second': {'image': 'old2'}}}
         base = {'backend': 'truenas', 'app': 'app', 'original': original,
                 'before_images': {'first': 'id1', 'second': 'id2'}, 'effect': 'Redeploy with one new image. Backup exists.'}

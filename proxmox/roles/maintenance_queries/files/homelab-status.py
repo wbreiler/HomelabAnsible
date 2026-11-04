@@ -266,7 +266,12 @@ def truenas(kind):
         result['apps'].append(row)
     if kind == 'updates':
         result['catalog_updates'] = [clean(app['id']) for app in apps if app.get('upgrade_available')]
-        result['apps'] = versions.image_updates(versions.docker_inventory())
+        inventory = versions.docker_inventory()
+        observed = {image['app'] for image in inventory}
+        result['apps'] = versions.image_updates(inventory)
+        result['apps'].extend({'app': clean(app['id']), 'state': clean(app['state']),
+                               'unavailable': 'No running containers to compare with the registry.'}
+                              for app in apps if app['id'] not in observed)
         status = midclt('update.status')
         if status.get('code') == 'NORMAL':
             newer = status['status'].get('new_version')
@@ -740,15 +745,15 @@ def main():
             any(not isinstance(node, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,60}', node) for node in nodes) or
             len(set(nodes)) != len(nodes) or config['node'] not in nodes):
         raise ValueError('Invalid summary host list')
+    if args.inspect:
+        print(json.dumps(collect(args.inspect, config['platform']), indent=2))
+        return
     path = Path(config['state_dir']) / 'state.json'
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (path.parent / 'lock').open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            return
-        if args.inspect:
-            print(json.dumps(collect(args.inspect, config['platform']), indent=2))
             return
         state = json.loads(path.read_text()) if path.exists() else {}
         poll_window(config, state, path)

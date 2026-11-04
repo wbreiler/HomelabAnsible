@@ -147,15 +147,23 @@ def prepare(config, backend, versions, progress):
                 notes.append(app['id'] + ': catalog app; use the TrueNAS app upgrade screen.')
                 continue
             def all_images(app=app):
+                if app.get('state') != 'RUNNING':
+                    raise backend.Refused('App is not RUNNING; version check unavailable; excluded.')
                 images = [image for image in inventory if image['app'] == app['id']]
+                if not images:
+                    raise backend.Refused('No running containers to compare; excluded.')
                 selected = []
+                unchecked = False
                 for image in images:
                     result = snapshot.image_update(image)
                     if result.get('available') and not result.get('manual'):
                         selected.append(backend.prepare_nas(config, app['id'] + '/' + image['service'], snapshot))
                     elif result.get('unavailable') or result.get('manual'):
+                        unchecked = True
                         notes.append(app['id'] + '/' + image['service'] + ': manual image/source check; excluded.')
                 if not selected:
+                    if unchecked:
+                        raise backend.Refused('Some image checks unavailable or manual; excluded.')
                     return None
                 merged = copy.deepcopy(selected[0])
                 for plan in selected[1:]:

@@ -546,6 +546,9 @@ Use `../terraform/README.md` for provisioning and media management.
   redeployment. Never run APT or appliance upgrades on TrueNAS. Keep raw app
   configuration and private logs out of public attachments. Run
   `tests/test_maintenance_batches.py` when changing the distributed protocol.
+  Close local batch state only after its final Discord delivery succeeds.
+  Retry delivery without replaying preparation or execution. After cancellation,
+  distinguish unapproved plans from possibly stale reports of approved work.
 * Keep read-only app/package preparation bounded to three concurrent checks.
   Preserve output order and per-target failures. Batch TrueNAS preparation
   reuses one fresh Docker inventory and image comparison set within that
@@ -554,6 +557,9 @@ Use `../terraform/README.md` for provisioning and media management.
   matches identities, and preserves missing optional fields without full configs.
   TrueNAS holds the existing worker lock while polling every ten seconds within
   a 50-second cron window. Linux retains its timer. Preserve budgets and cursors.
+  Direct `--inspect` diagnostics run outside this polling lock and do not write
+  query state. Missing TrueNAS containers must remain explicit unavailable
+  checks. Never label stopped or unchecked custom apps as current.
 * APT metadata refresh is permitted. Keep raw errors, logs, configuration, and
   secrets out of Discord and model input. Identify unsupported, stopped,
   failed, and cached checks. Never equate missing evidence with healthy.

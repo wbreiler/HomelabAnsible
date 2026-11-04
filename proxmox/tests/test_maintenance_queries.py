@@ -123,9 +123,22 @@ class Probes(unittest.TestCase):
             result = q.truenas('updates')
         self.assertEqual([call.args[0] for call in mid.call_args_list], ['app.query', 'update.status', 'system.version'])
         self.assertNotIn('secret', json.dumps(result))
-        self.assertEqual(result['apps'], [])
+        self.assertEqual(result['apps'][0]['app'], 'custom')
+        self.assertIn('unavailable', result['apps'][0])
         q.versions.docker_inventory.assert_called_once()
         self.assertIn('cached', result['limits'][0])
+
+    def test_stopped_nas_apps_remain_visible_without_duplicate_running_apps(self):
+        apps = [{'id': name, 'state': state, 'version': '1'} for name, state in
+                [('stopped', 'STOPPED'), ('running', 'RUNNING')]]
+        q.versions.docker_inventory.return_value = [{'app': 'running', 'service': 'web'}]
+        q.versions.image_updates.return_value = [{'app': 'running/web', 'current': '1'}]
+        with patch.object(q, 'midclt', side_effect=[apps, {'code': 'NORMAL', 'status': {}}, 'TrueNAS-test']):
+            result = q.truenas('updates')
+        self.assertEqual(len(result['apps']), 2)
+        missing = next(row for row in result['apps'] if row['app'] == 'stopped')
+        self.assertEqual(missing['state'], 'STOPPED')
+        self.assertIn('unavailable', missing)
 
     def test_truenas_prereleases_and_zfs_cache_are_explicit(self):
         with patch.object(q, 'midclt', side_effect=[[], {'code': 'NORMAL', 'status': {'new_version': {'version': '27.0.0-RC.1'}}}, 'TrueNAS-25.10.7']):
@@ -161,6 +174,21 @@ class Probes(unittest.TestCase):
 
 
 class Workflow(unittest.TestCase):
+    def test_inspect_returns_evidence_while_polling_lock_is_held(self):
+        config = {**CONFIG, 'state_dir': self.directory.name}
+        config_path = Path(self.directory.name) / 'config.json'
+        config_path.write_text(json.dumps(config))
+        self.path.write_text(json.dumps(self.state))
+        with (Path(self.directory.name) / 'lock').open('a') as lock:
+            q.fcntl.flock(lock, q.fcntl.LOCK_EX | q.fcntl.LOCK_NB)
+            with patch('sys.argv', ['homelab-status', '--config', str(config_path), '--inspect', 'health']), \
+                    patch('sys.stdout', new_callable=io.StringIO) as output, \
+                    patch.object(q, 'collect', return_value=REPORT), patch.object(q, 'poll_window') as poll:
+                q.main()
+                self.assertEqual(json.loads(output.getvalue()), REPORT)
+        poll.assert_not_called()
+        self.assertEqual(json.loads(self.path.read_text()), self.state)
+
     def test_cron_polls_every_ten_seconds_and_linux_polls_once(self):
         now = [100.0]
         with patch.object(q.time, 'monotonic', side_effect=lambda: now[0]), \
