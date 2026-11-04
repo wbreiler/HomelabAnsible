@@ -50,6 +50,10 @@ and power. IP tagging remains with its existing service.
 See [the historical repository audit](../LIVE_AUDIT.md) for the earlier baseline.
 Current placement must be checked live rather than inferred from role defaults.
 
+The [observer deployment guide](docs/offsite-observer.md) uses the independent
+application installer inside a dedicated Terraform-owned LXC. Installation
+leaves monitoring disabled until private configuration and acceptance checks.
+
 ## Features
 
 - **Repository Configuration**: Disables enterprise repositories (`.sources` format for PVE 9+) and configures the APT caching proxy

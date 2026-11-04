@@ -733,6 +733,15 @@ Use `../terraform/README.md` for provisioning and media management.
 * Local tests disable telemetry, ISP lookup, compression, buffering, and
   bandwidth overhead compensation. Use the direct guest HTTP address.
 
+### offsite observer
+
+* The independent `homelab-offsite-observer` repository owns its installer and
+  activation gates. Follow `docs/offsite-observer.md`; do not duplicate its role.
+* Terraform owns the dedicated LXC and firewall. Use console administration,
+  no nesting/devices/host mounts, and no inbound listener. Keep credentials private.
+* Installation stays disabled. Provider tests and activation need their real
+  configuration and authorization. Home-cluster placement is not an offsite vantage.
+
 ### Local DNS and private web services
 
 * `local-services.yml` manages a separate NPM configuration with private-peer
