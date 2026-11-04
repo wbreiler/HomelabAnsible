@@ -6,6 +6,11 @@ Terraform owns guest provisioning and hardware. Ansible owns host configuration
 and guest software. Use the [guest workflow](#create-a-guest-and-install-its-application)
 for a new Gatus, Apt-Cacher NG, or LibreSpeed guest.
 
+The independent observer uses a console-based installer and a dedicated
+[Terraform template](proxmox/offsite-observer.tf.example). Follow its
+[deployment guide](../proxmox/docs/offsite-observer.md); it does not use the
+SSH/nesting application workflow below.
+
 ## Historical adoption baseline — 2026-10-26
 
 The adoption baseline tracked 32 guests:

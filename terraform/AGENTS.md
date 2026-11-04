@@ -66,6 +66,12 @@ It restores temporary definition edits and does not apply or run Ansible.
 
 ## Adoption and recovery safeguards
 
+The independent observer uses `proxmox/offsite-observer.tf.example` and its
+existing console installer, documented in `../proxmox/docs/offsite-observer.md`.
+Keep nesting and guest SSH absent. Review creation of only its guest/firewall,
+then a power-only start plan. Do not route it through the SSH/nesting bootstrap
+or bypass its separate application activation gates.
+
 Read the [adoption notes](README.md#existing-guest-adoption) before importing
 resources. Preserve imported disk settings, MAC identities, privilege modes,
 HA ignores, tags, and raw LXC passthrough snapshots. The provider does not

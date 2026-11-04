@@ -1,0 +1,102 @@
+# Copy to offsite-observer.local.tf and replace the documentation values.
+# Create stopped, review/apply the creation-only plan, then set started = true.
+resource "proxmox_virtual_environment_container" "offsite_observer" {
+  node_name     = "NODE"
+  vm_id         = 999
+  description   = "Outbound observer. Installed disabled. Console administration."
+  unprivileged  = true
+  started       = false
+  start_on_boot = true
+  tags          = ["monitoring", "terraform"]
+
+  cpu {
+    cores = 1
+    limit = 1
+  }
+  memory {
+    dedicated = 512
+    swap      = 0
+  }
+  disk {
+    datastore_id = "local-zfs"
+    size         = 8
+    replicate    = false
+  }
+  operating_system {
+    template_file_id = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+    type             = "debian"
+  }
+  initialization {
+    hostname = "offsite-observer"
+    dns {
+      servers = ["1.1.1.1", "9.9.9.9"]
+    }
+    ip_config {
+      ipv4 {
+        address = "192.0.2.10/24"
+        gateway = "192.0.2.1"
+      }
+    }
+  }
+  network_interface {
+    name     = "eth0"
+    bridge   = "vmbr0"
+    vlan_id  = 40
+    firewall = true
+  }
+  # No nesting, devices, host mounts, or SSH key. Manage through pct exec.
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [tags]
+  }
+}
+
+resource "proxmox_virtual_environment_firewall_options" "offsite_observer" {
+  node_name     = proxmox_virtual_environment_container.offsite_observer.node_name
+  container_id  = proxmox_virtual_environment_container.offsite_observer.vm_id
+  enabled       = true
+  input_policy  = "DROP"
+  output_policy = "DROP"
+  dhcp          = false
+  ndp           = false
+  radv          = false
+  ipfilter      = true
+  macfilter     = true
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "proxmox_virtual_environment_firewall_rules" "offsite_observer" {
+  node_name    = proxmox_virtual_environment_container.offsite_observer.node_name
+  container_id = proxmox_virtual_environment_container.offsite_observer.vm_id
+  rule {
+    type    = "out"
+    action  = "ACCEPT"
+    enabled = true
+    proto   = "udp"
+    dest    = "1.1.1.1,9.9.9.9"
+    dport   = "53"
+    comment = "Public DNS"
+  }
+  rule {
+    type    = "out"
+    action  = "ACCEPT"
+    enabled = true
+    proto   = "tcp"
+    dest    = "1.1.1.1,9.9.9.9"
+    dport   = "53"
+    comment = "Public DNS fallback"
+  }
+  rule {
+    type    = "out"
+    action  = "ACCEPT"
+    enabled = true
+    proto   = "tcp"
+    dport   = "80,443"
+    comment = "Package mirrors and HTTPS probes/providers"
+  }
+  lifecycle {
+    prevent_destroy = true
+  }
+}
