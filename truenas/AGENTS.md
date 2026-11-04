@@ -98,6 +98,9 @@ edits to the appliance filesystem or database.
   Keep apps absent from running-container inventory visible as unavailable in
   reports. Exclude stopped or unchecked apps explicitly instead of calling them
   current. Persist terminal delivery before closing local batch state.
+  Reject RC, pre-release, and preview image versions before creating a proposal.
+  Preserve delivery state during execution. A deleted reply must not block later
+  report requests, recreate approval, or replay an update.
   Require recent successful backup evidence and preserve one-attempt semantics.
   Catalog apps, local builds, and appliance OS upgrades remain manual. Never
   run APT on TrueNAS. Never broaden this into host,

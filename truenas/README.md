@@ -26,6 +26,8 @@ idle. Image checks run three at a time and reuse fresh observations within the
 same batch. Approved app changes remain sequential.
 Stopped apps and missing container inventory remain explicit unavailable checks.
 Direct `--inspect` diagnostics also work while the cron worker holds its lock.
+Deleted report replies do not block later commands. Single-app proposals reject
+implementation changes during preparation and RC, pre-release, or preview images.
 
 [ISO web server](files/iso-server/SETUP.md): a deployed read-only custom app
 with a dedicated macvlan address. HTTP, Proxmox downloads, and repeat-run
