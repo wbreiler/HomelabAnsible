@@ -30,7 +30,6 @@ JOBS = {
 }
 WEBHOOK = re.compile(r'https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+')
 INVOCATION = re.compile(r'[0-9a-f]{32}')
-SUPPRESS_NOTIFICATIONS = 1 << 12
 # Guest-defined unit names can contain private instance identifiers.
 PUBLIC_OS_UNITS = ('dev-mqueue.mount', 'run-lock.mount', 'tmp.mount', 'wtmpdb-rotate.timer')
 # Only these normalized observations leave the host; arbitrary log text never does.
@@ -235,8 +234,7 @@ def deliver(payload, config):
     url = config['discord_webhook_url']
     if not WEBHOOK.fullmatch(url):
         raise ValueError('Invalid Discord destination')
-    # Apply at delivery so briefs queued before the upgrade are silent on retry.
-    response = post(url + '?wait=true', {**payload, 'flags': SUPPRESS_NOTIFICATIONS})
+    response = post(url + '?wait=true', payload)
     if not isinstance(response, dict) or not response.get('id'):
         raise ValueError('Discord did not confirm delivery')
     return response

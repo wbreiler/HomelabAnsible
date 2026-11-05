@@ -257,8 +257,6 @@ class Transport(unittest.TestCase):
         with patch.object(briefs, 'post', return_value={'id': '123'}) as post:
             briefs.deliver(payload, CONFIG)
         self.assertTrue(post.call_args.args[0].endswith('?wait=true'))
-        self.assertEqual(post.call_args.args[1]['flags'], 1 << 12)
-        self.assertNotIn('flags', payload)  # Legacy queued payloads work without a state migration.
         with patch.object(briefs, 'post', return_value={}):
             with self.assertRaises(ValueError):
                 briefs.deliver(payload, CONFIG)

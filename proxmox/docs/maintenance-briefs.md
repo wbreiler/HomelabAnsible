@@ -7,9 +7,6 @@ No new guest, package, remote access credential, or Loki query route is needed.
 
 The worker sends one Discord brief for each failed invocation. After a reported
 failure, a successful later invocation sends a maintenance recovery message.
-The scheduled LXC summaries, failure and recovery briefs, and repair bot posts
-use Discord's silent delivery at all hours. Messages and approval reactions
-remain available in the channel. Discord suppresses push and desktop alerts.
 Ordinary successful runs stay quiet. Recovery describes maintenance only and
 does not claim that application health or a backup restore was verified.
 

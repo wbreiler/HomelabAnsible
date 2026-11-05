@@ -780,9 +780,7 @@ Optional [maintenance failure briefs](docs/maintenance-briefs.md) add read-only
 explanations for failed OS/application runs. A per-node worker reads current
 reports and selected journal signals, then sends a Discord brief. OpenAI analysis
 uses a protected key file or Vault variable; without it, the worker sends factual
-briefs. Scheduled update summaries, failure and recovery briefs, and repair bot
-posts use silent Discord delivery around the clock. Deploy the brief worker
-through `maintenance-briefs.yml`.
+briefs. Existing notifications remain independent. Deploy through `maintenance-briefs.yml`.
 Optional interactive repairs use a Discord bot: the owner requests a stronger-model
 proposal with 🔍 and approves one concrete attempt with ✅. The separate executor
 reuses guarded single-guest maintenance, retains backup/version checks, and never

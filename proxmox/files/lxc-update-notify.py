@@ -127,8 +127,7 @@ def summary(kind, result, report, invocation, node):
 def send(url, message):
     if not WEBHOOK.fullmatch(url):
         raise ValueError('invalid Discord webhook destination')
-    payload = json.dumps({'embeds': [message], 'allowed_mentions': {'parse': []},
-                          'flags': 1 << 12}).encode()  # Discord SUPPRESS_NOTIFICATIONS
+    payload = json.dumps({'embeds': [message], 'allowed_mentions': {'parse': []}}).encode()
     request = urllib.request.Request(url + '?wait=true', data=payload, headers={
         'Content-Type': 'application/json', 'User-Agent': 'HomelabAnsible-maintenance',
     })

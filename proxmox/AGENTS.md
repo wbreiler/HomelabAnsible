@@ -475,8 +475,6 @@ Use `../terraform/README.md` for provisioning and media management.
 * Read only completed OS/application maintenance reports and journals for the
   matching systemd invocation. Preserve race checks, successful-run silence,
   recovery semantics, and existing independent maintenance notifications.
-* Send scheduled LXC summaries, failure/recovery briefs (including queued
-  retries), and repair bot posts with Discord's `SUPPRESS_NOTIFICATIONS` flag.
 * Only normalized allowlisted signals and selected metadata may leave the host.
   Never forward arbitrary journal lines, exception reasons, URLs, or config.
 * Keep the OpenAI key in the ignored, mode-0600 `.maintenance-briefs-openai-key`
