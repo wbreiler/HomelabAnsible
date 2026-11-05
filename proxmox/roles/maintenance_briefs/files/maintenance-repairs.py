@@ -130,7 +130,7 @@ def publish(settings, incident, slot, content, reply_to=None):
         return
     if len(content) > 2000:
         raise ValueError('Interactive message too long')
-    payload = {'content': content, 'allowed_mentions': {'parse': []},
+    payload = {'content': content, 'allowed_mentions': {'parse': []}, 'flags': briefs.SUPPRESS_NOTIFICATIONS,
                'nonce': hashlib.sha256((incident['id'] + slot).encode()).hexdigest()[:24], 'enforce_nonce': True}
     if reply_to:
         if not ID.fullmatch(reply_to):

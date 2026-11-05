@@ -175,6 +175,7 @@ class Notifications(unittest.TestCase):
         request = opener.open.call_args.args[0]
         self.assertTrue(request.full_url.endswith('?wait=true'))
         self.assertEqual(json.loads(request.data)['allowed_mentions'], {'parse': []})
+        self.assertEqual(json.loads(request.data)['flags'], 1 << 12)
         self.assertEqual(json.loads(request.data)['embeds'], [{'description': '@everyone test'}])
 
     def test_invalid_destinations_and_redirects_are_blocked(self):

@@ -501,6 +501,7 @@ class Repairs(unittest.TestCase):
             repairs.publish(SETTINGS, value, 'proposal_id', repairs.proposal(value))
         discord.assert_called_once()
         self.assertEqual(discord.call_args.args[3]['allowed_mentions'], {'parse': []})
+        self.assertEqual(discord.call_args.args[3]['flags'], 1 << 12)
         self.assertTrue(discord.call_args.args[3]['enforce_nonce'])
         self.assertEqual((self.root / 'incident-test-1.json').stat().st_mode & 0o777, 0o600)
 
