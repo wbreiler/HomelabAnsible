@@ -679,6 +679,10 @@ ansible-playbook site.yml --tags lxc_auto_update \
 ```
 
 Set these flags in the ignored group variables to preserve the configuration.
+The scheduled updater compares failed systemd unit IDs before and after APT.
+If new units fail, the node's private `/var/lib/lxc-auto-update/last-run.json`
+records their names for that CT. See [maintenance failure briefs](docs/maintenance-briefs.md).
+
 The updater requires an LXC backup on `lxc_auto_update_backup_storage` from
 the last eight hours. A missing, stale, or failed-verification backup blocks
 that guest's update and fails the service. Existing Terraform backup jobs

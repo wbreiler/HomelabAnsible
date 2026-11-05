@@ -90,11 +90,14 @@ class AutoUpdate(unittest.TestCase):
         for call in run.call_args_list:
             self.assertEqual(call.args[0][:2], ['pct', 'exec'])
 
-    @patch.object(updater, 'failed_services', side_effect=[set(), {'broken.service loaded failed failed'}])
-    @patch.object(updater, 'guest', return_value='')
+    @patch.object(updater, 'guest', side_effect=['', 'tmp.mount loaded failed failed Temporary Directory',
+                  'tmp.mount           loaded    failed failed Temporary Directory\n'
+                  'wtmpdb-rotate.timer not-found failed failed wtmpdb-rotate.timer'])
     @patch.object(updater.subprocess, 'run')
-    def test_new_service_failure_fails_the_job(self, run, guest, failed):
+    def test_new_timer_fails_job_without_recounting_old_mount(self, run, guest):
         self.assertEqual(self.run_updates(), 1)
+        row, = json.loads(updater.REPORT_FILE.read_text())['results']
+        self.assertEqual(row['new_failed_units'], ['wtmpdb-rotate.timer'])
 
     def test_unknown_requested_guest_is_an_error(self):
         self.assertEqual(self.run_updates(requested=[999]), 1)

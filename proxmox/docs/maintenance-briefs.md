@@ -88,6 +88,11 @@ It reads at most the last 200 journal entries for the exact invocation.
 Only recognized, normalized failure signals leave the host. These include the
 backup prerequisite, container/package locks, new failed services, disk space,
 DNS, APT signatures/dependencies, TLS verification, and application health checks.
+For scheduled OS updates, a successful APT command followed by a new unit
+failure is reported as a health-check failure after installation. The matching
+private report keeps the exact new unit IDs per CT. Briefs may name the three
+standard mount units `dev-mqueue.mount`, `run-lock.mount`, and `tmp.mount`, and
+the standard `wtmpdb-rotate.timer`. Other unit names stay on the node.
 Raw journal text, arbitrary exception reasons, URLs, and application configuration
 are never sent to OpenAI or Discord. Unknown failures direct the operator to the
 local journal. A broad signal can describe one command rather than the whole run.

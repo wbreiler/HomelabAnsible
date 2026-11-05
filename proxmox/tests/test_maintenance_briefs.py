@@ -65,6 +65,17 @@ class Collection(unittest.TestCase):
         self.assertFalse(result['report_current'])
         self.assertEqual(result['failed_vmids'], [])
 
+    def test_os_report_names_only_reviewed_units_from_current_failed_guests(self):
+        rows = [{'vmid': 108, 'status': 'failed', 'new_failed_units': ['wtmpdb-rotate.timer', 'private-name.service']},
+                {'vmid': 109, 'status': 'completed', 'new_failed_units': ['tmp.mount']}]
+        result, _ = self.collect({'invocation_id': INVOCATION, 'results': rows})
+        self.assertIn('wtmpdb-rotate.timer', json.dumps(result['observations']))
+        self.assertIn('private updater report', json.dumps(result['observations']))
+        self.assertNotIn('private-name', json.dumps(result))
+        self.assertNotIn('tmp.mount', json.dumps(result))
+        stale, _ = self.collect({'invocation_id': 'b' * 32, 'results': rows})
+        self.assertEqual(stale['observations'], [])
+
     def test_running_or_never_run_unit_is_skipped(self):
         for active, invocation in [('active', INVOCATION), ('activating', INVOCATION), ('inactive', '')]:
             with patch.object(briefs, 'unit_status', return_value=status(invocation, active)), patch.object(briefs, 'read_json') as read:

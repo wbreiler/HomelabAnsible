@@ -441,6 +441,9 @@ Use `../terraform/README.md` for provisioning and media management.
   pins, refuses package removal, and never changes guest power or host packages.
 * Opt in with `install_lxc_auto_update: true` and `lxc_auto_update_enabled: true`.
 * Keep Terraform backup schedules and application release ownership intact.
+* Compare failed systemd unit IDs across the package operation. Table padding
+  or description changes must not count as a new failure. Keep the exact IDs
+  in the private report and restrict brief output to reviewed unit names.
 * Validate with `python3 tests/test_lxc_auto_update.py` and a live
   `lxc-auto-update --dry-run` on both nodes before enabling the timer.
 

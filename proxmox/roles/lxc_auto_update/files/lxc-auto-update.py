@@ -47,7 +47,9 @@ def guest(vmid, *args):
 
 
 def failed_services(vmid):
-    return set(guest(vmid, 'systemctl', '--failed', '--no-legend', '--plain', '--no-pager').splitlines())
+    rows = guest(vmid, 'systemctl', '--failed', '--no-legend', '--plain', '--no-pager')
+    # A new unit can change the column widths of every existing row.
+    return {line.split(maxsplit=1)[0] for line in rows.splitlines() if line.strip()}
 
 
 def update_guests(config, dry_run=False, requested=()):
@@ -62,9 +64,10 @@ def update_guests(config, dry_run=False, requested=()):
         if requested and vmid not in requested:
             continue
         selected.add(vmid)
+        entry = {'vmid': vmid, 'name': row.get('name', '')}
         if row['status'] != 'running' or vmid in config['skip_vmids']:
             print(f'SKIP {vmid}: stopped or explicitly excluded', flush=True)
-            report.append({'vmid': vmid, 'name': row.get('name', ''), 'status': 'skipped'})
+            report.append({**entry, 'status': 'skipped'})
             continue
         try:
             if not recent_backup(backups, vmid, config['backup_max_age_hours'], time.time()):
@@ -83,12 +86,13 @@ def update_guests(config, dry_run=False, requested=()):
             subprocess.run(['pct', 'exec', str(vmid), '--', 'sh', '-c', UPDATE], check=True)
             new_failures = failed_services(vmid) - before
             if new_failures:
-                raise RuntimeError('new failed services: ' + ', '.join(sorted(new_failures)))
+                entry['new_failed_units'] = sorted(new_failures)
+                raise RuntimeError('new failed services: ' + ', '.join(entry['new_failed_units']))
             print(f'OK {vmid}', flush=True)
-            report.append({'vmid': vmid, 'name': row.get('name', ''), 'status': 'completed'})
+            report.append({**entry, 'status': 'completed'})
         except (RuntimeError, subprocess.CalledProcessError) as error:
             failures.append(vmid)
-            report.append({'vmid': vmid, 'name': row.get('name', ''), 'status': 'failed'})
+            report.append({**entry, 'status': 'failed'})
             # Do not echo arbitrary command arguments or application configuration.
             detail = str(error) if isinstance(error, RuntimeError) else f'command exited {error.returncode}'
             print(f'FAILED {vmid}: {detail}', flush=True)
