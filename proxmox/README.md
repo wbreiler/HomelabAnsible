@@ -53,6 +53,7 @@ Current placement must be checked live rather than inferred from role defaults.
 The [observer deployment guide](docs/offsite-observer.md) uses the independent
 application installer inside a dedicated Terraform-owned LXC. Installation
 leaves monitoring disabled until private configuration and acceptance checks.
+The guide also covers [guest mount checks](docs/offsite-observer.md#guest-mount-checks) for the unprivileged container.
 
 ## Features
 

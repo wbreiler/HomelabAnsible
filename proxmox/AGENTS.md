@@ -742,6 +742,8 @@ Use `../terraform/README.md` for provisioning and media management.
   activation gates. Follow `docs/offsite-observer.md`; do not duplicate its role.
 * Terraform owns the dedicated LXC and firewall. Use console administration,
   no nesting/devices/host mounts, and no inbound listener. Keep credentials private.
+* For guest mount failures, inspect the host's AppArmor audit and follow the
+  guest mount checks in the deployment guide. Verify the actual filesystems.
 * Installation stays disabled. Provider tests and activation need their real
   configuration and authorization. Home-cluster placement is not an offsite vantage.
 

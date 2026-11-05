@@ -52,6 +52,33 @@ installer run. Missing credential preflight failures are expected before setup.
 Use an inert configuration for any sandbox smoke test. Never substitute fake
 credentials into production credential paths or enable the timer to test installation.
 
+### Guest mount checks
+
+Check `dev-mqueue.mount`, `run-lock.mount`, and `tmp.mount` after installation.
+On the unprivileged observer, the kernel audit log identified AppArmor denials
+for the move operation at those three destinations. On empty disposable paths
+in the guest, tmpfs and mqueue both succeeded with the classic mount operation.
+
+For that confirmed failure, each affected unit uses a guest-local drop-in at
+`/etc/systemd/system/<unit>.d/50-lxc-classic-mount.conf`:
+
+```ini
+[Mount]
+Environment=LIBMOUNT_FORCE_MOUNT2=always
+```
+
+Before starting a mount, check for files, open handles, and private service
+directories beneath its destination. Preserve any data and directory permissions.
+Reload systemd, start each affected unit and verify its filesystem and options
+with `findmnt --mountpoint`. Test an unprivileged temporary-file write, a lock
+under `/run/lock`, and a POSIX queue send/receive. This setting is limited to
+the three mount helpers. See the [util-linux mount documentation](https://github.com/util-linux/util-linux/blob/master/sys-utils/mount.8.adoc#environment).
+
+If a wtmpdb upgrade retires `wtmpdb-rotate.timer`, check the installed package
+changelog, the active `logrotate.timer`, and `logrotate --debug /etc/logrotate.conf`.
+If its old activation link is dangling, save that link for rollback, remove it
+from `timers.target.wants`, reload systemd, and clear that timer's failed state.
+
 ## Add private inputs later
 
 Inside the guest, create a mode-0700 `/root/offsite-private` directory. Copy
