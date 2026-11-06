@@ -1,4 +1,10 @@
-# Keep a small local pool. HAProxy reuses connections per CDN address and host.
+# Reuse the local redirect connection for adjacent disk-cache slices.
+upstream lancache_redirect {
+    server 127.0.0.1:3128;
+    keepalive 64;
+}
+
+# HAProxy reuses connections per CDN address and host.
 upstream lancache_origins {
     server 127.0.0.1:3129;
     keepalive 64;

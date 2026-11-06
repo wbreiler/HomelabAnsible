@@ -1,4 +1,4 @@
-"""Run with the rendered nginx config, startup hook, and locally pinned image."""
+"""Run with both rendered nginx configs, startup hook, and locally pinned image."""
 import hashlib
 from pathlib import Path
 import subprocess
@@ -15,7 +15,7 @@ def run(*args):
         raise
 
 
-def main(config, hook, image):
+def main(config, cache_config, hook, image):
     assert "@sha256:" in image, "Use the pinned LANCache image"
     name = "lancache-range-test-" + uuid.uuid4().hex[:12]
     payload = b"range-test-" * 200000
@@ -23,6 +23,7 @@ def main(config, hook, image):
         root = Path(directory)
         (root / "range-body").write_bytes(payload)
         (root / "upstream.conf").write_text(Path(config).read_text())
+        (root / "cache-upstream.conf").write_text(Path(cache_config).read_text())
         (root / "upstream-hook.sh").write_text(Path(hook).read_text())
         (root / "upstream-hook.sh").chmod(0o755)
         (root / "nginx.conf").write_text("""user root;
@@ -30,7 +31,8 @@ pid /tmp/nginx.pid;
 error_log stderr;
 events {}
 http {
-    access_log off;
+    log_format connections '$server_port $connection';
+    access_log /tmp/connections.log connections;
     include /fixture/upstream.conf;
     server {
         listen 127.0.0.1:3129;
@@ -42,7 +44,7 @@ http {
         location / {
             slice 1m;
             proxy_set_header Range $slice_range;
-            proxy_pass http://127.0.0.1:3128;
+            include /fixture/cache-upstream.conf;
         }
     }
 }
@@ -68,6 +70,10 @@ http {
                 digest = run("docker", "exec", name, "sha256sum", "/tmp/received").split()[0]
                 assert digest == hashlib.sha256(expected).hexdigest()
                 print(f"PASS {path} {byte_range or 'complete response'}")
+            lines = run("docker", "exec", name, "cat", "/tmp/connections.log").splitlines()
+            connections = [line.split()[1] for line in lines if line.startswith("3128 ")]
+            assert len(connections) >= 6 and len(set(connections)) == 1, connections
+            print("PASS adjacent slices reuse one local proxy connection")
         finally:
             subprocess.run(["docker", "rm", "-f", name], check=True, stdout=subprocess.DEVNULL)
 
@@ -76,6 +82,7 @@ http {
                 "--network", "none", "--tmpfs", "/data/cache:size=64m", "--tmpfs", "/data/logs",
                 "-e", "CACHE_INDEX_SIZE=1m", "-e", "CACHE_DISK_SIZE=32m", "-e", "MIN_FREE_DISK=0",
                 "-v", str(root / "upstream.conf") + ":/etc/lancache-upstream.conf:ro",
+                "-v", str(root / "cache-upstream.conf") + ":/etc/lancache-cache-upstream.conf:ro",
                 "-v", str(root / "upstream-hook.sh") + ":/hooks/entrypoint-pre.d/99_upstream.sh:ro", image)
             run("docker", "exec", name, "curl", "-fsS", "--max-time", "10", "--retry", "20",
                 "--retry-connrefused", "--retry-delay", "1", "http://127.0.0.1/lancache-heartbeat")

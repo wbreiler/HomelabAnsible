@@ -25,6 +25,7 @@ services:
       - /srv/lancache/cache:/data/cache
       - /srv/lancache/logs:/data/logs
       - /opt/lancache/nginx-upstream.conf:/etc/lancache-upstream.conf:ro
+      - /opt/lancache/nginx-cache-upstream.conf:/etc/lancache-cache-upstream.conf:ro
       - /opt/lancache/upstream-hook.sh:/hooks/entrypoint-pre.d/99_upstream.sh:ro
   upstream:
     image: {{ lancache_upstream_image }}

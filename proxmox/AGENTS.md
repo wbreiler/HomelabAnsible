@@ -782,6 +782,7 @@ Use the guest-only [SSD cache workflow](docs/lancache.md). Terraform owns both d
 Keep game data separate from the backed-up dashboard and check ownership of
 the service addresses before cutover.
 Preserve upstream HTTP/1.1, range normalization, and the loopback-only connection
-pool. Keep the short Steam RAM buffer separate from the persistent cache keys.
+pool on both the local redirect hop and the CDN hop. Keep the short Steam RAM
+buffer separate from the persistent cache keys.
 Validate uncached downloads with fresh chunks from a verified wired client.
 See the proxy regression test and configuration restart rules in that guide.

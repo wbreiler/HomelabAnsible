@@ -41,6 +41,7 @@ class LANCacheTest(unittest.TestCase):
             self.assertEqual(upstream["labels"]["homelab.lancache-proxy-config"], "haproxy-test-checksum")
             self.assertIn("/srv/lancache/cache:/data/cache", services["monolithic"]["volumes"])
             self.assertIn("/opt/lancache/nginx-upstream.conf:/etc/lancache-upstream.conf:ro", services["monolithic"]["volumes"])
+            self.assertIn("/opt/lancache/nginx-cache-upstream.conf:/etc/lancache-cache-upstream.conf:ro", services["monolithic"]["volumes"])
             self.assertIn("/opt/lancache/upstream-hook.sh:/hooks/entrypoint-pre.d/99_upstream.sh:ro", services["monolithic"]["volumes"])
             if phase == "full":
                 self.assertIn("/srv/lancache/dashboard:/data", services["dashboard"]["volumes"])

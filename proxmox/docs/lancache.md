@@ -80,6 +80,9 @@ The internal nginx redirect handler uses HTTP/1.1 and normalizes full upstream
 responses into the requested byte ranges. This prevents an origin that ignores
 `Range` from truncating a sliced download. The outer cache retains its original
 1 MiB slices and cache keys, so existing cached games remain usable.
+The disk cache also uses HTTP/1.1 and a keepalive pool to reach the local
+redirect handler. Keep both proxy hops pooled. Reopening the local connection
+for every slice can reduce uncached throughput even when WAN connections reuse.
 
 The `upstream` container listens only on loopback inside the cache's network
 namespace. It pools connections by CDN host and address. Each persistent
@@ -105,11 +108,12 @@ After changes, require a second playbook run with zero changes.
 For a regression check on a Docker host with the pinned cache image available:
 
 ```sh
-python3 tests/lancache_proxy_integration.py /opt/lancache/nginx-upstream.conf /opt/lancache/upstream-hook.sh 'lancachenet/monolithic@sha256:155817065b13cc427aa0014acc34bbb389591400d7639c95abcfcfb2230ad7f0'
+python3 tests/lancache_proxy_integration.py /opt/lancache/nginx-upstream.conf /opt/lancache/nginx-cache-upstream.conf /opt/lancache/upstream-hook.sh 'lancachenet/monolithic@sha256:155817065b13cc427aa0014acc34bbb389591400d7639c95abcfcfb2230ad7f0'
 ```
 
 This isolated test checks real image startup, complete downloads, byte ranges,
-and redirects against an origin that deliberately ignores ranges. For performance validation, use a
+and redirects against an origin that deliberately ignores ranges. It also
+verifies that adjacent slices reuse one local proxy connection. For performance validation, use a
 wired client, verify that every selected chunk is absent before the first pass,
 and compare uncached, cached, and direct transfers with byte counts and hashes.
 Do not use `nocache` queries as a substitute for a fresh workload.

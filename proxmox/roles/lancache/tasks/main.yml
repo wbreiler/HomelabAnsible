@@ -106,7 +106,7 @@
     src: "{{ item }}.j2"
     dest: "/opt/lancache/{{ item }}"
     mode: '0644'
-  loop: [haproxy.cfg, nginx-upstream.conf]
+  loop: [haproxy.cfg, nginx-upstream.conf, nginx-cache-upstream.conf]
   when: lancache_phase != 'prepare'
 
 - name: Install the final nginx startup hook
@@ -119,7 +119,8 @@
 - name: Include configuration content in the Compose service identity
   ansible.builtin.set_fact:
     lancache_nginx_config_checksum: >-
-      {{ (lookup('template', 'nginx-upstream.conf.j2') ~ lookup('file', 'upstream-hook.sh')) | hash('sha256') }}
+      {{ (lookup('template', 'nginx-upstream.conf.j2') ~ lookup('template', 'nginx-cache-upstream.conf.j2')
+          ~ lookup('file', 'upstream-hook.sh')) | hash('sha256') }}
     lancache_haproxy_config_checksum: "{{ lookup('template', 'haproxy.cfg.j2') | hash('sha256') }}"
   when: lancache_phase != 'prepare'
 
