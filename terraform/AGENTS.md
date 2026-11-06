@@ -111,3 +111,5 @@ verify guest identity, application health, and Terraform convergence separately.
 For the SSD LANCache VM, use the lower-level installation map with its optional
 cache disk. Keep the rebuildable data disk out of backup and replication.
 See the [guest deployment guide](../proxmox/docs/lancache.md).
+For an installed PXE VM, use `runtime_node_name` for a reviewed migration.
+Preserve the installation-origin `node_name`, UUID, and retired PXE entry.

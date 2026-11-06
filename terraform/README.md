@@ -634,6 +634,13 @@ Terraform attaches a separate `scsi1` disk on the selected datastore with
 serial `lancache-data`. It excludes that disk from PBS and replication.
 The [LANCache guest workflow](../proxmox/docs/lancache.md) owns its filesystem.
 
+To move an installed PXE VM, set `runtime_node_name` to the destination node.
+Keep `node_name` as the installation origin to preserve its UUID and retired
+PXE entry. The provider migrates the VM and local disks. Check destination
+capacity, matching storage names, and network bridges before applying a plan
+that changes only the intended VM. Omit this field for the initial install.
+The API identity needs `VM.Migrate` on the selected VM.
+
 For PXE, set `boot_method = "pxe"`, `firmware = "uefi"`, and `secure_boot = true`.
 The guest profile workflow sets these automatically. PXE VMs have no CD-ROM,
 boot their disk before `net0`, and include VirtIO RNG for OVMF network drivers.

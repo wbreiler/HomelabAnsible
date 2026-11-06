@@ -3,6 +3,7 @@ variable "iso_installations" {
   type = map(object({
     vm_id               = number
     node_name           = string
+    runtime_node_name   = optional(string)
     datastore_id        = string
     os                  = string
     boot_method         = optional(string, "iso")
@@ -41,6 +42,7 @@ variable "iso_installations" {
       (vm.cache_disk_gb == null ? true : vm.os == "debian" && vm.cache_disk_gb >= 1 && floor(vm.cache_disk_gb) == vm.cache_disk_gb) &&
       vm.vm_id >= 100 && vm.cores >= 1 && vm.memory_mb >= 2048 && vm.disk_gb >= 24 &&
       try(contains(var.iso_library.nodes, vm.node_name), false) &&
+      (vm.runtime_node_name == null ? true : vm.boot_method == "pxe" && contains(var.iso_library.nodes, vm.runtime_node_name)) &&
       can(var.iso_library.files[vm.iso_filename])
     ])
     error_message = "Use valid hostnames, a non-root user, a public SSH key file, IPv4 CIDRs, supported OS families, bios/uefi firmware (UEFI required for Secure Boot), bounded server resources, and a node/image in the pinned ISO library. An optional cache disk requires Debian and a positive whole size in GiB."
@@ -63,8 +65,8 @@ resource "terraform_data" "install_identity" {
 
 locals {
   install_specs = {
-    # Cache hardware does not change installer media or re-arm a verified installation.
-    for name, vm in var.iso_installations : name => merge({ for key, value in vm : key => value if key != "cache_disk_gb" }, {
+    # Runtime placement and cache hardware must not re-arm a verified installation.
+    for name, vm in var.iso_installations : name => merge({ for key, value in vm : key => value if !contains(["cache_disk_gb", "runtime_node_name"], key) }, {
       name          = name
       uuid          = terraform_data.install_identity[name].id
       public_key    = trimspace(file(pathexpand(vm.ssh_public_key_file)))
@@ -118,7 +120,8 @@ resource "proxmox_virtual_environment_file" "install_media" {
 resource "proxmox_virtual_environment_vm" "iso_installation" {
   for_each            = local.install_specs
   name                = each.key
-  node_name           = each.value.node_name
+  node_name           = coalesce(var.iso_installations[each.key].runtime_node_name, each.value.node_name)
+  migrate             = var.iso_installations[each.key].runtime_node_name != null
   vm_id               = each.value.vm_id
   bios                = each.value.firmware == "uefi" ? "ovmf" : "seabios"
   machine             = each.value.firmware == "uefi" ? "q35" : "pc"
@@ -230,7 +233,7 @@ output "installed_vms" {
   value = {
     for name, vm in var.iso_installations : name => {
       vm_id        = vm.vm_id
-      node_name    = vm.node_name
+      node_name    = proxmox_virtual_environment_vm.iso_installation[name].node_name
       ipv4_address = vm.ipv4_address
       os           = vm.os
       firmware     = vm.firmware

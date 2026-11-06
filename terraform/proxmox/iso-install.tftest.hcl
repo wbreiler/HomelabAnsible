@@ -183,7 +183,7 @@ run "pxe_has_no_cdrom_or_uploaded_private_iso" {
     pbs_storage_password = "mock-pbs-password"
     iso_library = {
       base_url = "http://iso.example"
-      nodes    = ["test-node"]
+      nodes    = ["test-node", "second-node"]
       files    = { "debian-test.iso" = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
     }
     iso_installations = {
@@ -194,6 +194,7 @@ run "pxe_has_no_cdrom_or_uploaded_private_iso" {
         os                  = "debian"
         boot_method         = "pxe"
         cache_disk_gb       = 768
+        runtime_node_name   = "second-node"
         firmware            = "uefi"
         secure_boot         = true
         iso_filename        = "debian-test.iso"
@@ -213,6 +214,10 @@ run "pxe_has_no_cdrom_or_uploaded_private_iso" {
       length(proxmox_virtual_environment_file.install_media) == 0 &&
       length(terraform_data.install_media) == 0 &&
       length(terraform_data.pxe_media) == 1 &&
+      proxmox_virtual_environment_vm.iso_installation["automated-test"].node_name == "second-node" &&
+      proxmox_virtual_environment_vm.iso_installation["automated-test"].migrate &&
+      local.install_specs["automated-test"].node_name == "test-node" &&
+      !contains(keys(local.install_specs["automated-test"]), "runtime_node_name") &&
       length([for disk in proxmox_virtual_environment_vm.iso_installation["automated-test"].disk : disk
         if disk.interface == "scsi1" && disk.size == 768 && !disk.backup && !disk.replicate && disk.serial == "lancache-data"
       ]) == 1 &&
