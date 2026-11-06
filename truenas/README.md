@@ -292,7 +292,9 @@ to make it pass.
   isolated VPN networking, NAT-PMP synchronization, and arr access.
 
 - [LANCache](files/lancache/SETUP.md) — dedicated macvlan cache/DNS, manager
-  prefill routing, and a dashboard with a reserved private address.
+  prefill routing, and a dashboard with a reserved private address. After
+  migration, the [Proxmox guest workflow](../proxmox/docs/lancache.md) owns
+  service startup and the TrueNAS deployment guard prevents address conflicts.
 
 - [FastChannels](files/fastchannels/SETUP.md) — channel aggregator with dedicated
   appdata and a required HTTPS public origin in local variables.

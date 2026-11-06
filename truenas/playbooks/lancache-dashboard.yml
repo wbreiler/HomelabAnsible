@@ -9,6 +9,7 @@
     - name: Require deployment opt-in and local configuration
       ansible.builtin.assert:
         that:
+          - lancache_hosting | default('truenas') == 'truenas'
           - ansible_check_mode or truenas_allow_changes | bool
           - lancache_dashboard_address is defined
           - lancache_dashboard_address != lancache_bind_address

@@ -156,3 +156,7 @@ verify services and storage health, and perform a second run expecting
 Syntax checks use the ignored local inventory and variables. If they have not
 been created from the tracked examples, report that prerequisite instead of
 weakening inventory, authentication, or host-key checking.
+
+Use `lancache_hosting: proxmox` on a migrated NAS host to prevent the two
+LANCache deployment playbooks from reclaiming the VM addresses. See the
+[LANCache migration and rollback guide](../proxmox/docs/lancache.md).

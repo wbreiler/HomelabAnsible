@@ -1,5 +1,10 @@
 # LANCache
 
+For a migrated cache, see the [Proxmox guest workflow](../../../proxmox/docs/lancache.md).
+Set `lancache_hosting: proxmox` in the ignored TrueNAS host variables once the VM owns
+the service addresses. Both TrueNAS deployment playbooks check this setting.
+The rest of this guide describes the NAS deployment and its rollback services.
+
 The scoped `playbooks/lancache.yml` installs a TrueNAS custom app with
 digest-pinned LANCache monolithic and DNS images. Monolithic handles HTTP
 caching and HTTPS passthrough. HTTPS content is not cached.
