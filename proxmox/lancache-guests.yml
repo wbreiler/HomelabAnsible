@@ -1,0 +1,6 @@
+---
+- name: Configure the SSD-backed LANCache VM
+  hosts: lancache_guests
+  become: true
+  roles:
+    - role: lancache

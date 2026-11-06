@@ -775,3 +775,9 @@ Use `../terraform/README.md` for provisioning and media management.
 * DHCP belongs to each subnet's actual router. Do not enable UniFi routing on
   an externally routed VLAN. Arista changes need explicit approval through its
   separate workflow. See `docs/network-boot.md` for verification and recovery.
+
+## LANCache VM
+
+Use the guest-only [SSD cache workflow](docs/lancache.md). Terraform owns both disks.
+Keep game data separate from the backed-up dashboard and check ownership of
+the service addresses before cutover.

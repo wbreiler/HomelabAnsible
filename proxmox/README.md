@@ -1490,3 +1490,9 @@ then verify device control in Apple Home. Unit tests run with
 The protected inventory and operational records for the 2026-11-02 repair
 are under `terraform/proxmox/artifacts/homebridge-discovery/` at the repository
 root. The guest's original VLAN interface and routes remain unchanged.
+
+## LANCache VM
+
+Use the guest-only [SSD cache workflow](docs/lancache.md). Terraform owns both disks.
+Keep game data separate from the backed-up dashboard and check ownership of
+the service addresses before cutover.

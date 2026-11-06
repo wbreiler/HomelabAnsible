@@ -1,0 +1,82 @@
+name: lancache
+x-logging: &logging
+  driver: json-file
+  options: {max-size: 10m, max-file: "3"}
+services:
+  monolithic:
+    image: {{ lancache_cache_image }}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      UPSTREAM_DNS: "{{ lancache_upstream_dns }}"
+      CACHE_DISK_SIZE: "{{ lancache_cache_gib }}g"
+      CACHE_INDEX_SIZE: 250m
+      MIN_FREE_DISK: "{{ lancache_free_gib }}g"
+      CACHE_MAX_AGE: 3650d
+      TZ: "{{ lancache_timezone }}"
+    networks:
+      public:
+        ipv4_address: "{{ lancache_cache_ip }}"
+      workers:
+        ipv4_address: "{{ lancache_worker_cache_ip }}"
+    volumes:
+      - /srv/lancache/cache:/data/cache
+      - /srv/lancache/logs:/data/logs
+  dns:
+    image: {{ lancache_dns_image }}
+    restart: unless-stopped
+    logging: *logging
+    depends_on: [monolithic]
+    network_mode: service:monolithic
+    environment:
+      USE_GENERIC_CACHE: "true"
+      LANCACHE_IP: "{{ lancache_cache_ip }}"
+      UPSTREAM_DNS: "{{ lancache_upstream_dns }}"
+      TZ: "{{ lancache_timezone }}"
+{% if lancache_phase == 'full' %}
+  dashboard:
+    image: {{ lancache_dashboard_image }}
+    restart: unless-stopped
+    logging: *logging
+    dns: ["{{ lancache_cache_ip }}"]
+    env_file: [/srv/lancache/dashboard/database.env]
+    environment:
+      # Nginx creates cache files mode 0600. Share its UID on the guest filesystem.
+      PUID: "33"
+      PGID: "33"
+      Prefill__NetworkMode: lancache-workers
+      Prefill__LancacheIp: "{{ lancache_worker_cache_ip }}"
+      Prefill__LancacheDnsIp: "{{ lancache_worker_cache_ip }}"
+      TZ: "{{ lancache_timezone }}"
+      LanCache__LogPath: /logs/access.log
+      LanCache__CachePath: /cache/cache
+      LanCache__EnvFilePath: /settings/lancache.env
+      NginxLogRotation__Enabled: "true"
+      NginxLogRotation__ContainerName: lancache-monolithic-1
+    networks:
+      public:
+        ipv4_address: "{{ lancache_dashboard_ip }}"
+      workers:
+        ipv4_address: "{{ lancache_worker_dashboard_ip }}"
+    volumes:
+      - /srv/lancache/dashboard:/data
+      - /srv/lancache/logs:/logs
+      - /srv/lancache/cache:/cache
+      - /srv/lancache/dashboard/lancache.env:/settings/lancache.env:ro
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+{% endif %}
+networks:
+  public:
+    name: lancache-public
+    driver: macvlan
+    driver_opts: {parent: "{{ ansible_facts.default_ipv4.interface }}"}
+    ipam:
+      config:
+        - subnet: "{{ lancache_subnet }}"
+          gateway: "{{ lancache_gateway }}"
+  workers:
+    name: lancache-workers
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "{{ lancache_worker_subnet }}"

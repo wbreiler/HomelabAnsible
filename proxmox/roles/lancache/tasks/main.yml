@@ -1,0 +1,137 @@
+---
+- name: Verify the guest and its cache limits
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.hostname == terraform_guest_name
+      - ansible_facts.virtualization_type in ['kvm', 'kvm-hv']
+      - lancache_phase in ['prepare', 'cache', 'full']
+      - lancache_cache_gib | int > 0
+      - lancache_free_gib | int > 0
+      - lancache_cache_gib | int + lancache_free_gib | int < lancache_disk_gib | int
+      - lancache_upstream_dns != lancache_cache_ip
+      - ([lancache_cache_ip, lancache_dashboard_ip, ansible_facts.default_ipv4.address] | unique | length) == 3
+      - lancache_worker_cache_ip != lancache_worker_dashboard_ip
+
+- name: Identify the Terraform cache disk by serial number
+  ansible.builtin.command: lsblk --bytes --json --output NAME,PATH,SERIAL,SIZE,FSTYPE,LABEL,TYPE,MOUNTPOINTS
+  register: lancache_disks
+  check_mode: false
+  changed_when: false
+
+- name: Select the dedicated whole disk
+  ansible.builtin.set_fact:
+    lancache_disks_found: >-
+      {{ (lancache_disks.stdout | from_json).blockdevices | selectattr('serial', 'equalto', lancache_disk_serial) | list }}
+
+- name: Require one correctly sized disk with no partitions or other filesystem
+  ansible.builtin.assert:
+    that:
+      - lancache_disks_found | length == 1
+      - lancache_disks_found[0].type == 'disk'
+      - lancache_disks_found[0].size | int == (lancache_disk_gib | int) * 1073741824
+      - not lancache_disks_found[0].children | default([])
+      - >-
+        (not lancache_disks_found[0].fstype and not lancache_disks_found[0].label)
+        or (lancache_disks_found[0].fstype == 'ext4' and lancache_disks_found[0].label == 'lancache-data')
+      - (lancache_disks_found[0].mountpoints | reject('none') | list | difference(['/srv/lancache/cache']) | length) == 0
+
+- name: Install the distribution packages for LANCache
+  ansible.builtin.apt:
+    name: [ca-certificates, docker.io, docker-compose, e2fsprogs, iputils-arping, rsync]
+    state: present
+    update_cache: true
+    cache_valid_time: 86400
+
+- name: Check all on-disk signatures before creating a filesystem
+  ansible.builtin.command:
+    argv: [wipefs, --no-act, --noheadings, --output, TYPE, "{{ lancache_disks_found[0].path }}"]
+  register: lancache_signatures
+  check_mode: false
+  changed_when: false
+
+- name: Refuse to overwrite an unidentified signature
+  ansible.builtin.assert:
+    that:
+      - (lancache_signatures.stdout | trim) == (lancache_disks_found[0].fstype | default('', true))
+
+- name: Initialize the new empty cache disk
+  community.general.filesystem:
+    dev: "{{ lancache_disks_found[0].path }}"
+    fstype: ext4
+    opts: -L lancache-data -m 0
+  when: not lancache_disks_found[0].fstype
+
+- name: Mount the cache filesystem before Docker starts
+  ansible.posix.mount:
+    path: /srv/lancache/cache
+    src: LABEL=lancache-data
+    fstype: ext4
+    opts: defaults,noatime
+    state: mounted
+
+- name: Give the cache service ownership of the mounted data directory
+  ansible.builtin.file:
+    path: /srv/lancache/cache
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0775'
+
+- name: Create the service and backed-up state directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /opt/lancache
+    - /srv/lancache/logs
+    - /srv/lancache/dashboard
+    - /etc/systemd/system/docker.service.d
+
+- name: Order Docker after its cache mount
+  ansible.builtin.copy:
+    content: "[Unit]\nRequiresMountsFor=/srv/lancache/cache\n"
+    dest: /etc/systemd/system/docker.service.d/lancache.conf
+    mode: '0644'
+
+- name: Enable Docker on the cache guest
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Install the Compose configuration
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: /opt/lancache/compose.yml
+    mode: '0644'
+  when: lancache_phase != 'prepare'
+
+- name: Verify dashboard database state before starting the migrated dashboard
+  ansible.builtin.stat:
+    path: "/srv/lancache/dashboard/{{ item }}"
+  loop: [database.env, postgresql, security]
+  register: lancache_dashboard_state
+  when: lancache_phase == 'full'
+
+- name: Require the preserved dashboard identity and database
+  ansible.builtin.assert:
+    that: lancache_dashboard_state.results | map(attribute='stat.exists') | min
+  when: lancache_phase == 'full'
+
+- name: Write the dashboard capacity file
+  ansible.builtin.copy:
+    content: "CACHE_DISK_SIZE={{ lancache_cache_gib }}g\n"
+    dest: /srv/lancache/dashboard/lancache.env
+    mode: '0644'
+  when: lancache_phase == 'full'
+
+- name: Start the selected LANCache services
+  ansible.builtin.command:
+    argv: >-
+      {{ ['docker', 'compose', '-f', '/opt/lancache/compose.yml', 'up', '-d', 'monolithic', 'dns']
+         + (['dashboard'] if lancache_phase == 'full' else []) }}
+  register: lancache_up
+  changed_when: lancache_up.stderr is search('(?m) (Started|Created|Recreated|Pulled)\s*$')
+  when: lancache_phase != 'prepare'

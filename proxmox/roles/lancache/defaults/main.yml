@@ -1,0 +1,10 @@
+---
+lancache_phase: prepare
+lancache_disk_serial: lancache-data
+lancache_disk_gib: 768
+lancache_cache_gib: 640
+lancache_free_gib: 100
+lancache_timezone: Etc/UTC
+lancache_cache_image: lancachenet/monolithic@sha256:155817065b13cc427aa0014acc34bbb389591400d7639c95abcfcfb2230ad7f0
+lancache_dns_image: lancachenet/lancache-dns@sha256:6e046a40e9f0467b1df97ca2ba9b8b7c0d4404736a349c0f8df11fa212871a03
+lancache_dashboard_image: ghcr.io/regix1/lancache-manager@sha256:ac2311652b2a643c256373ccf93de25d0bf1c3df7c91b04676ec5519dfa598fa
