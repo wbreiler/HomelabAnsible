@@ -2,6 +2,7 @@
 
 Terraform owns the Debian VM and its disks. The guest playbook installs Docker,
 mounts the disposable disk, and runs the pinned cache, DNS, and manager images.
+An additional pinned HAProxy container pools upstream HTTP/1.1 connections.
 Use a static management IP and two separate macvlan service addresses on the
 VM's VLAN. Confirm address reservations and live ownership before deployment.
 
@@ -72,3 +73,43 @@ logs. The cache disk has backup and replication disabled. After restoring
 the VM, provision its cache disk before starting the stack. A restored
 cache can refill through normal requests. The manager uses nginx's UID so
 it can read the mode-0600 game chunks on the Linux filesystem.
+
+## Uncached downloads
+
+The internal nginx redirect handler uses HTTP/1.1 and normalizes full upstream
+responses into the requested byte ranges. This prevents an origin that ignores
+`Range` from truncating a sliced download. The outer cache retains its original
+1 MiB slices and cache keys, so existing cached games remain usable.
+
+The `upstream` container listens only on loopback inside the cache's network
+namespace. It pools connections by CDN host and address. Each persistent
+connection retains its resolved address until the host changes or an upstream
+error requires another lookup. Private destination addresses are rejected.
+
+Steam depot chunks have an additional 256 MiB RAM buffer with a five-second
+lifetime and an 8 MiB object limit. Adjacent disk-cache slices can share one
+complete WAN fetch. This buffer does not spill to disk. When it is full, requests
+fetch from the origin. The outer cache still writes its normal disk slices.
+Explicit `nocache` requests bypass this buffer and retain upstream range requests.
+Other download paths retain their upstream range requests. HTTPS passthrough
+and the dashboard database are unchanged.
+
+The final startup hook installs the nginx configuration after the image edits
+its stock files. Do not mount over those stock files, since the image uses
+atomic replacements during startup. Ansible includes the hook and configuration
+checksums in Compose labels so changes recreate the affected containers and
+remount updated files. Keep DNS and
+the upstream container attached to the current monolithic network namespace.
+After changes, require a second playbook run with zero changes.
+
+For a regression check on a Docker host with the pinned cache image available:
+
+```sh
+python3 tests/lancache_proxy_integration.py /opt/lancache/nginx-upstream.conf /opt/lancache/upstream-hook.sh 'lancachenet/monolithic@sha256:155817065b13cc427aa0014acc34bbb389591400d7639c95abcfcfb2230ad7f0'
+```
+
+This isolated test checks real image startup, complete downloads, byte ranges,
+and redirects against an origin that deliberately ignores ranges. For performance validation, use a
+wired client, verify that every selected chunk is absent before the first pass,
+and compare uncached, cached, and direct transfers with byte counts and hashes.
+Do not use `nocache` queries as a substitute for a fresh workload.

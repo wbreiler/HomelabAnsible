@@ -1,0 +1,49 @@
+global
+    maxconn 4096
+    stats socket /tmp/admin.sock mode 600 level user
+    dns-accept-family ipv4
+
+defaults
+    mode http
+    timeout connect 10s
+    timeout client 120s
+    timeout server 120s
+    timeout http-request 30s
+    timeout http-keep-alive 60s
+    http-reuse always
+
+resolvers origin_dns
+    nameserver upstream {{ lancache_upstream_dns }}:53
+    accepted_payload_size 8192
+    timeout resolve 2s
+    timeout retry 1s
+    hold valid 30s
+    hold nx 3s
+    hold other 3s
+
+# Adjacent disk-cache slices can share one full Steam chunk download.
+cache steam_chunks
+    total-max-size 256
+    max-object-size 8388608
+    max-age 5
+
+listen origins
+    bind 127.0.0.1:3129
+    # Keep one CDN address per persistent connection, just as a direct client does.
+    http-request set-var(txn.origin_host) hdr(Host),host_only,lower
+    acl same_origin var(sess.origin_host),strcmp(txn.origin_host) eq 0
+    http-request unset-var(sess.origin_ip) unless same_origin
+    http-request do-resolve(sess.origin_ip,origin_dns,ipv4) var(txn.origin_host) unless { var(sess.origin_ip) -m found }
+    http-request set-var(sess.origin_host) var(txn.origin_host)
+    http-request return status 502 unless { var(sess.origin_ip) -m found }
+    http-request return status 403 if { var(sess.origin_ip) -m ip 0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 240.0.0.0/4 }
+    acl steam_chunk path_reg ^/depot/[0-9]+/chunk/[0-9a-f]{40}$
+    acl force_refresh url_param(nocache) -m found
+    http-request set-var(txn.steam_chunk) bool(true) if steam_chunk METH_GET !force_refresh
+    http-request del-header Range if { var(txn.steam_chunk) -m bool }
+    http-request cache-use steam_chunks if { var(txn.steam_chunk) -m bool }
+    http-request set-dst var(sess.origin_ip)
+    http-request set-dst-port int(80)
+    http-response cache-store steam_chunks if { var(txn.steam_chunk) -m bool }
+    http-after-response unset-var(sess.origin_ip) if { status ge 500 }
+    server origin 0.0.0.0:0 pool-conn-name req.hdr(host),lower pool-max-conn 256

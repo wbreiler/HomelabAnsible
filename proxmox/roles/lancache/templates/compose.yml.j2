@@ -7,6 +7,8 @@ services:
     image: {{ lancache_cache_image }}
     restart: unless-stopped
     logging: *logging
+    labels:
+      homelab.lancache-proxy-config: "{{ lancache_nginx_config_checksum }}"
     environment:
       UPSTREAM_DNS: "{{ lancache_upstream_dns }}"
       CACHE_DISK_SIZE: "{{ lancache_cache_gib }}g"
@@ -22,6 +24,22 @@ services:
     volumes:
       - /srv/lancache/cache:/data/cache
       - /srv/lancache/logs:/data/logs
+      - /opt/lancache/nginx-upstream.conf:/etc/lancache-upstream.conf:ro
+      - /opt/lancache/upstream-hook.sh:/hooks/entrypoint-pre.d/99_upstream.sh:ro
+  upstream:
+    image: {{ lancache_upstream_image }}
+    restart: unless-stopped
+    logging: *logging
+    labels:
+      homelab.lancache-proxy-config: "{{ lancache_haproxy_config_checksum }}"
+    depends_on: [monolithic]
+    network_mode: service:monolithic
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - /opt/lancache/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
   dns:
     image: {{ lancache_dns_image }}
     restart: unless-stopped
