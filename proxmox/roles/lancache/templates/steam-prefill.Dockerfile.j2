@@ -1,0 +1,14 @@
+FROM {{ lancache_steam_prefill_sdk_image }} AS build
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+WORKDIR /src
+COPY steam.tar.gz common.tar.gz /sources/
+RUN tar -xzf /sources/steam.tar.gz -C /src --strip-components=1 \
+    && tar -xzf /sources/common.tar.gz -C /src/LancachePrefill.Common --strip-components=1
+COPY progress-order.patch /sources/
+RUN git apply --whitespace=nowarn /sources/progress-order.patch
+RUN dotnet test SteamPrefill.Test/SteamPrefill.Test.csproj --configuration Release --logger 'console;verbosity=minimal'
+RUN dotnet publish SteamPrefill/SteamPrefill.csproj --configuration Release --runtime linux-x64 \
+    --self-contained true -p:VersionSuffix=progress1 --output /publish
+
+FROM {{ lancache_steam_prefill_base_image }}
+COPY --from=build /publish/SteamPrefill /app/SteamPrefill

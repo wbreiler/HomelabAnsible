@@ -790,6 +790,9 @@ Use the manager's native scheduled prefill for selected-game updates. Preserve
 its game selections, platform logins, and schedule state. Keep Steam, Epic, and
 Riot worker images digest-pinned through the Compose environment. Use full
 persistence for unattended sessions that must recover after a VM restart.
+The Steam worker also has a checksum-pinned local build. Its serialized progress
+callback reads the current byte counter to prevent stale parallel reports from
+aborting a download. Preserve the regression test and common protocol validation.
 The Epic worker has a checksum-pinned local build for the four-byte chunk-header
 expansion. Keep its manifest hash verification and tests. The manager receives
 the immutable local image ID. See the build tasks before changing this pin.

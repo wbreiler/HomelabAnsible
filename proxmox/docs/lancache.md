@@ -154,6 +154,13 @@ macvlan address. Workers cannot reach that public address through the guest,
 so do not configure their DNS to use the public-facing DNS instance. Steam's
 explicit cache override can hide this error until Epic or Riot is tested.
 
+Steam also uses a locally built worker with a progress-ordering repair. Parallel
+download callbacks can arrive out of order. The worker reads the current byte
+counter after serializing each callback, so a stale progress report cannot abort
+a valid download. Keep the regression test for reordered callbacks and the pinned
+source, shared library, SDK, and runtime image. The common protocol still rejects
+decreasing byte totals. Do not weaken that validation or edit failed history.
+
 Epic uses a locally built compatibility image. The role verifies the source
 archives, pins both build and runtime images, and runs the worker tests before
 publishing its local image ID to the manager. The build tag includes all build

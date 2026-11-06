@@ -1,0 +1,43 @@
+--- a/SteamPrefill/Api/SocketCommandInterface.cs
++++ b/SteamPrefill/Api/SocketCommandInterface.cs
+@@ -1413,7 +1413,8 @@
+                         Name = progress.AppName,
+                         State = "downloading",
+                         TotalBytes = progress.TotalBytes,
+-                        BytesTransferred = progress.BytesDownloaded
++                        // Sample after serialization so concurrent callbacks cannot publish stale counters.
++                        BytesTransferred = _run.Bytes(progress.AppId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                     });
+                 }
+             }
+--- a/SteamPrefill.Test/PrefillRunTests.cs
++++ b/SteamPrefill.Test/PrefillRunTests.cs
+@@ -7,6 +7,28 @@
+ [Collection("SteamAccountFile")]
+ public sealed class PrefillRunTests
+ {
++    [Fact]
++    public void ReorderedProgressCallbacksUseTheCurrentByteCounter()
++    {
++        var options = new RunOptions { AppIds = new[] { "1" }, MaxConcurrency = 1 };
++        using var budget = new RequestBudget(30);
++        var progress = new RunProgress("run", "daemon", options);
++        var run = new PrefillRun(options, progress, budget, new ItemClaims());
++        var sink = new SocketCommandInterface.SocketProgress(run: run);
++        sink.OnAppStarted(new AppDownloadInfo { AppId = 1, Name = "Game", TotalBytes = 200 });
++
++        run.AddBytes(1, 100);
++        var delayed = new DownloadProgressInfo { AppId = 1, AppName = "Game", BytesDownloaded = 100, TotalBytes = 200 };
++        run.AddBytes(1, 100);
++        sink.OnDownloadProgress(new DownloadProgressInfo { AppId = 1, AppName = "Game", BytesDownloaded = 200, TotalBytes = 200 });
++        sink.OnDownloadProgress(delayed);
++
++        Assert.Equal(200, progress.Snapshot.CurrentItem!.BytesTransferred);
++        sink.OnAppCompleted(new AppDownloadInfo { AppId = 1, Name = "Game", TotalBytes = 200 }, AppDownloadResult.Success);
++        Assert.Equal("success", progress.Snapshot.CurrentItem.Result);
++        Assert.Equal(200, progress.Snapshot.BytesTransferred);
++    }
++
+     [Fact]
+     public async Task DrainRetainsRequestsRegisteredByPendingWork()
+     {

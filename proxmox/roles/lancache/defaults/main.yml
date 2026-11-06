@@ -12,7 +12,15 @@ lancache_dashboard_base_image: ghcr.io/regix1/lancache-manager@sha256:d44591379c
 lancache_dashboard_node_image: node:22-bookworm@sha256:7702d8aa4d5910871692af4480eb3ba86f23047a6417a44d857d06c95d060d3f
 lancache_dashboard_source_url: https://codeload.github.com/regix1/lancache-manager/tar.gz/348dbcf551175f309693b89695bd1bd472cbbb42
 lancache_dashboard_source_checksum: sha256:bef68117b9a0616baec7c7ad72604ff486cde1f4c7cc1030258e3a3d0da69c3d
-lancache_steam_prefill_image: ghcr.io/regix1/steam-prefill-daemon@sha256:1c747720eef25225526e2734f32b4081ad350bbebbad9bc371b90bbb9ed7ed8a
+lancache_steam_prefill_base_image: ghcr.io/regix1/steam-prefill-daemon@sha256:1c747720eef25225526e2734f32b4081ad350bbebbad9bc371b90bbb9ed7ed8a
+lancache_steam_prefill_sdk_image: mcr.microsoft.com/dotnet/sdk:8.0@sha256:341aa6e8bbaceb1194732328ca27c15bfa9c531687db83a66af3c0c1833f5534
+lancache_steam_prefill_sources:
+  - name: steam
+    url: https://codeload.github.com/regix1/steam-prefill-daemon/tar.gz/9302a446db95eb3902a9ea0dfc7d01b239c48d18
+    checksum: sha256:d8deb7aa5a30b406217bb310a2b591c47fed08deb36b7ad3c7733b179b64a4c0
+  - name: common
+    url: https://codeload.github.com/regix1/lancache-prefill-common/tar.gz/4f72e2796df74e73bbc86be903cc557690560a18
+    checksum: sha256:917483471de445e24e25e52755d657847ca4407065379b8918bbd725386d6e4b
 lancache_epic_prefill_base_image: ghcr.io/regix1/epic-prefill-daemon@sha256:ed76e394e6b332215b776329dc10183273e76fb792c67dc7e74972dfdbecfc22
 lancache_epic_prefill_sdk_image: mcr.microsoft.com/dotnet/sdk:8.0@sha256:341aa6e8bbaceb1194732328ca27c15bfa9c531687db83a66af3c0c1833f5534
 lancache_epic_prefill_sources:

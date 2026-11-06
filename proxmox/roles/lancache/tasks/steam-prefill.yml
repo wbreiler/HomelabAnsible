@@ -1,0 +1,63 @@
+---
+- name: Identify the patched Steam prefill build inputs
+  ansible.builtin.set_fact:
+    lancache_steam_prefill_build_tag: >-
+      homelab-steam-prefill:{{ (lookup('template', 'steam-prefill.Dockerfile.j2')
+        ~ lookup('file', 'steam-prefill/progress-order.patch')
+        ~ (lancache_steam_prefill_sources | to_json)) | hash('sha256') }}
+
+- name: Create the Steam prefill build directory
+  ansible.builtin.file:
+    path: /opt/lancache/steam-prefill
+    state: directory
+    mode: '0755'
+
+- name: Download the checksum-pinned Steam prefill sources
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "/opt/lancache/steam-prefill/{{ item.name }}.tar.gz"
+    checksum: "{{ item.checksum }}"
+    mode: '0644'
+  loop: "{{ lancache_steam_prefill_sources }}"
+
+- name: Install the Steam progress ordering patch
+  ansible.builtin.copy:
+    src: steam-prefill/progress-order.patch
+    dest: /opt/lancache/steam-prefill/progress-order.patch
+    mode: '0644'
+
+- name: Install the pinned Steam prefill build definition
+  ansible.builtin.template:
+    src: steam-prefill.Dockerfile.j2
+    dest: /opt/lancache/steam-prefill/Dockerfile
+    mode: '0644'
+
+- name: Check for the tested Steam prefill image
+  ansible.builtin.command:
+    argv: [docker, image, inspect, --format, "{{ '{{.Id}}' }}", "{{ lancache_steam_prefill_build_tag }}"]
+  register: lancache_steam_prefill_existing
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Build and test the Steam prefill image when its inputs change
+  ansible.builtin.command:
+    argv: [docker, build, --tag, "{{ lancache_steam_prefill_build_tag }}", /opt/lancache/steam-prefill]
+  async: 1800
+  poll: 15
+  changed_when: true
+  when:
+    - lancache_steam_prefill_existing.rc != 0
+    - not ansible_check_mode
+
+- name: Read the immutable Steam prefill image ID
+  ansible.builtin.command:
+    argv: [docker, image, inspect, --format, "{{ '{{.Id}}' }}", "{{ lancache_steam_prefill_build_tag }}"]
+  register: lancache_steam_prefill_built
+  changed_when: false
+  when: not ansible_check_mode or lancache_steam_prefill_existing.rc == 0
+  check_mode: false
+
+- name: Pin the manager to the tested local Steam image
+  ansible.builtin.set_fact:
+    lancache_steam_prefill_image: "{{ lancache_steam_prefill_built.stdout | default(lancache_steam_prefill_build_tag) }}"
