@@ -11,6 +11,7 @@
       - lancache_upstream_dns != lancache_cache_ip
       - ([lancache_cache_ip, lancache_dashboard_ip, ansible_facts.default_ipv4.address] | unique | length) == 3
       - lancache_worker_cache_ip != lancache_worker_dashboard_ip
+      - lancache_worker_dns_ip not in [lancache_worker_cache_ip, lancache_worker_dashboard_ip]
 
 - name: Identify the Terraform cache disk by serial number
   ansible.builtin.command: lsblk --bytes --json --output NAME,PATH,SERIAL,SIZE,FSTYPE,LABEL,TYPE,MOUNTPOINTS
@@ -116,12 +117,20 @@
     mode: '0755'
   when: lancache_phase != 'prepare'
 
+- name: Allow PostgreSQL recovery during a busy cache fill
+  ansible.builtin.copy:
+    src: postgres-environment
+    dest: /opt/lancache/postgres-environment
+    mode: '0644'
+  when: lancache_phase == 'full'
+
 - name: Include configuration content in the Compose service identity
   ansible.builtin.set_fact:
     lancache_nginx_config_checksum: >-
       {{ (lookup('template', 'nginx-upstream.conf.j2') ~ lookup('template', 'nginx-cache-upstream.conf.j2')
           ~ lookup('file', 'upstream-hook.sh')) | hash('sha256') }}
     lancache_haproxy_config_checksum: "{{ lookup('template', 'haproxy.cfg.j2') | hash('sha256') }}"
+    lancache_postgres_config_checksum: "{{ lookup('file', 'postgres-environment') | hash('sha256') }}"
   when: lancache_phase != 'prepare'
 
 - name: Install the Compose configuration
@@ -191,7 +200,7 @@
   ansible.builtin.command:
     argv: >-
       {{ ['docker', 'compose', '-f', '/opt/lancache/compose.yml', 'up', '-d', 'monolithic', 'upstream', 'dns']
-         + (['dashboard'] if lancache_phase == 'full' else []) }}
+         + (['worker-dns', 'dashboard'] if lancache_phase == 'full' else []) }}
   register: lancache_up
   changed_when: lancache_up.stderr is search('(?m) (Started|Created|Recreated|Pulled)\s*$')
   when: lancache_phase != 'prepare'
@@ -219,4 +228,16 @@
   changed_when: false
   when:
     - lancache_phase != 'prepare'
+    - not ansible_check_mode
+
+- name: Wait for the dashboard and its database to become healthy
+  ansible.builtin.command:
+    argv: [docker, inspect, --format, "{{ '{{.State.Health.Status}}' }}", lancache-dashboard-1]
+  register: lancache_dashboard_ready
+  until: lancache_dashboard_ready.rc == 0 and lancache_dashboard_ready.stdout == 'healthy'
+  retries: 60
+  delay: 10
+  changed_when: false
+  when:
+    - lancache_phase == 'full'
     - not ansible_check_mode

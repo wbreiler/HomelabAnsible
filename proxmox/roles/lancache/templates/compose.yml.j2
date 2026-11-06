@@ -53,19 +53,39 @@ services:
       UPSTREAM_DNS: "{{ lancache_upstream_dns }}"
       TZ: "{{ lancache_timezone }}"
 {% if lancache_phase == 'full' %}
+  worker-dns:
+    image: {{ lancache_dns_image }}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      USE_GENERIC_CACHE: "true"
+      LANCACHE_IP: "{{ lancache_worker_cache_ip }}"
+      UPSTREAM_DNS: "{{ lancache_upstream_dns }}"
+      TZ: "{{ lancache_timezone }}"
+    networks:
+      workers:
+        ipv4_address: "{{ lancache_worker_dns_ip }}"
   dashboard:
     image: {{ lancache_dashboard_image }}
     restart: unless-stopped
     logging: *logging
-    dns: ["{{ lancache_cache_ip }}"]
+    labels:
+      homelab.lancache-postgres-startup: "{{ lancache_postgres_config_checksum }}"
+    depends_on: [worker-dns]
+    dns: ["{{ lancache_worker_dns_ip }}"]
     env_file: [/srv/lancache/dashboard/database.env]
     environment:
       # Nginx creates cache files mode 0600. Share its UID on the guest filesystem.
       PUID: "33"
       PGID: "33"
+      # A slow durable commit must finish before EF retries the same session insert.
+      ConnectionStrings__DefaultConnection: "Host=/var/run/postgresql;Database=lancache;Username=lancache;Command Timeout=120"
+      Prefill__SteamDockerImage: "{{ lancache_steam_prefill_image }}"
+      Prefill__EpicDockerImage: "{{ lancache_epic_prefill_image }}"
+      Prefill__RiotDockerImage: "{{ lancache_riot_prefill_image }}"
       Prefill__NetworkMode: lancache-workers
       Prefill__LancacheIp: "{{ lancache_worker_cache_ip }}"
-      Prefill__LancacheDnsIp: "{{ lancache_worker_cache_ip }}"
+      Prefill__LancacheDnsIp: "{{ lancache_worker_dns_ip }}"
       TZ: "{{ lancache_timezone }}"
       LanCache__LogPath: /logs/access.log
       LanCache__CachePath: /cache/cache
@@ -79,6 +99,8 @@ services:
         ipv4_address: "{{ lancache_worker_dashboard_ip }}"
     volumes:
       - /srv/lancache/dashboard:/data
+      # The image uses su - postgres, which reads PAM's environment, not Docker's.
+      - /opt/lancache/postgres-environment:/etc/environment:ro
       - /srv/lancache/logs:/logs
       - /srv/lancache/cache:/cache
       - /srv/lancache/dashboard/lancache.env:/settings/lancache.env:ro

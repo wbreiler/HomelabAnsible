@@ -786,3 +786,17 @@ pool on both the local redirect hop and the CDN hop. Keep the short Steam RAM
 buffer separate from the persistent cache keys.
 Validate uncached downloads with fresh chunks from a verified wired client.
 See the proxy regression test and configuration restart rules in that guide.
+Use the manager's native scheduled prefill for selected-game updates. Preserve
+its game selections, platform logins, and schedule state. Keep Steam, Epic, and
+Riot worker images digest-pinned through the Compose environment. Use full
+persistence for unattended sessions that must recover after a VM restart.
+Validate manager/worker protocol compatibility together. The pinned manager
+currently requires the upstream development build for protocol 2 workers.
+Check a real dashboard sign-in after upgrades. Preserve the database command
+timeout during bulk fills and keep the existing account and authentication mode.
+Keep `worker-dns` on the worker bridge. It must return the bridge cache IP,
+while public DNS returns the public cache IP. Test Epic and Riot resolution
+as well as Steam's explicit cache override.
+The manager owns these workers. Do not introduce a second scheduler or place
+credentials and selected game IDs in tracked variables. See the automatic
+update procedure in the same guide.
