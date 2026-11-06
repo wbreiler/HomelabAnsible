@@ -10,6 +10,14 @@ lancache_dns_image: lancachenet/lancache-dns@sha256:6e046a40e9f0467b1df97ca2ba9b
 # Protocol 2 workers require this pinned upstream dev build (revision 348dbcf).
 lancache_dashboard_image: ghcr.io/regix1/lancache-manager@sha256:d44591379cc8a6d26a43a6707111fc9476fd9c3549348e18dc2eced4b81472ba
 lancache_steam_prefill_image: ghcr.io/regix1/steam-prefill-daemon@sha256:1c747720eef25225526e2734f32b4081ad350bbebbad9bc371b90bbb9ed7ed8a
-lancache_epic_prefill_image: ghcr.io/regix1/epic-prefill-daemon@sha256:ed76e394e6b332215b776329dc10183273e76fb792c67dc7e74972dfdbecfc22
+lancache_epic_prefill_base_image: ghcr.io/regix1/epic-prefill-daemon@sha256:ed76e394e6b332215b776329dc10183273e76fb792c67dc7e74972dfdbecfc22
+lancache_epic_prefill_sdk_image: mcr.microsoft.com/dotnet/sdk:8.0@sha256:341aa6e8bbaceb1194732328ca27c15bfa9c531687db83a66af3c0c1833f5534
+lancache_epic_prefill_sources:
+  - name: epic
+    url: https://codeload.github.com/regix1/epic-prefill-daemon/tar.gz/3d86039773f368b4aa459d5e5dc46cf8614fd978
+    checksum: sha256:8264966f8b5205b57b12a8067ea3668477963ee39795f2b735d9129278523cca
+  - name: common
+    url: https://codeload.github.com/regix1/lancache-prefill-common/tar.gz/f26dfea5a1a3d3356a5b87fecaf8b4199ba2f036
+    checksum: sha256:87a1254cf88d37f26b29acf88b2e94432c8c464f7b0b7924d75b791a854aae3d
 lancache_riot_prefill_image: ghcr.io/regix1/riot-prefill-daemon@sha256:b78068b1bb835797cef82f15c035c742dacc362c3536661c2804280c797a8e17
 lancache_upstream_image: haproxy:3.2.26-alpine@sha256:96ec3c75a9264ba94e733eeacb44051ed6e7b79bb77a73c2c36f236b6423f1f0

@@ -154,6 +154,20 @@ macvlan address. Workers cannot reach that public address through the guest,
 so do not configure their DNS to use the public-facing DNS instance. Steam's
 explicit cache override can hide this error until Epic or Riot is tested.
 
+Epic uses a locally built compatibility image. The role verifies the source
+archives, pins both build and runtime images, and runs the worker tests before
+publishing its local image ID to the manager. The build tag includes all build
+inputs. An unchanged deployment reuses the tested image. Preserve this image
+or rebuild it with Ansible when restoring the VM.
+
+Some Epic manifests retain a 62-byte chunk-header size while the CDN serves
+the same content with a 66-byte version-3 header. The upstream worker rejects
+these valid files. The local patch accepts this exact four-byte difference
+only when the header and bounded decompressed content match the manifest SHA-1.
+Other length mismatches remain failures. Remove the patch when a verified
+upstream worker supports these chunks. Do not weaken the checks or mark failed
+runs successful by editing their history.
+
 The manager pin uses upstream's
 development build at revision `348dbcf551175f309693b89695bd1bd472cbbb42`.
 The published `v1.10.6` manager cannot start these protocol 2 workers. Treat
@@ -200,6 +214,15 @@ offline state edit, stop only the dashboard, back up its state privately,
 preserve unrelated fields and file ownership, and restart the dashboard.
 Never edit its cached state file while the process is running. Verify that
 the manager reconnects to each persistent worker without another login.
+
+A full reset is a separate, explicitly approved operation. Stop the manager
+and its workers before clearing data. Retain a protected recovery copy of
+dashboard state. Clear cache files, dashboard state, old access logs, and the
+identified worker authentication volumes together. Old logs can repopulate a
+fresh database. Verify a new API key, zero account/history records, and no
+persistent workers. The upstream fresh defaults enable Riot and Battle.net
+schedules, so explicitly empty and disable every platform's schedule list when
+the owner requests a reset of schedules too. A normal playbook never resets data.
 
 See the [upstream prefill guide](https://regix1.github.io/lancache-manager/prefill/)
 for the current interface. Validate behavior against the pinned manager version

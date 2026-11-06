@@ -124,6 +124,10 @@
     mode: '0644'
   when: lancache_phase == 'full'
 
+- name: Prepare the compatible Epic prefill worker
+  ansible.builtin.include_tasks: epic-prefill.yml
+  when: lancache_phase == 'full'
+
 - name: Include configuration content in the Compose service identity
   ansible.builtin.set_fact:
     lancache_nginx_config_checksum: >-

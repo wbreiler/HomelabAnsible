@@ -1,0 +1,63 @@
+---
+- name: Identify the patched Epic prefill build inputs
+  ansible.builtin.set_fact:
+    lancache_epic_prefill_build_tag: >-
+      homelab-epic-prefill:{{ (lookup('template', 'epic-prefill.Dockerfile.j2')
+        ~ lookup('file', 'epic-prefill/header-size.patch')
+        ~ (lancache_epic_prefill_sources | to_json)) | hash('sha256') }}
+
+- name: Create the Epic prefill build directory
+  ansible.builtin.file:
+    path: /opt/lancache/epic-prefill
+    state: directory
+    mode: '0755'
+
+- name: Download the checksum-pinned Epic prefill sources
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "/opt/lancache/epic-prefill/{{ item.name }}.tar.gz"
+    checksum: "{{ item.checksum }}"
+    mode: '0644'
+  loop: "{{ lancache_epic_prefill_sources }}"
+
+- name: Install the Epic chunk header compatibility patch
+  ansible.builtin.copy:
+    src: epic-prefill/header-size.patch
+    dest: /opt/lancache/epic-prefill/header-size.patch
+    mode: '0644'
+
+- name: Install the pinned Epic prefill build definition
+  ansible.builtin.template:
+    src: epic-prefill.Dockerfile.j2
+    dest: /opt/lancache/epic-prefill/Dockerfile
+    mode: '0644'
+
+- name: Check for the tested Epic prefill image
+  ansible.builtin.command:
+    argv: [docker, image, inspect, --format, "{{ '{{.Id}}' }}", "{{ lancache_epic_prefill_build_tag }}"]
+  register: lancache_epic_prefill_existing
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Build and test the Epic prefill image when its inputs change
+  ansible.builtin.command:
+    argv: [docker, build, --tag, "{{ lancache_epic_prefill_build_tag }}", /opt/lancache/epic-prefill]
+  async: 1800
+  poll: 15
+  changed_when: true
+  when:
+    - lancache_epic_prefill_existing.rc != 0
+    - not ansible_check_mode
+
+- name: Read the immutable Epic prefill image ID
+  ansible.builtin.command:
+    argv: [docker, image, inspect, --format, "{{ '{{.Id}}' }}", "{{ lancache_epic_prefill_build_tag }}"]
+  register: lancache_epic_prefill_built
+  changed_when: false
+  when: not ansible_check_mode or lancache_epic_prefill_existing.rc == 0
+  check_mode: false
+
+- name: Pin the manager to the tested local Epic image
+  ansible.builtin.set_fact:
+    lancache_epic_prefill_image: "{{ lancache_epic_prefill_built.stdout | default(lancache_epic_prefill_build_tag) }}"

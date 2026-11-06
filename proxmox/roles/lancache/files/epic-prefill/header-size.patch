@@ -1,0 +1,254 @@
+diff --git a/EpicPrefill/Models/QueuedRequest.cs b/EpicPrefill/Models/QueuedRequest.cs
+index 3ff14de..d5bc85f 100644
+--- a/EpicPrefill/Models/QueuedRequest.cs
++++ b/EpicPrefill/Models/QueuedRequest.cs
+@@ -6,5 +6,6 @@
+         public string DownloadUrl { get; set; }
+ 
+         public ulong DownloadSizeBytes { get; set; }
++        public byte[] ContentSha1 { get; set; } = Array.Empty<byte>();
+     }
+ }
+\ No newline at end of file
+diff --git a/EpicPrefill/Models/Manifests/CdnChunk.cs b/EpicPrefill/Models/Manifests/CdnChunk.cs
+index 3912bfe..e1ac431 100644
+--- a/EpicPrefill/Models/Manifests/CdnChunk.cs
++++ b/EpicPrefill/Models/Manifests/CdnChunk.cs
+@@ -22,6 +22,7 @@ namespace EpicPrefill.Models.Manifests
+         /// The download size of the chunk.
+         /// </summary>
+         public ulong CompressedFileSize;
++        public byte[] ContentSha1;
+ 
+         // ChunksV4 is usually determined by the manifest version, however it seems it that it never changes since the manifests are always 18
+         public string Uri => Path.Join("ChunksV4", GroupNum.ToString("D2"), $"{Hash}_{Guid}.chunk");
+diff --git a/EpicPrefill/Models/Manifests/BinaryManifest.cs b/EpicPrefill/Models/Manifests/BinaryManifest.cs
+index 4e19b6b..b8142f0 100644
+--- a/EpicPrefill/Models/Manifests/BinaryManifest.cs
++++ b/EpicPrefill/Models/Manifests/BinaryManifest.cs
+@@ -105,8 +105,10 @@ namespace EpicPrefill.Models.Manifests
+                 chunkInfos[i].Hash = sharedLongBuffer.ToHexStringUpper();
+             }
+ 
+-            // Skipping sha1's since we don't use them
+-            br.BaseStream.Seek(count * 20, SeekOrigin.Current);
++            for (int i = 0; i < count; i++)
++            {
++                chunkInfos[i].ContentSha1 = br.ReadBytes(20);
++            }
+ 
+             // Group number, is part of the download path
+             for (int i = 0; i < count; i++)
+diff --git a/EpicPrefill/Handlers/ManifestHandler.cs b/EpicPrefill/Handlers/ManifestHandler.cs
+index b9be925..78f6c06 100644
+--- a/EpicPrefill/Handlers/ManifestHandler.cs
++++ b/EpicPrefill/Handlers/ManifestHandler.cs
+@@ -147,6 +147,7 @@
+                                              .Select(chunk => new QueuedRequest
+                                              {
+                                                  DownloadSizeBytes = chunk.CompressedFileSize,
++                                                 ContentSha1 = chunk.ContentSha1,
+                                                  DownloadUrl = Path.Combine(binaryManifest.Url.ChunkBaseUrl, chunk.Uri)
+                                              })
+                                              .ToList();
+diff --git a/EpicPrefill/Handlers/DownloadHandler.cs b/EpicPrefill/Handlers/DownloadHandler.cs
+index 62827cd..7b744ed 100644
+--- a/EpicPrefill/Handlers/DownloadHandler.cs
++++ b/EpicPrefill/Handlers/DownloadHandler.cs
+@@ -158,6 +158,11 @@ namespace EpicPrefill.Handlers
+ 
+                     // Don't save the data anywhere, so we don't have to waste time writing it to disk.
+                     var buffer = new byte[4096];
++                    // Epic sometimes expands a legacy 62-byte header to version 3 without updating the manifest size.
++                    using var expandedChunk = chunk.ContentSha1.Length == 20
++                        && chunk.DownloadSizeBytes <= ChunkResponseValidator.MaxChunkBytes
++                        && response.Content.Headers.ContentLength == (long)chunk.DownloadSizeBytes + 4
++                        ? new MemoryStream() : null;
+                     try
+                     {
+                         stallCts.CancelAfter(AppConfig.DefaultRequestTimeout);
+@@ -167,9 +172,12 @@ namespace EpicPrefill.Handlers
+                         {
+                             Interlocked.Add(ref _bytesTransferred, read);
+                             chunkBytes += read;
++                            expandedChunk?.Write(buffer, 0, read);
+                             stallCts.CancelAfter(AppConfig.DefaultRequestTimeout);
+                         }
+-                        if (chunk.DownloadSizeBytes > 0 && chunkBytes != (long)chunk.DownloadSizeBytes)
++                        if (chunk.DownloadSizeBytes > 0 && chunkBytes != (long)chunk.DownloadSizeBytes
++                            && (expandedChunk == null || !ChunkResponseValidator.IsValidHeaderExpansion(
++                                expandedChunk.ToArray(), chunk.DownloadSizeBytes, chunk.ContentSha1)))
+                         {
+                             throw new IOException("The chunk response did not match its expected length.");
+                         }
+diff --git a/EpicPrefill/Handlers/ChunkResponseValidator.cs b/EpicPrefill/Handlers/ChunkResponseValidator.cs
+new file mode 100644
+index 0000000..b6511e2
+--- /dev/null
++++ b/EpicPrefill/Handlers/ChunkResponseValidator.cs
+@@ -0,0 +1,52 @@
++using System.Buffers.Binary;
++
++namespace EpicPrefill.Handlers;
++
++internal static class ChunkResponseValidator
++{
++    internal const int MaxChunkBytes = 8 * 1024 * 1024;
++
++    // shortcut: accept only the verified four-byte version-3 expansion; extend for another observed format.
++    internal static bool IsValidHeaderExpansion(byte[] data, ulong expectedSize, byte[] expectedSha1)
++    {
++        if (expectedSha1.Length != 20 || expectedSize > MaxChunkBytes
++            || (ulong)data.Length != expectedSize + 4 || data.Length < 66
++            || BinaryPrimitives.ReadUInt32LittleEndian(data) != 0xB1FE3AA2
++            || BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(4)) != 3
++            || BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(8)) != 66
++            || BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(12)) != data.Length - 66
++            || !data.AsSpan(41, 20).SequenceEqual(expectedSha1))
++        {
++            return false;
++        }
++
++        uint plainSize = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(62));
++        if (plainSize == 0 || plainSize > MaxChunkBytes || data[40] > 1)
++        {
++            return false;
++        }
++
++        try
++        {
++            using var payload = new MemoryStream(data, 66, data.Length - 66, writable: false);
++            using Stream decoded = data[40] == 1
++                ? new ZLibStream(payload, CompressionMode.Decompress) : payload;
++            // SHA-1 is the content identity supplied by Epic's manifest format.
++            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
++            var buffer = new byte[8192];
++            int total = 0;
++            int read;
++            while ((read = decoded.Read(buffer, 0, buffer.Length)) != 0)
++            {
++                total += read;
++                if (total > plainSize) return false;
++                hash.AppendData(buffer, 0, read);
++            }
++            return total == plainSize && hash.GetHashAndReset().AsSpan().SequenceEqual(expectedSha1);
++        }
++        catch (InvalidDataException)
++        {
++            return false;
++        }
++    }
++}
+diff --git a/EpicPrefill.Test/ChunkResponseValidatorTests.cs b/EpicPrefill.Test/ChunkResponseValidatorTests.cs
+new file mode 100644
+index 0000000..6ae3c0b
+--- /dev/null
++++ b/EpicPrefill.Test/ChunkResponseValidatorTests.cs
+@@ -0,0 +1,107 @@
++using System.Buffers.Binary;
++using System.IO.Compression;
++using System.Security.Cryptography;
++using EpicPrefill.Handlers;
++using EpicPrefill.Models;
++using EpicPrefill.Models.ApiResponses;
++using Spectre.Console;
++using System.Net;
++
++namespace EpicPrefill.Test;
++
++public sealed class ChunkResponseValidatorTests
++{
++    [Theory]
++    [InlineData(false)]
++    [InlineData(true)]
++    public async Task DownloaderAcceptsOnlyVerifiedExpansion(bool wrongHash)
++    {
++        var (data, hash) = Chunk(true);
++        if (wrongHash) hash[0] ^= 0x40;
++        using var handler = new ChunkHandler(data);
++        var console = AnsiConsole.Create(new AnsiConsoleSettings
++        {
++            Ansi = AnsiSupport.No,
++            Interactive = InteractionSupport.No,
++            Out = new AnsiConsoleOutput(TextWriter.Synchronized(TextWriter.Null))
++        });
++        using var downloader = new DownloadHandler(console, handler, "127.0.0.1");
++        var requests = new List<QueuedRequest>
++        {
++            new() { DownloadUrl = "/chunk", DownloadSizeBytes = (ulong)data.Length - 4, ContentSha1 = hash }
++        };
++        bool result = await downloader.DownloadQueuedChunksAsync(requests,
++            new ManifestUrl { ManifestDownloadUrl = "http://example.test/build.manifest" });
++        Assert.Equal(!wrongHash, result);
++    }
++
++    [Theory]
++    [InlineData(false)]
++    [InlineData(true)]
++    public void AcceptsCompleteLegacyHeaderExpansion(bool compressed)
++    {
++        var (data, hash) = Chunk(compressed);
++        Assert.True(ChunkResponseValidator.IsValidHeaderExpansion(data, (ulong)data.Length - 4, hash));
++    }
++
++    [Theory]
++    [InlineData("truncated")]
++    [InlineData("payload")]
++    [InlineData("manifest-hash")]
++    [InlineData("version")]
++    [InlineData("header-size")]
++    [InlineData("payload-size")]
++    [InlineData("plain-size")]
++    [InlineData("oversized")]
++    [InlineData("wrong-difference")]
++    public void RejectsInvalidContentAndOtherLengthChanges(string damage)
++    {
++        var (data, hash) = Chunk(true);
++        ulong size = (ulong)data.Length - 4;
++        switch (damage)
++        {
++            case "truncated": data = data[..^1]; break;
++            case "payload": data[100] ^= 0x40; break;
++            case "manifest-hash": hash[0] ^= 0x40; break;
++            case "version": data[4] = 2; break;
++            case "header-size": data[8] = 62; break;
++            case "payload-size": data[12] ^= 0x40; break;
++            case "plain-size": BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(62), 1); break;
++            case "oversized": BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(62), uint.MaxValue); break;
++            case "wrong-difference": size--; break;
++        }
++        Assert.False(ChunkResponseValidator.IsValidHeaderExpansion(data, size, hash));
++    }
++
++    private static (byte[] Data, byte[] Hash) Chunk(bool compressed)
++    {
++        byte[] plain = Enumerable.Range(0, 4096).Select(i => (byte)i).ToArray();
++        byte[] hash = SHA1.HashData(plain);
++        using var body = new MemoryStream();
++        if (compressed)
++        {
++            using (var zlib = new ZLibStream(body, CompressionLevel.Optimal, leaveOpen: true))
++                zlib.Write(plain);
++        }
++        else body.Write(plain);
++        byte[] payload = body.ToArray();
++        byte[] data = new byte[66 + payload.Length];
++        BinaryPrimitives.WriteUInt32LittleEndian(data, 0xB1FE3AA2);
++        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(4), 3);
++        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(8), 66);
++        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(12), (uint)payload.Length);
++        data[40] = compressed ? (byte)1 : (byte)0;
++        hash.CopyTo(data, 41);
++        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(62), (uint)plain.Length);
++        payload.CopyTo(data, 66);
++        return (data, hash);
++    }
++
++    private sealed class ChunkHandler : HttpMessageHandler
++    {
++        private readonly byte[] _data;
++        public ChunkHandler(byte[] data) => _data = data;
++        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
++            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(_data) });
++    }
++}

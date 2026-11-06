@@ -24,6 +24,7 @@ class LANCacheTest(unittest.TestCase):
             lancache_nginx_config_checksum="nginx-test-checksum",
             lancache_haproxy_config_checksum="haproxy-test-checksum",
             lancache_postgres_config_checksum="postgres-test-checksum",
+            lancache_epic_prefill_image="sha256:" + "0" * 64,
         )
         template = jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(
             (role / "templates/compose.yml.j2").read_text()
