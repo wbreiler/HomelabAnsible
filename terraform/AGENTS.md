@@ -113,3 +113,6 @@ cache disk. Keep the rebuildable data disk out of backup and replication.
 See the [guest deployment guide](../proxmox/docs/lancache.md).
 For an installed PXE VM, use `runtime_node_name` for a reviewed migration.
 Preserve the installation-origin `node_name`, UUID, and retired PXE entry.
+For a cache pinned to local SSD storage, preserve its strict single-node HA
+rule and disabled automatic rebalancing. Register a new HA resource as
+`ignored` until its rule exists, then activate it with a separate reviewed plan.

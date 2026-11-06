@@ -641,6 +641,11 @@ capacity, matching storage names, and network bridges before applying a plan
 that changes only the intended VM. Omit this field for the initial install.
 The API identity needs `VM.Migrate` on the selected VM.
 
+Pin a cache VM to its SSD node with a strict HA node-affinity rule in the
+ignored platform configuration. First register its HA resource as `ignored`
+and create the rule. Verify the rule before changing the resource to `started`.
+Disable automatic rebalancing. The cache requires its selected node to be online.
+
 For PXE, set `boot_method = "pxe"`, `firmware = "uefi"`, and `secure_boot = true`.
 The guest profile workflow sets these automatically. PXE VMs have no CD-ROM,
 boot their disk before `net0`, and include VirtIO RNG for OVMF network drivers.
