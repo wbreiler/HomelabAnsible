@@ -22,8 +22,14 @@ d-i clock-setup/utc boolean true
 d-i time/zone string UTC
 d-i clock-setup/ntp boolean true
 # Refuse unattended partitioning on any machine except the declared UUID.
-d-i partman/early_command string test "$(tr A-Z a-z < /sys/class/dmi/id/product_uuid)" = "@VM_UUID@" || exit 1
-d-i partman-auto/disk string /dev/sda
+# A second VirtIO SCSI disk can enumerate first. Resolve scsi0 before partitioning.
+d-i partman/early_command string \
+  test "$(tr A-Z a-z < /sys/class/dmi/id/product_uuid)" = "@VM_UUID@" || exit 1; \
+  disk="$(list-devices disk)"; \
+  if [ "$disk" != /dev/sda ]; then \
+    disk="$(readlink -f /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi0)" && test -b "$disk" || exit 1; \
+  fi; \
+  debconf-set partman-auto/disk "$disk" && debconf-set grub-installer/bootdev "$disk"
 d-i partman-auto/method string regular
 d-i partman-auto/choose_recipe select atomic
 d-i partman-partitioning/confirm_write_new_label boolean true
@@ -37,6 +43,5 @@ d-i pkgsel/include string openssh-server qemu-guest-agent sudo python3
 d-i pkgsel/upgrade select none
 popularity-contest popularity-contest/participate boolean false
 d-i grub-installer/only_debian boolean true
-d-i grub-installer/bootdev string /dev/sda
 d-i preseed/late_command string set -e; cp /cdrom/terraform/bootstrap.sh /target/tmp/terraform-bootstrap.sh; in-target /bin/sh /tmp/terraform-bootstrap.sh; rm /target/tmp/terraform-bootstrap.sh
 d-i finish-install/reboot_in_progress note

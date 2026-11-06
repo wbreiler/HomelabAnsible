@@ -107,3 +107,7 @@ Keep completed imports outside the active module, as the README specifies.
 For changes to the application handoff, also validate the affected Proxmox
 Ansible entry point from `../../proxmox/`. After an authorized live run,
 verify guest identity, application health, and Terraform convergence separately.
+
+For the SSD LANCache VM, use the lower-level installation map with its optional
+cache disk. Keep the rebuildable data disk out of backup and replication.
+See the [guest deployment guide](../proxmox/docs/lancache.md).

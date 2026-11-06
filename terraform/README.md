@@ -629,6 +629,11 @@ Normal VMs enable host boot and backup of the system disk. Validation VMs
 explicitly disable both. The existing cluster backup policy determines coverage.
 No HA or replication policy is added automatically.
 
+For a disposable game cache, set `cache_disk_gb` in the installation entry.
+Terraform attaches a separate `scsi1` disk on the selected datastore with
+serial `lancache-data`. It excludes that disk from PBS and replication.
+The [LANCache guest workflow](../proxmox/docs/lancache.md) owns its filesystem.
+
 For PXE, set `boot_method = "pxe"`, `firmware = "uefi"`, and `secure_boot = true`.
 The guest profile workflow sets these automatically. PXE VMs have no CD-ROM,
 boot their disk before `net0`, and include VirtIO RNG for OVMF network drivers.
@@ -649,7 +654,8 @@ bootloaders and kernels. TPM and custom module signing remain outside this workf
 
 Debian receives a preseed inside its network initrd. Ubuntu receives NoCloud
 user-data over HTTP. Fedora receives Kickstart over HTTP. Every installer checks
-its own machine UUID before partitioning and selects only `/dev/sda`.
+its own machine UUID before partitioning. Ubuntu and Fedora select `/dev/sda`.
+Debian resolves the stable QEMU system disk identity when multiple disks exist.
 
 Existing definitions default to `boot_method = "iso"` to preserve their immutable
 media and resource addresses. That legacy builder embeds answers into a private

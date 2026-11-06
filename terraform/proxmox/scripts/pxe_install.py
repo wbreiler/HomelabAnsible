@@ -44,7 +44,7 @@ def server(spec):
 
 def ssh(spec):
     server(spec)
-    return ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'ControlPath=none',
+    return ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
             '-o', 'StrictHostKeyChecking=accept-new', '-o', 'IdentitiesOnly=yes',
             '-i', str(Path(spec['pxe_server']['ssh_public_key_file']).expanduser())]
 

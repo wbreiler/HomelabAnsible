@@ -27,6 +27,10 @@ class PxeTests(unittest.TestCase):
                 self.assertIn('/sys/class/dmi/id/product_uuid', seed)
                 self.assertIn(spec['uuid'], seed)
                 self.assertIn('/dev/sda' if family != 'fedora' else '--only-use=sda', seed)
+                if family == 'debian':
+                    self.assertIn('drive-scsi0', seed)
+                    self.assertIn('debconf-set partman-auto/disk "$disk"', seed)
+                    self.assertNotIn('partman-auto/disk string /dev/sda', seed)
                 self.assertNotIn('/cdrom/terraform', seed)
                 self.assertNotIn('/run/install/repo/terraform', seed)
                 self.assertIn('/bootstrap.sh', seed)

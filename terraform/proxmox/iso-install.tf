@@ -19,6 +19,7 @@ variable "iso_installations" {
     cores               = optional(number, 2)
     memory_mb           = optional(number, 2048)
     disk_gb             = optional(number, 24)
+    cache_disk_gb       = optional(number)
     on_boot             = optional(bool, true)
     backup              = optional(bool, true)
   }))
@@ -37,11 +38,12 @@ variable "iso_installations" {
       can(regex("^[a-z_][a-z0-9_-]{0,31}$", vm.username)) && vm.username != "root" &&
       can(regex("^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/]+=*( [^\\r\\n]*)?$", trimspace(file(pathexpand(vm.ssh_public_key_file))))) &&
       vm.vlan_id >= 0 && vm.vlan_id <= 4094 &&
+      (vm.cache_disk_gb == null ? true : vm.os == "debian" && vm.cache_disk_gb >= 1 && floor(vm.cache_disk_gb) == vm.cache_disk_gb) &&
       vm.vm_id >= 100 && vm.cores >= 1 && vm.memory_mb >= 2048 && vm.disk_gb >= 24 &&
       try(contains(var.iso_library.nodes, vm.node_name), false) &&
       can(var.iso_library.files[vm.iso_filename])
     ])
-    error_message = "Use valid hostnames, a non-root user, a public SSH key file, IPv4 CIDRs, supported OS families, bios/uefi firmware (UEFI required for Secure Boot), bounded server resources, and a node/image in the pinned ISO library."
+    error_message = "Use valid hostnames, a non-root user, a public SSH key file, IPv4 CIDRs, supported OS families, bios/uefi firmware (UEFI required for Secure Boot), bounded server resources, and a node/image in the pinned ISO library. An optional cache disk requires Debian and a positive whole size in GiB."
   }
 
   validation {
@@ -61,7 +63,8 @@ resource "terraform_data" "install_identity" {
 
 locals {
   install_specs = {
-    for name, vm in var.iso_installations : name => merge(vm, {
+    # Cache hardware does not change installer media or re-arm a verified installation.
+    for name, vm in var.iso_installations : name => merge({ for key, value in vm : key => value if key != "cache_disk_gb" }, {
       name          = name
       uuid          = terraform_data.install_identity[name].id
       public_key    = trimspace(file(pathexpand(vm.ssh_public_key_file)))
@@ -153,6 +156,20 @@ resource "proxmox_virtual_environment_vm" "iso_installation" {
     backup       = each.value.backup
     replicate    = false
     discard      = "on"
+  }
+  dynamic "disk" {
+    for_each = var.iso_installations[each.key].cache_disk_gb[*]
+    content {
+      datastore_id = each.value.datastore_id
+      interface    = "scsi1"
+      serial       = "lancache-data"
+      size         = disk.value
+      backup       = false
+      replicate    = false
+      iothread     = true
+      discard      = "on"
+      ssd          = true
+    }
   }
   dynamic "cdrom" {
     for_each = each.value.boot_method == "iso" ? [true] : []
