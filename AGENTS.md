@@ -128,3 +128,30 @@ Verify live state before infrastructure changes. These addresses are references.
   TrueNAS keep host-key checking enabled. If a host is legitimately
   reinstalled, remove its old key with `ssh-keygen -R <host>` — do not weaken
   host-key checking to `no`.
+
+## Persistent SSH sessions
+
+Before long infrastructure work, establish or reuse an SSH control socket for
+each required host. Keep one socket path across SSH, Ansible, and helper scripts
+so they share the authenticated connection. Do not ask for another 1Password
+unlock until checking whether an existing master still works.
+
+1. Inspect `ssh -G user@host` for `controlpath` and check that master with
+   `ssh -O check user@host`. Use `-S` when selecting a different socket path.
+2. If no master exists, create it once with `ssh -MNf
+   -S ~/.ssh/sockets/%r@%h:%p -o ControlMaster=auto
+   -o ControlPersist=24h -o ServerAliveInterval=30 -o ServerAliveCountMax=4
+   user@host`. Add the appropriate public-key selector with `-i` when needed.
+   Preserve the host-key policy and use this same `-S` path in later commands
+   if it differs from `ssh -G` or the Ansible connection configuration.
+   Use a TTY for the initial authentication when the SSH agent requires one.
+3. Verify reuse with `ssh -o BatchMode=yes -o IdentityAgent=none user@host true`.
+   Keep the socket directory private (`0700`). Do not replace a working master
+   or let an Ansible-specific path silently create a second connection.
+4. During an unattended Mac session, use a task-owned `caffeinate -i` guard.
+   Release only that guard when finished. Leave reusable masters available.
+   Network loss or a host reboot can still require new authentication.
+
+When access fails, check the socket and connection first. Send a requested
+webhook notification only when user action is actually required. Never print
+the webhook URL or weaken SSH or 1Password security to avoid an unlock.
