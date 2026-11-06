@@ -1,0 +1,62 @@
+---
+- name: Identify the dashboard frontend build inputs
+  ansible.builtin.set_fact:
+    lancache_dashboard_build_tag: >-
+      homelab-lancache-manager:{{ (lookup('template', 'dashboard-frontend.Dockerfile.j2')
+        ~ lookup('file', 'dashboard-frontend/steam-confirmation.patch')
+        ~ lancache_dashboard_source_url ~ lancache_dashboard_source_checksum) | hash('sha256') }}
+
+- name: Create the dashboard frontend build directory
+  ansible.builtin.file:
+    path: /opt/lancache/dashboard-frontend
+    state: directory
+    mode: '0755'
+
+- name: Download the checksum-pinned dashboard source
+  ansible.builtin.get_url:
+    url: "{{ lancache_dashboard_source_url }}"
+    dest: /opt/lancache/dashboard-frontend/manager.tar.gz
+    checksum: "{{ lancache_dashboard_source_checksum }}"
+    mode: '0644'
+
+- name: Install the Steam approval compatibility patch
+  ansible.builtin.copy:
+    src: dashboard-frontend/steam-confirmation.patch
+    dest: /opt/lancache/dashboard-frontend/steam-confirmation.patch
+    mode: '0644'
+
+- name: Install the pinned dashboard frontend build definition
+  ansible.builtin.template:
+    src: dashboard-frontend.Dockerfile.j2
+    dest: /opt/lancache/dashboard-frontend/Dockerfile
+    mode: '0644'
+
+- name: Check for the tested dashboard image
+  ansible.builtin.command:
+    argv: [docker, image, inspect, --format, "{{ '{{.Id}}' }}", "{{ lancache_dashboard_build_tag }}"]
+  register: lancache_dashboard_existing
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Build and test the dashboard image when its inputs change
+  ansible.builtin.command:
+    argv: [docker, build, --tag, "{{ lancache_dashboard_build_tag }}", /opt/lancache/dashboard-frontend]
+  async: 1800
+  poll: 15
+  changed_when: true
+  when:
+    - lancache_dashboard_existing.rc != 0
+    - not ansible_check_mode
+
+- name: Read the immutable dashboard image ID
+  ansible.builtin.command:
+    argv: [docker, image, inspect, --format, "{{ '{{.Id}}' }}", "{{ lancache_dashboard_build_tag }}"]
+  register: lancache_dashboard_built
+  changed_when: false
+  when: not ansible_check_mode or lancache_dashboard_existing.rc == 0
+  check_mode: false
+
+- name: Pin the dashboard to its tested local image
+  ansible.builtin.set_fact:
+    lancache_dashboard_image: "{{ lancache_dashboard_built.stdout | default(lancache_dashboard_build_tag) }}"

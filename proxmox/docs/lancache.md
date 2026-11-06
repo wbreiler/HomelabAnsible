@@ -170,6 +170,13 @@ runs successful by editing their history.
 
 The manager pin uses upstream's
 development build at revision `348dbcf551175f309693b89695bd1bd472cbbb42`.
+The role rebuilds only its frontend to fix duplicate Steam mobile-confirmation
+replies. SignalR and the sign-in form share one request for each service,
+session, and challenge. Both receive the same success or error. Passwords and
+Steam Guard codes retain their ordinary request behavior. The build uses a
+checksum-pinned source archive, a pinned Node image, regression tests, and the
+unchanged manager backend image. Retain or rebuild the resulting local image
+when restoring the VM. Reload open browser tabs after deploying this frontend.
 The published `v1.10.6` manager cannot start these protocol 2 workers. Treat
 the manager and worker pins as a compatible set. Do not return the manager
 to the stable tag without compatible workers and migration validation.

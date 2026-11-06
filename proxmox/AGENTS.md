@@ -793,6 +793,9 @@ persistence for unattended sessions that must recover after a VM restart.
 The Epic worker has a checksum-pinned local build for the four-byte chunk-header
 expansion. Keep its manifest hash verification and tests. The manager receives
 the immutable local image ID. See the build tasks before changing this pin.
+The dashboard frontend also has a pinned local build. Its shared credential
+request prevents duplicate Steam mobile-confirmation replies from SignalR and
+the form. Preserve rejection handling and the regression tests when updating it.
 Validate manager/worker protocol compatibility together. The pinned manager
 currently requires the upstream development build for protocol 2 workers.
 Check a real dashboard sign-in after upgrades. Preserve the database command

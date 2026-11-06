@@ -1,0 +1,119 @@
+diff --git a/Web/src/services/api.service.ts b/Web/src/services/api.service.ts
+index 5a8875d..8b69c05 100644
+--- a/Web/src/services/api.service.ts
++++ b/Web/src/services/api.service.ts
+@@ -3868,11 +3868,39 @@ class ApiService {
+     return conflictError as Error & { cause: PersistentSessionConflictInfo };
+   }
+ 
++  private static deviceConfirmationRequests = new Map<
++    string,
++    { expiresAt: number; request: Promise<void> }
++  >();
++
+   static async providePersistentCredential(
+     service: PersistentPrefillServiceId,
+     challenge: CredentialChallenge,
+     credential: string,
+     sessionId: string
++  ): Promise<void> {
++    if (challenge.credentialType !== 'device-confirmation' || credential !== 'confirm') {
++      return this.sendPersistentCredential(service, challenge, credential, sessionId);
++    }
++
++    // SignalR and the form can answer the same one-use Steam approval challenge concurrently.
++    const now = Date.now();
++    for (const [key, entry] of this.deviceConfirmationRequests) {
++      if (entry.expiresAt <= now) this.deviceConfirmationRequests.delete(key);
++    }
++    const key = JSON.stringify([service, sessionId, challenge.challengeId]);
++    const existing = this.deviceConfirmationRequests.get(key);
++    if (existing) return existing.request;
++    const request = this.sendPersistentCredential(service, challenge, credential, sessionId);
++    this.deviceConfirmationRequests.set(key, { expiresAt: now + 5 * 60_000, request });
++    return request;
++  }
++
++  private static async sendPersistentCredential(
++    service: PersistentPrefillServiceId,
++    challenge: CredentialChallenge,
++    credential: string,
++    sessionId: string
+   ): Promise<void> {
+     try {
+       const res = await fetch(
+diff --git a/Web/scripts/test-persistent-login-reuse.mjs b/Web/scripts/test-persistent-login-reuse.mjs
+index e10b9d4..cc81050 100644
+--- a/Web/scripts/test-persistent-login-reuse.mjs
++++ b/Web/scripts/test-persistent-login-reuse.mjs
+@@ -635,3 +635,70 @@ for (const reason of ['unknown', null])
+         error.message === 'errors.integration.statusUnavailable'
+     );
+   });
++
++test('Steam approval is sent once for concurrent and delayed duplicate callers', async (context) => {
++  const api = await loadApi('device-confirmation-once');
++  const calls = [];
++  let complete;
++  context.mock.method(globalThis, 'fetch', async (_url, options) => {
++    calls.push(JSON.parse(options.body));
++    await new Promise((resolve) => {
++      complete = resolve;
++    });
++    return new Response('{}', { status: 200 });
++  });
++  const challenge = { credentialType: 'device-confirmation', challengeId: 'approval-1' };
++  const first = api.providePersistentCredential('Steam', challenge, 'confirm', 'session-1');
++  const duplicate = api.providePersistentCredential('Steam', challenge, 'confirm', 'session-1');
++  assert.equal(calls.length, 1);
++  complete();
++  await Promise.all([first, duplicate]);
++  await api.providePersistentCredential('Steam', challenge, 'confirm', 'session-1');
++  assert.equal(calls.length, 1);
++});
++
++test('approval errors reach both callers without a duplicate request', async (context) => {
++  const api = await loadApi('device-confirmation-rejected');
++  let calls = 0;
++  context.mock.method(console, 'error', () => undefined);
++  context.mock.method(globalThis, 'fetch', async () => {
++    calls++;
++    return new Response(JSON.stringify({ error: 'credential_rejected', state: 'active' }), {
++      status: 409
++    });
++  });
++  const challenge = { credentialType: 'device-confirmation', challengeId: 'approval-rejected' };
++  const results = await Promise.allSettled([
++    api.providePersistentCredential('Steam', challenge, 'confirm', 'session-1'),
++    api.providePersistentCredential('Steam', challenge, 'confirm', 'session-1')
++  ]);
++  assert.equal(calls, 1);
++  assert.ok(
++    results.every(
++      (result) =>
++        result.status === 'rejected' && result.reason.cause.error === 'credential_rejected'
++    )
++  );
++});
++
++test('new approvals and sessions stay separate and ordinary credentials are not deduplicated', async (context) => {
++  const api = await loadApi('device-confirmation-isolation');
++  let calls = 0;
++  context.mock.method(globalThis, 'fetch', async () => {
++    calls++;
++    return new Response('{}', { status: 200 });
++  });
++  const challenge = { credentialType: 'device-confirmation', challengeId: 'approval-separate' };
++  await api.providePersistentCredential('Steam', challenge, 'confirm', 'session-1');
++  await api.providePersistentCredential('Steam', challenge, 'confirm', 'session-2');
++  await api.providePersistentCredential(
++    'Steam',
++    { ...challenge, challengeId: 'approval-next' },
++    'confirm',
++    'session-2'
++  );
++  const password = { credentialType: 'password', challengeId: 'password-1' };
++  await api.providePersistentCredential('Steam', password, 'test-only', 'session-2');
++  await api.providePersistentCredential('Steam', password, 'test-only', 'session-2');
++  assert.equal(calls, 5);
++});

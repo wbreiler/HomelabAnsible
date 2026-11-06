@@ -1,0 +1,14 @@
+FROM {{ lancache_dashboard_node_image }} AS frontend
+WORKDIR /src
+COPY manager.tar.gz /sources/
+RUN tar -xzf /sources/manager.tar.gz -C /src --strip-components=1
+COPY steam-confirmation.patch /sources/
+RUN git apply --whitespace=nowarn /sources/steam-confirmation.patch
+WORKDIR /src/Web
+RUN npm ci --ignore-scripts --no-audit --no-fund
+RUN node --test scripts/test-persistent-login-reuse.mjs scripts/test-login-deadline.mjs scripts/test-persistent-prefill-login.mjs
+RUN npm run build
+
+FROM {{ lancache_dashboard_base_image }}
+RUN rm -rf /app/wwwroot
+COPY --from=frontend /src/Web/dist /app/wwwroot
