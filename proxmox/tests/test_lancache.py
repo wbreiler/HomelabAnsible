@@ -26,6 +26,7 @@ class LANCacheTest(unittest.TestCase):
             lancache_postgres_config_checksum="postgres-test-checksum",
             lancache_epic_prefill_image="sha256:" + "0" * 64,
             lancache_dashboard_image="sha256:" + "1" * 64,
+            lancache_steam_prefill_image="sha256:" + "2" * 64,
         )
         template = jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(
             (role / "templates/compose.yml.j2").read_text()

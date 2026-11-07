@@ -1,6 +1,7 @@
 """Run with both rendered nginx configs, startup hook, and locally pinned image."""
 import hashlib
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -77,6 +78,11 @@ http {
         finally:
             subprocess.run(["docker", "rm", "-f", name], check=True, stdout=subprocess.DEVNULL)
 
+        # Give the isolated image a worker subnet that curl can bind on loopback.
+        fixture, count = re.subn(r"(?m)^(    )[0-9./]+ 0;$", r"\g<1>127.42.0.0/24 0;",
+                                 Path(config).read_text())
+        assert count == 1, "Expected one worker subnet in the rendered geo block"
+        (root / "upstream.conf").write_text(fixture)
         try:
             run("docker", "run", "-d", "--name", name, "--pull", "never",
                 "--network", "none", "--tmpfs", "/data/cache:size=64m", "--tmpfs", "/data/logs",
@@ -89,6 +95,15 @@ http {
             active = run("docker", "exec", name, "nginx", "-T")
             assert "proxy_force_ranges on;" in active and "server 127.0.0.1:3129;" in active
             print("PASS image startup hooks and HTTP readiness")
+            for source in ("127.42.0.4", "127.42.0.99", "127.0.0.1"):
+                status = run("docker", "exec", name, "curl", "-fsS", "--max-time", "5",
+                             "--interface", source, "-H", "X-Forwarded-For: 127.42.0.4",
+                             "-o", "/dev/null", "-w", "%{http_code}",
+                             "http://127.0.0.1/lancache-heartbeat?analytics-test=" + source)
+                assert status == "204", status
+            access = run("docker", "exec", name, "cat", "/data/logs/access.log")
+            assert access.count("analytics-test=") == 1 and "analytics-test=127.0.0.1 " in access
+            print("PASS only real client requests enter the dashboard log")
         except BaseException:
             print(run("docker", "logs", name), file=sys.stderr)
             raise

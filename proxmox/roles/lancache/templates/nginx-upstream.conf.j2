@@ -1,3 +1,9 @@
+# Only client traffic belongs in the access log consumed by the dashboard.
+geo $lancache_log_client {
+    default 1;
+    {{ lancache_worker_subnet }} 0;
+}
+
 # Reuse the local redirect connection for adjacent disk-cache slices.
 upstream lancache_redirect {
     server 127.0.0.1:3128;

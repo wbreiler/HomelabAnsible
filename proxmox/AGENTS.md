@@ -786,6 +786,8 @@ pool on both the local redirect hop and the CDN hop. Keep the short Steam RAM
 buffer separate from the persistent cache keys.
 Validate uncached downloads with fresh chunks from a verified wired client.
 See the proxy regression test and configuration restart rules in that guide.
+Keep scheduled prefills on the worker-only bridge. Keep its subnet filter on
+the dashboard access log and retain Hidden rules for past worker downloads.
 Use the manager's native scheduled prefill for selected-game updates. Preserve
 its game selections, platform logins, and schedule state. Keep Steam, Epic, and
 Riot worker images digest-pinned through the Compose environment. Use full

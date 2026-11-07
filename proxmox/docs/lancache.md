@@ -60,8 +60,8 @@ cache through TrueNAS middleware. Copy the final cache delta, logs, and stopped
 dashboard state. Start the VM services on the original service addresses.
 Verify dashboard history and worker DNS as well as client traffic. Set
 `lancache_hosting: proxmox` in the old TrueNAS host variables to guard its
-deployment playbooks. Standalone prefill workers can still use the public
-cache address from the NAS.
+deployment playbooks. A legacy standalone worker on the NAS uses the public
+cache address and appears as a client. Use the manager on the VM for prefills.
 
 For rollback, stop the VM's Compose project and verify that its service
 addresses have been released. Restore the TrueNAS hosting selection. Start
@@ -153,6 +153,14 @@ returns the bridge cache address. Public DNS continues to return the public
 macvlan address. Workers cannot reach that public address through the guest,
 so do not configure their DNS to use the public-facing DNS instance. Steam's
 explicit cache override can hide this error until Epic or Riot is tested.
+
+Keep every prefill worker on `lancache-workers`. Nginx uses the bridge subnet
+from Compose to omit worker requests from the dashboard access log. A new
+worker address takes effect immediately, without a dashboard rule. Keep this
+network separate from real clients. Use scheduled prefill history to check
+jobs. Keep existing Hidden rules for worker downloads recorded before this
+filter; the filter does not change past records. Cache usage still includes
+the files that workers fetch.
 
 Steam also uses a locally built worker with a progress-ordering repair. Parallel
 download callbacks can arrive out of order. The worker reads the current byte
