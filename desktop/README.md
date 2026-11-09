@@ -37,6 +37,15 @@ Clips server through an on-link IPv4 gateway. The role uses the IPv4 address
 from `gaming_pc_smb_path` and adds a persistent `/32` route. To apply only this
 route, run `ansible-playbook site.yml --tags clips_route --ask-vault-pass`.
 
+### Copy clips from File Explorer
+
+Run `.\copy-clips.ps1 -Install` from this directory in Windows PowerShell as the
+desktop user. Select one or more finished files, then choose **Show more options
+→ Send to → Clips**. The shortcut uses the user's SMB connection to
+`\\10.10.20.3\clips`. It copies each file with Robocopy `/J` and skips existing
+names. A file appears under its final name after the copy completes.
+You can also run `.\copy-clips.ps1 "C:\Videos\My clip.mp4"` directly.
+
 `gaming_pc_install_approved_applications` is disabled, and the WinGet,
 interactive-user package, and optional-feature lists are empty. The role does
 not duplicate the ISO-owned software baseline. Windows/driver updates,
