@@ -5,6 +5,7 @@ all:
       hosts:
         orion:
           ansible_host: 192.168.1.221
+          # gaming_pc_clips_gateway: 192.0.2.1  # Set to the on-link router for Clips.
       vars:
         ansible_user: 'ORION\ansible'
         ansible_password: "{{ gaming_pc_ansible_password }}"

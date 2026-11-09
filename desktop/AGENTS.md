@@ -12,7 +12,9 @@ non-secret baseline: applications, WSL, optional features, initial drivers,
 and initial updates. Preserve the ISO/Ansible split established in Git history.
 
 Ansible owns continuing Windows/driver updates, motherboard-driver remediation,
-and the persistent global SMB mapping. It does not install Windows, partition
+and the persistent global SMB mapping. The optional `clips_route` tag manages
+only the SMB server's IPv4 host route. Configure its on-link gateway in the
+private inventory. The role does not install Windows, partition
 disks, create the interactive user, configure dual boot, or update BIOS firmware.
 
 ## Code and configuration

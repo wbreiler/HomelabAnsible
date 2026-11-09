@@ -32,6 +32,11 @@ This Ansible project owns protected and continuing live state:
   `wbreiler`
 - The separately bootstrapped local `ansible` administrator and WinRM access
 
+Set `gaming_pc_clips_gateway` on the PC in the private inventory to route the
+Clips server through an on-link IPv4 gateway. The role uses the IPv4 address
+from `gaming_pc_smb_path` and adds a persistent `/32` route. To apply only this
+route, run `ansible-playbook site.yml --tags clips_route --ask-vault-pass`.
+
 `gaming_pc_install_approved_applications` is disabled, and the WinGet,
 interactive-user package, and optional-feature lists are empty. The role does
 not duplicate the ISO-owned software baseline. Windows/driver updates,

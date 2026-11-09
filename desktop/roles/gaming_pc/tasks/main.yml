@@ -153,6 +153,47 @@
     reboot: "{{ gaming_pc_reboot_after_updates }}"
   when: gaming_pc_install_driver_updates | bool
 
+- name: Route the Clips host through its local gateway
+  ansible.windows.win_powershell:
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Share, [ipaddress]$Gateway)
+
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
+      $server = [ipaddress]::Parse(([uri]$Share).Host)
+      if ($server.AddressFamily -ne 'InterNetwork') { throw 'Clips requires an IPv4 address' }
+      $prefix = "$server/32"
+      $link = Find-NetRoute -RemoteIPAddress $Gateway | Where-Object DestinationPrefix
+      if ($link.NextHop -ne '0.0.0.0') { throw 'The Clips gateway must be on the local link' }
+
+      $stores = 'PersistentStore', 'ActiveStore'
+      foreach ($store in $stores) {
+        $routes = Get-NetRoute -PolicyStore $store |
+          Where-Object DestinationPrefix -eq $prefix
+        foreach ($route in $routes) {
+          if ($route.NextHop -ne $Gateway.ToString() -or $route.InterfaceIndex -ne $link.InterfaceIndex) {
+            throw "Conflicting Clips host route in $store"
+          }
+        }
+      }
+      foreach ($store in $stores) {
+        $route = Get-NetRoute -DestinationPrefix $prefix -PolicyStore $store -ErrorAction SilentlyContinue
+        if (-not $route) {
+          $Ansible.Changed = $true
+          if (-not $Ansible.CheckMode) {
+            $policy = if ($store -eq 'PersistentStore') { 'persistent' } else { 'active' }
+            $message = netsh.exe interface ipv4 add route "prefix=$prefix" "interface=$($link.InterfaceIndex)" "nexthop=$Gateway" "store=$policy"
+            if ($LASTEXITCODE -ne 0) { throw "Could not add the Clips route to ${store}: $message" }
+          }
+        }
+      }
+    parameters:
+      Share: "{{ gaming_pc_smb_path }}"
+      Gateway: "{{ gaming_pc_clips_gateway }}"
+  when: gaming_pc_clips_gateway is defined
+  tags: [clips_route]
+
 - name: Map the clips SMB share globally and persistently
   ansible.windows.win_powershell:
     script: |
