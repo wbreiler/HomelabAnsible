@@ -22,7 +22,7 @@ disks, create the interactive user, configure dual boot, or update BIOS firmware
 | Path | Responsibility |
 | --- | --- |
 | `bootstrap-winrm.ps1` | One-time administrator bootstrap for the local automation account and WinRM |
-| `copy-clips.ps1` | Per-user Explorer Send To shortcut and Robocopy upload script. Run `-Install` as the desktop user. |
+| `copy-clips.ps1` | Per-user Explorer Send To shortcut. Batch selected files by source folder with Robocopy `/MT:1`. Run `-Install` as the desktop user. |
 | `group_vars/gaming_pc/main.yml` | Tracked non-secret desired state, update controls, driver pins, and SMB settings |
 | `roles/gaming_pc/tasks/main.yml` | Application gate, updates, optional features, and SMB mapping |
 | `roles/gaming_pc/tasks/motherboard_drivers.yml` | Hardware detection, verified downloads, installer markers, and reboot handling |

@@ -42,8 +42,10 @@ route, run `ansible-playbook site.yml --tags clips_route --ask-vault-pass`.
 Run `.\copy-clips.ps1 -Install` from this directory in Windows PowerShell as the
 desktop user. Select one or more finished files, then choose **Show more options
 → Send to → Clips**. The shortcut uses the user's SMB connection to
-`\\10.10.20.3\clips`. It copies each file with Robocopy `/J` and skips existing
-names. A file appears under its final name after the copy completes.
+`\\10.10.20.3\clips`. It runs one single-threaded Robocopy command (`/J /MT:1`)
+per source folder, using only the selected filenames. It skips names already
+on the share. When selected files share a name, the first one wins.
+Each file appears under its final name after its folder's batch completes.
 You can also run `.\copy-clips.ps1 "C:\Videos\My clip.mp4"` directly.
 
 `gaming_pc_install_approved_applications` is disabled, and the WinGet,
