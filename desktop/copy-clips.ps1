@@ -22,9 +22,60 @@ if ($Install) {
     if ($PSCommandPath -ne $script) { [IO.File]::Copy($PSCommandPath, $script, $true) }
     $shortcut.TargetPath = $powershell
     $shortcut.Arguments = $arguments
-    $shortcut.Description = 'Copy selected files to Clips with Robocopy'
+    $shortcut.Description = 'Move local files to Clips after verifying the uploaded contents'
     $shortcut.Save()
     return
+}
+
+function Remove-VerifiedOriginal([IO.FileInfo]$File, [string]$Target) {
+    # A normal path-based deletion could remove a replacement after we close the verified file.
+    if (-not ('ClipsVerifiedOriginal' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+public static class ClipsVerifiedOriginal {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder path, uint size, uint flags);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetFileInformationByHandle(SafeFileHandle handle, int infoClass, ref byte value, uint size);
+
+    public static void MarkForDeletion(FileStream verified, string selectedPath) {
+        var path = new StringBuilder(32768);
+        uint length = GetFinalPathNameByHandle(verified.SafeFileHandle, path, (uint)path.Capacity, 0);
+        if (length == 0) throw new Win32Exception();
+        if (!String.Equals(path.ToString(), @"\\?\" + selectedPath, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("The selected path resolves to a different location. Original retained.");
+        const int FileDispositionInfo = 4;
+        byte delete = 1;
+        if (!SetFileInformationByHandle(verified.SafeFileHandle, FileDispositionInfo, ref delete, 1))
+            throw new Win32Exception();
+    }
+}
+'@
+    }
+    $rights = [Security.AccessControl.FileSystemRights]::Read -bor [Security.AccessControl.FileSystemRights]::Delete
+    $copy = [IO.FileStream]::new($Target, 'Open', [IO.FileAccess]::ReadWrite, 'Read', 4MB, [IO.FileOptions]::SequentialScan)
+    try {
+        $copy.Flush($true)
+        $original = [IO.FileStream]::new($File.FullName, 'Open', $rights, 'Read', 4MB, [IO.FileOptions]::SequentialScan)
+        try {
+            $extraStreams = Get-Item -LiteralPath $File.FullName -Stream * | Where-Object Stream -ne ':$DATA'
+            if ($extraStreams) { throw 'The original has additional data streams that have not been verified.' }
+            $hash = [Security.Cryptography.SHA256]::Create()
+            try {
+                if ($original.Length -ne $copy.Length -or
+                    [BitConverter]::ToString($hash.ComputeHash($original)) -ne [BitConverter]::ToString($hash.ComputeHash($copy))) {
+                    throw 'The uploaded file does not match the original.'
+                }
+            } finally { $hash.Dispose() }
+            [ClipsVerifiedOriginal]::MarkForDeletion($original, $File.FullName)
+        } finally { $original.Dispose() }
+    } finally { $copy.Dispose() }
 }
 
 $skipped = $false
@@ -57,6 +108,14 @@ try {
             $target = [IO.Path]::Combine($destination, $file.Name)
             if ((Get-Item -LiteralPath $partial).Length -ne $file.Length) { throw "Incomplete copy of $($file.FullName)" }
             [IO.File]::Move($partial, $target)
+            if ($file.FullName -notmatch '^[a-z]:\\' -or
+                [IO.DriveInfo]::new($file.Directory.Root.FullName).DriveType -eq [IO.DriveType]::Network) {
+                Write-Warning "Copied network file; kept original: $($file.FullName)"
+                $skipped = $true
+                continue
+            }
+            try { Remove-VerifiedOriginal $file $target }
+            catch { throw "Could not complete verified removal of $($file.FullName): $($_.Exception.Message)" }
         }
     }
 } catch {

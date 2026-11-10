@@ -37,7 +37,7 @@ Clips server through an on-link IPv4 gateway. The role uses the IPv4 address
 from `gaming_pc_smb_path` and adds a persistent `/32` route. To apply only this
 route, run `ansible-playbook site.yml --tags clips_route --ask-vault-pass`.
 
-### Copy clips from File Explorer
+### Move local clips from File Explorer
 
 Run `.\copy-clips.ps1 -Install` from this directory in Windows PowerShell as the
 desktop user. Select one or more finished files, then choose **Show more options
@@ -45,7 +45,12 @@ desktop user. Select one or more finished files, then choose **Show more options
 `\\10.10.20.3\clips`. It runs one single-threaded Robocopy command (`/J /MT:1`)
 per source folder, using only the selected filenames. It skips names already
 on the share. When selected files share a name, the first one wins.
-Each file appears under its final name after its folder's batch completes.
+After publishing a file under its final name, the script flushes it to the
+share and compares its SHA-256 hash with the local original. A match allows
+the script to permanently delete the original, bypassing the Recycle Bin.
+Skipped files and network originals stay in place. A failed verification
+leaves the original available for inspection, including files with additional
+NTFS data streams. Verification reads the uploaded file back over SMB.
 You can also run `.\copy-clips.ps1 "C:\Videos\My clip.mp4"` directly.
 
 `gaming_pc_install_approved_applications` is disabled, and the WinGet,
