@@ -144,12 +144,12 @@ or guest restart, so existing links can need preparation time after a restart.
 The original Overwatch clip took about 80 seconds to prepare on this guest.
 
 The guest has 8 GiB RAM. Completed previews share a 6 GiB RAM budget,
-with at most 32 MiB per clip. This fits at least 192 maximum-size previews.
-The bitrate for each clip depends on its duration. Adding clips keeps that
-quality setting fixed. At capacity, new clips wait for space and the worker
-logs the full-cache condition. Long clips receive stronger compression to fit
-the per-clip limit. The worker encodes one clip at a time and retries failures
-after one minute. View its
+with at most 128 MiB per clip. This fits at least 48 maximum-size previews.
+The current 14 Mbps video ceiling and 160 kbps audio fit at full target
+bitrate for about 68 seconds. Longer clips reduce bitrate to fit the limit.
+Adding clips keeps the quality setting fixed. At capacity, new clips wait for
+space and the worker logs the full-cache condition. The worker encodes one clip
+at a time and retries failures after one minute. View its
 status with `docker compose --project-directory /opt/zipline logs discord-preview`.
 Every preview download checks anonymous access with Zipline. Withdrawal removes
 the catalog entry and releases the corresponding RAM file on the next worker

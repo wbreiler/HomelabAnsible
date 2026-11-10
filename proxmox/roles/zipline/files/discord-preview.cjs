@@ -21,7 +21,7 @@ function byteRange(header, size) {
 const shared = '/srv/zipline-media/Shared';
 const ram = '/dev/shm';
 const poolBytes = 6 * 1024 * 1024 * 1024;
-const maxClipBytes = 32 * 1024 * 1024;
+const maxClipBytes = 128 * 1024 * 1024;
 const sourceName = /^(shared-[0-9a-f]{32})\.(mp4|m4v|mov|mkv|webm)$/;
 const mediaPath = /^\/discord-media\/(?:v2\/|1080p\/)?(shared-[0-9a-f]{32})\.mp4$/;
 const ready = new Map();
@@ -194,7 +194,8 @@ if (process.argv.includes('--self-test')) {
   assert.deepEqual(byteRange('bytes=3-', 10), [3, 9]);
   for (const value of ['bytes=10-', 'bytes=4-2', 'bytes=-0', 'bytes=-', 'bytes=0-1,3-4'])
     assert.equal(byteRange(value, 10), null);
-  assert.deepEqual(rates(19.1667, maxClipBytes), {video: 12444, audio: 160});
+  assert.deepEqual(rates(19.1667, maxClipBytes), {video: 14000, audio: 160});
+  assert.deepEqual(rates(60, maxClipBytes), {video: 14000, audio: 160});
   assert(rates(120, maxClipBytes).video < rates(20, maxClipBytes).video);
   assert.equal(mediaPath.exec('/discord-media/1080p/shared-' + 'a'.repeat(32) + '.mp4')[1], 'shared-' + 'a'.repeat(32));
   assert.equal(mediaPath.exec('/discord-media/1080p/../../secret.mp4'), null);
