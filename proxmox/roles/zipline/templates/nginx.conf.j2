@@ -31,11 +31,9 @@ server {
         proxy_set_header Accept-Encoding "";
         proxy_pass http://{{ zipline_ip.stdout | trim }}:{{ zipline_port }};
         sub_filter '<meta property="og:video:url" content="https://{{ zipline_domain }}/raw/'
-                   '<meta property="og:video:url" content="https://{{ zipline_domain }}/discord-media/v2/';
-        sub_filter 'property="og:video:width" content="1920"' 'property="og:video:width" content="640"';
-        sub_filter 'property="og:video:height" content="1080"' 'property="og:video:height" content="360"';
+                   '<meta property="og:video:url" content="https://{{ zipline_domain }}/discord-media/1080p/';
     }
-    location ~ "^/discord-media/(?:v2/)?{{ zipline_discord_clip.split('.')[0] }}[.]mp4$" {
+    location ~ "^/discord-media/(?:(?:v2|1080p)/)?{{ zipline_discord_clip.split('.')[0] }}[.]mp4$" {
         proxy_buffering off;
         proxy_pass http://{{ zipline_ip.stdout | trim }}:3001;
     }

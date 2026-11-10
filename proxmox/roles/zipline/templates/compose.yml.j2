@@ -49,7 +49,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    mem_limit: 448m
+    mem_limit: 576m
     pids_limit: 64
     labels:
       preview-script: "{{ lookup('file', 'discord-preview.cjs') | hash('sha256') }}"

@@ -50,13 +50,14 @@ async function encode() {
   const file = dir + '/clip.mp4';
   try {
     await run('ffmpeg', ['-nostdin', '-v', 'error', '-protocol_whitelist', 'http,tcp',
-      '-skip_loop_filter', 'all', '-skip_frame', 'noref', '-threads', '4', '-f', 'mov', '-i', source,
-      '-map', '0:v:0', '-map', '0:a:0?', '-map_metadata', '-1', '-vf', 'fps=24,scale=640:-2:flags=fast_bilinear',
-      '-threads', '2', '-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', '1000k', '-maxrate', '1300k',
-      '-bufsize', '1800k', '-g', '24', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '80k',
-      '-fs', '9M', '-movflags', '+faststart', file], { timeout: 90000, killSignal: 'SIGKILL' });
+      '-threads', '2', '-f', 'mov', '-i', source,
+      '-map', '0:v:0', '-map', '0:a:0?', '-map_metadata', '-1', '-filter_threads', '2',
+      '-vf', 'fps=60,scale=1920:-2:flags=lanczos',
+      '-threads', '2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-maxrate', '14M',
+      '-bufsize', '14M', '-g', '120', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k',
+      '-fs', '36M', '-movflags', '+faststart', file], { timeout: 240000, killSignal: 'SIGKILL' });
     const { size } = await fs.stat(file);
-    if (!size || size > 8 * 1024 * 1024) throw Error('preview size limit');
+    if (!size || size > 32 * 1024 * 1024) throw Error('preview size limit');
     return await fs.readFile(file);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
@@ -83,7 +84,7 @@ async function refresh() {
   }
 }
 
-const paths = ['/discord-media/' + clip, '/discord-media/v2/' + clip];
+const paths = ['/discord-media/' + clip, '/discord-media/v2/' + clip, '/discord-media/1080p/' + clip];
 const server = http.createServer(async (req, res) => {
   res.setHeader('Cache-Control', 'private, no-store');
   try {
