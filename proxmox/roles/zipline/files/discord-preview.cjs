@@ -20,7 +20,7 @@ function byteRange(header, size) {
 
 const shared = '/srv/zipline-media/Shared';
 const ram = '/dev/shm';
-const poolBytes = 512 * 1024 * 1024;
+const poolBytes = 6 * 1024 * 1024 * 1024;
 const maxClipBytes = 32 * 1024 * 1024;
 const sourceName = /^(shared-[0-9a-f]{32})\.(mp4|m4v|mov|mkv|webm)$/;
 const mediaPath = /^\/discord-media\/(?:v2\/|1080p\/)?(shared-[0-9a-f]{32})\.mp4$/;
@@ -94,13 +94,16 @@ async function nextPreview() {
   if (active || !catalog.size) return;
   let selected;
   try {
-    const budget = Math.min(maxClipBytes, Math.floor(poolBytes / catalog.size));
+    const budget = maxClipBytes;
     const candidates = [...catalog.keys()].filter(id => !(retryAfter.get(id) > Date.now()));
-    // Reclaim space from oversized renditions before admitting new ones.
-    selected = candidates.find(id => ready.get(id) > budget) ?? candidates.find(id => !ready.has(id));
+    selected = candidates.find(id => !ready.has(id));
     if (!selected) return;
     const used = [...ready.values()].reduce((a, b) => a + b, 0);
-    if (!ready.has(selected) && used + budget > poolBytes) return;
+    if (used + budget > poolBytes) {
+      retryAfter.set(selected, Date.now() + 60000);
+      console.error('Preview cache full; waiting for space:', selected);
+      return;
+    }
     active = {id: selected, controller: new AbortController()};
     await prepare(selected, catalog.get(selected), budget, active.controller.signal);
     retryAfter.delete(selected);
@@ -195,6 +198,25 @@ if (process.argv.includes('--self-test')) {
   assert(rates(120, maxClipBytes).video < rates(20, maxClipBytes).video);
   assert.equal(mediaPath.exec('/discord-media/1080p/shared-' + 'a'.repeat(32) + '.mp4')[1], 'shared-' + 'a'.repeat(32));
   assert.equal(mediaPath.exec('/discord-media/1080p/../../secret.mp4'), null);
+  (async () => {
+    const budgets = [];
+    prepare = async (id, entry, budget) => { budgets.push(budget); ready.set(id, 1); };
+    for (const count of [1, 250]) {
+      catalog = new Map(Array.from({length: count}, (_, i) => [String(i), {}]));
+      ready.clear();
+      await nextPreview();
+    }
+    assert.deepEqual(budgets, [maxClipBytes, maxClipBytes]);
+    ready.clear();
+    ready.set('full', poolBytes);
+    await nextPreview();
+    assert.equal(budgets.length, 2);
+    assert(retryAfter.size > 0);
+    ready.clear();
+    retryAfter.clear();
+    await nextPreview();
+    assert.equal(budgets.length, 3);
+  })().catch(error => { console.error(error); process.exitCode = 1; });
   return;
 }
 

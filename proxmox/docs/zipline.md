@@ -143,10 +143,13 @@ a private tmpfs. Container swap is disabled. The cache rebuilds after a worker
 or guest restart, so existing links can need preparation time after a restart.
 The original Overwatch clip took about 80 seconds to prepare on this guest.
 
-Completed previews share a 512 MiB RAM budget, with at most 32 MiB per clip.
-Bitrate adjusts to clip duration and collection size while keeping 1080p60.
-Long clips and larger collections receive stronger compression. The worker
-encodes one clip at a time and retries failures after one minute. View its
+The guest has 8 GiB RAM. Completed previews share a 6 GiB RAM budget,
+with at most 32 MiB per clip. This fits at least 192 maximum-size previews.
+The bitrate for each clip depends on its duration. Adding clips keeps that
+quality setting fixed. At capacity, new clips wait for space and the worker
+logs the full-cache condition. Long clips receive stronger compression to fit
+the per-clip limit. The worker encodes one clip at a time and retries failures
+after one minute. View its
 status with `docker compose --project-directory /opt/zipline logs discord-preview`.
 Every preview download checks anonymous access with Zipline. Withdrawal removes
 the catalog entry and releases the corresponding RAM file on the next worker

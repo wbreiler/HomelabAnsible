@@ -49,9 +49,9 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    mem_limit: 1200m
-    memswap_limit: 1200m
-    shm_size: 576m
+    mem_limit: 7g
+    memswap_limit: 7g
+    shm_size: 6208m
     pids_limit: 64
     labels:
       preview-script: "{{ lookup('file', 'discord-preview.cjs') | hash('sha256') }}"

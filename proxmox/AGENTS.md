@@ -733,7 +733,8 @@ Use `../terraform/README.md` for provisioning and media management.
   For an opted-in Discord preview, also verify a complete download within ten seconds,
   seeking, and withdrawal. Shared publication waits for a ready RAM preview.
   Keep the preview catalog separate from secrets, preserve the RAM budget and
-  disabled container swap, and test nested silent/non-MP4 inputs before changing
+  disabled container swap. Clip count must not reduce encoding quality. Queue
+  new previews at capacity. Test nested silent/non-MP4 inputs before changing
   the encoder or publisher.
 * NAS clips require explicit placement in the SMB Shared tree. Mirror its visible
   folders, including empty ones, under the existing dashboard folder. Preserve the
