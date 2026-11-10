@@ -87,6 +87,8 @@ explicit authorization for those targets and a reviewed removal plan.
 Preserve original ISO files, recovery media, credentials, and backup contents.
 The historical resource counts and VM 108 records are not current inventory.
 
+For a Zipline host bind mount, follow the [in-place attachment procedure](README.md#read-only-zipline-bind-mount). Preserve the replacement guard.
+
 ## Validation
 
 Use the pinned tools and existing provider installation. From `proxmox/`:

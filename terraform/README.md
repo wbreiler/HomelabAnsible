@@ -522,6 +522,20 @@ ACL setting; explicit `acl=0` can disable it on a later mount. Set the desired
 values to preserve the existing behavior, compare raw configuration after
 apply, and verify the dataset's `acltype` and the final Terraform plan.
 
+### Read-only Zipline bind mount
+
+The [NAS clips workflow](../proxmox/docs/zipline.md#publish-a-clip-from-the-nas)
+uses the same host path on both nodes. The ignored guest definition owns its
+`mount_point` with `read_only = true`, `shared = true`, and `replicate = false`.
+A host bind mount references external files and does not include them in guest backups.
+
+Provider 0.118.0 can propose guest replacement when adding the first bind
+mount. Keep `prevent_destroy`. For an existing guest, verify the NFS mount and
+guest identity, then attach the declared path in place with Proxmox's root-only
+`pct set` operation. Inspect pending configuration before a graceful restart.
+Compare the native config, review and apply a scoped refresh-only plan, and
+require a no-change ordinary scoped plan. Preserve the unprivileged guest.
+
 ## Platform policy and media
 
 ### PXE service and library
