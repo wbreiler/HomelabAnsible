@@ -719,7 +719,8 @@ Use `../terraform/README.md` for provisioning and media management.
 
 ### zipline
 
-* Authenticated screenshot uploads with public root-level image URLs.
+* Authenticated uploads with public root-level file URLs. Use the dashboard
+  for large files so each chunk fits within the proxy request limit.
 * Uses digest-pinned Zipline and PostgreSQL in an unprivileged LXC.
 * The fallback is Prometheus, VMID 126. Confirm live and configured ID usage.
 * Creates a private administrator before public exposure. Registration and

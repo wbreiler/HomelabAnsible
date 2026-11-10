@@ -6,7 +6,6 @@ zipline_storage: local-zfs
 zipline_template: ""
 zipline_cores: 2
 zipline_memory: 2048
-zipline_disk: 32
 zipline_bridge: vmbr0
 zipline_vlan: 40
 zipline_domain: i.wbreiler.com

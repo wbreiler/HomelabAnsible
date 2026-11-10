@@ -28,7 +28,6 @@
         lxc_template: "{{ zipline_template }}"
         lxc_cores: "{{ zipline_cores }}"
         lxc_memory: "{{ zipline_memory }}"
-        lxc_disk: "{{ zipline_disk }}"
         lxc_bridge: "{{ zipline_bridge }}"
         lxc_vlan: "{{ zipline_vlan }}"
         lxc_tags: screenshots

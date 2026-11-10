@@ -1396,7 +1396,7 @@ release until its migration and backup procedure have been reviewed.
 
 The `zipline` role deploys digest-pinned Zipline and PostgreSQL in an
 unprivileged LXC. Enable `install_zipline` and run the `zipline` tag.
-See [screenshot setup](docs/zipline.md) for ingress prerequisites and clients.
+See the [upload guide](docs/zipline.md) for ingress, screenshot clients, and large video uploads.
 
 ## LibreSpeed LAN bandwidth test
 

@@ -19,12 +19,14 @@ Existing data is never deleted. Check mode validates configuration but skips
 container operations. Back up `/var/lib/zipline` and `/opt/zipline` together.
 Review database migrations before changing either pinned image.
 
-Fresh deployment defaults use VMID 126 on Prometheus, 2 CPUs, 2 GiB RAM,
-and a 32 GiB root disk. VMID 114 remains configured for Minecraft.
-Verify IDs against live guests and local server configuration before reuse.
+Terraform manages the guest's root disk. The role locates the existing guest
+by hostname before configuring Zipline.
 The first administrator is `wbreiler`. Its password is generated inside the
 container at `/opt/zipline/admin.json`, mode 0600. No default password exists.
-Uploads are limited to 25 MiB. Active HTML, JavaScript, and SVG content is refused.
+Use the dashboard to upload videos and other files up to 512 MiB each.
+For files over 25 MiB, the dashboard sends 25 MiB chunks through the proxy.
+The proxy limits each request to 26 MiB, including multipart overhead.
+Active HTML, JavaScript, and SVG content is refused.
 
 ## Public ingress
 
