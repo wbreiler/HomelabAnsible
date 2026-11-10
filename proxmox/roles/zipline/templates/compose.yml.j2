@@ -40,3 +40,23 @@ services:
     depends_on:
       postgresql:
         condition: service_healthy
+{% if zipline_discord_clip | default('') %}
+  discord-preview:
+    image: {{ zipline_image }}
+    entrypoint: ["node", "/discord-preview.cjs"]
+    restart: unless-stopped
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 448m
+    pids_limit: 64
+    labels:
+      preview-script: "{{ lookup('file', 'discord-preview.cjs') | hash('sha256') }}"
+    environment:
+      PREVIEW_CLIP: "{{ zipline_discord_clip }}"
+    volumes:
+      - /opt/zipline/discord-preview.cjs:/discord-preview.cjs:ro
+    ports:
+      - "{{ zipline_ip.stdout | trim }}:3001:3001"
+{% endif %}

@@ -513,3 +513,5 @@ homelable_scanner_ranges:
 install_zipline: false
 # Optional read-only opt-in directory, used by zipline-clips-storage.yml.
 # zipline_clips_export: nas.example.internal:/pool/clips/Shared
+# Optional 16:9 Shared MP4 for a RAM-only Discord preview.
+# zipline_discord_clip: shared-0123456789abcdef0123456789abcdef.mp4

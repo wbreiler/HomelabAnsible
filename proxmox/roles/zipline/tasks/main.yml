@@ -4,6 +4,7 @@
     that:
       - zipline_image is match('^ghcr.io/diced/zipline:[^@]+@sha256:[0-9a-f]{64}$')
       - zipline_postgres_image is match('^docker.io/library/postgres:[^@]+@sha256:[0-9a-f]{64}$')
+      - zipline_discord_clip | default('') is match('^(shared-[0-9a-f]{32}[.]mp4)?$')
       - zipline_port | int > 0
       - zipline_port | int < 65536
 
@@ -95,6 +96,46 @@
       until: zipline_ip.stdout | trim | length > 0
       retries: 12
       delay: 5
+
+    - name: Install the Discord preview worker
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - sh
+          - -ceu
+          - |
+            file=/opt/zipline/discord-preview.cjs
+            tmp=$(mktemp)
+            trap 'rm -f "$tmp"' EXIT
+            cat > "$tmp"
+            if ! cmp -s "$tmp" "$file"; then
+              install -m 0644 "$tmp" "$file"
+              echo changed
+            fi
+        stdin: "{{ lookup('file', 'discord-preview.cjs') }}"
+      register: zipline_preview_worker
+      changed_when: "'changed' in zipline_preview_worker.stdout"
+      when: zipline_discord_clip | default('') | length > 0
+
+    - name: Remove the managed preview worker when its clip is withdrawn from inventory
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - sh
+          - -ceu
+          - |
+            id=$(docker ps -aq --filter label=com.docker.compose.project=zipline \
+                  --filter label=com.docker.compose.service=discord-preview --filter label=preview-script)
+            if test -n "$id"; then docker rm -f "$id"; fi
+      register: zipline_preview_remove
+      changed_when: zipline_preview_remove.stdout | length > 0
+      when: zipline_discord_clip | default('') | length == 0
 
     - name: Render Zipline Compose configuration
       ansible.builtin.template:

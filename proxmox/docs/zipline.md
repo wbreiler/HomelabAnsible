@@ -127,6 +127,14 @@ video URL and, when available, a JPEG thumbnail in its Open Graph metadata.
 The `/raw/` URL serves the media itself. The proxy preserves direct PNG
 responses for the 16-character screenshot URLs used by the Mac and ShareX.
 
+For a large 16:9 MP4, set `zipline_discord_clip` in local inventory to its
+published `shared-<32 hex characters>.mp4` name. Apply the Zipline role with
+proxy management enabled. The viewer advertises a full-duration 640×360
+H.264/AAC preview. Browsers can still open the original. The worker reads the
+anonymous Zipline route, encodes on demand, and drops its RAM buffer 60 seconds
+after encoding completes. It has no writable media volume. The worker caps its
+output at 8 MiB and encoding time at 90 seconds.
+
 Move a clip out of Shared to withdraw it. The next scan removes its Zipline
 record. Deleting a file in Zipline leaves the NAS file intact and suppresses
 republication until a scan observes removal or a change. Anyone who already
