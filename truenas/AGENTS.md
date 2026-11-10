@@ -127,6 +127,8 @@ edits to the appliance filesystem or database.
   Threadfin uses the canonical playlist/XMLTV links. Proxy/DNS ownership remains
   in `../proxmox/docs/local-services.md`. TrueNAS API proxy upstreams require TLS.
 
+For Zipline clips, export only the opt-in `Shared` directory read-only to the cluster nodes. Keep its containing SMB share out of the publisher. See [the publishing guide](../proxmox/docs/zipline.md#publish-a-clip-from-the-nas).
+
 ## Validation
 
 Run, at minimum:

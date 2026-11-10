@@ -38,6 +38,13 @@ HandBrakeCLI transcodes. The check includes Docker's required PID column.
 with a dedicated macvlan address. HTTP, Proxmox downloads, and repeat-run
 idempotency passed verification.
 
+## Zipline shared clips
+
+An ordinary `Shared` directory inside the Clips SMB share is the opt-in
+publication boundary. Its NFS export is read-only and restricted to the
+Proxmox nodes. Keep the Clips share root private. The existing Clips backup
+covers the media. See the [publishing guide](../proxmox/docs/zipline.md#publish-a-clip-from-the-nas).
+
 ## Target
 
 | Setting | Value |
