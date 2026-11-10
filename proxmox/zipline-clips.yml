@@ -1,0 +1,94 @@
+---
+- name: Configure publication from the existing read-only guest mount
+  hosts: proxmox_cluster
+  gather_facts: false
+  become: true
+  vars:
+    zipline_defaults: "{{ lookup('file', 'roles/zipline/defaults/main.yml') | from_yaml }}"
+    zipline_clips_vmid: "{{ zipline_vmid | default(zipline_defaults.zipline_vmid) }}"
+    zipline_clips_hostname: "{{ zipline_hostname | default(zipline_defaults.zipline_hostname) }}"
+  tasks:
+    - name: Resolve the active Zipline node
+      ansible.builtin.include_tasks: tasks/resolve_lxc_node.yml
+      vars:
+        lxc_lookup_hostname: "{{ zipline_clips_hostname }}"
+        lxc_fallback_node: "{{ zipline_node | default(zipline_defaults.zipline_node) }}"
+
+    - name: Configure the existing Zipline guest
+      when: (proxmox_node_name | default(inventory_hostname)) == lxc_current_node
+      block:
+        - name: Verify guest identity and read-only media mount
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ zipline_clips_vmid }}"
+              - --
+              - sh
+              - -ceu
+              - |
+                test "$(hostname)" = "$1"
+                findmnt -M /srv/zipline-media/Shared -t nfs,nfs4 -O ro,nosymfollow >/dev/null
+              - sh
+              - "{{ zipline_clips_hostname }}"
+          changed_when: false
+          check_mode: false
+
+        - name: Install the publisher, read-only Docker mount, and timer
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ zipline_clips_vmid }}"
+              - --
+              - sh
+              - -ceu
+              - |
+                tmp=$(mktemp -- "$1.XXXXXX")
+                trap 'rm -f -- "$tmp"' EXIT
+                cat > "$tmp"
+                if ! cmp -s -- "$tmp" "$1"; then
+                  if [ "$1" = /opt/zipline/compose.override.yml ] && [ -e "$1" ]; then
+                    grep -qx '# Managed by HomelabAnsible for Shared clips' "$1"
+                  fi
+                  chmod 0644 "$tmp"
+                  mv -T -- "$tmp" "$1"
+                  echo changed
+                fi
+              - sh
+              - "{{ item.dest }}"
+            stdin: "{{ lookup('file', 'files/zipline/' ~ item.src) }}"
+          loop:
+            - {src: compose.override.yml, dest: /opt/zipline/compose.override.yml}
+            - {src: shared-clips.py, dest: /opt/zipline/shared-clips.py}
+            - {src: zipline-shared-clips.service, dest: /etc/systemd/system/zipline-shared-clips.service}
+            - {src: zipline-shared-clips.timer, dest: /etc/systemd/system/zipline-shared-clips.timer}
+          register: zipline_clips_install
+          changed_when: "'changed' in zipline_clips_install.stdout"
+
+        - name: Apply the Docker mount and reload the service units
+          ansible.builtin.command:
+            argv: [pct, exec, "{{ zipline_clips_vmid }}", --, sh, -ceu,
+                   "systemctl daemon-reload; docker compose --project-directory /opt/zipline up -d zipline"]
+          register: zipline_clips_compose
+          changed_when: "zipline_clips_compose.stderr is search('(?i)creat|start')"
+          when: not ansible_check_mode
+
+        - name: Enable automatic publication
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ zipline_clips_vmid }}"
+              - --
+              - sh
+              - -ceu
+              - |
+                if ! systemctl is-enabled --quiet zipline-shared-clips.timer ||
+                   ! systemctl is-active --quiet zipline-shared-clips.timer; then
+                  systemctl enable --now zipline-shared-clips.timer
+                  echo changed
+                fi
+          register: zipline_clips_timer
+          changed_when: "'changed' in zipline_clips_timer.stdout"
+          when: zipline_clips_start_timer | default(true) | bool

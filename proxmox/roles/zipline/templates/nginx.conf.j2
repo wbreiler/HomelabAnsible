@@ -1,4 +1,9 @@
 # Managed screenshot ingress. The certificate uses the existing ACME webroot.
+# Opt-in links must be withdrawable when the source leaves Shared.
+map $uri $zipline_shared_cache_control {
+    default "";
+    ~^/(?:raw/|view/)?shared-[0-9a-f]+(?:[.][a-z0-9]+)?$ "private, no-store";
+}
 server {
     listen 80;
     listen [::]:80;
@@ -13,6 +18,7 @@ server {
     ssl_certificate /etc/letsencrypt/live/homelab-zipline/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/homelab-zipline/privkey.pem;
     client_max_body_size 26m;
+    add_header Cache-Control $zipline_shared_cache_control always;
     location / {
         proxy_pass http://{{ zipline_ip.stdout | trim }}:{{ zipline_port }};
         proxy_set_header Host $host;

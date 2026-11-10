@@ -107,3 +107,38 @@ Live verification checked login, upload, public HTTP 200 with `image/png`,
 matching image bytes, denied anonymous uploads, and repeat-run convergence.
 Actual Discord rendering, Windows ShareX operation, and the Mac capture
 shortcut require user interaction and remain unverified.
+
+## Publish a clip from the NAS
+
+Move a finished clip into the top level of the SMB share's **Shared** folder.
+A move within the same share keeps the media on the NAS. The publisher checks
+every minute and waits for the file identity, size, and modification time to
+stay stable for two minutes. Open **Shared clips** in the Zipline dashboard to
+copy its individual public link. MP4, M4V, MOV, WebM, and MKV are eligible.
+Browser playback depends on the codecs. Hidden files, subdirectories, and
+symbolic links are excluded.
+
+Move a clip out of Shared to withdraw it. The next scan removes its Zipline
+record. Deleting a file in Zipline leaves the NAS file intact and suppresses
+republication until a scan observes removal or a change. Anyone who already
+downloaded the clip can keep their copy.
+
+The guest stores a small JPEG preview, a symlink, and metadata. The original
+video remains on Erebus and does not go through the HTTP upload limit.
+The publisher uses the Zipline 4.8 file, folder, and thumbnail tables. Test
+registration, seeking, and withdrawal after schema changes. Preserve
+`/opt/zipline/shared-clips.json` with the Zipline database and uploads.
+
+For deployment, create an ordinary Shared directory on the SMB filesystem.
+Export only Shared using read-only NFS restricted to the cluster nodes.
+Set `zipline_clips_export` in the local Proxmox variables. From `proxmox/`,
+run `ansible-playbook zipline-clips-storage.yml --ask-vault-pass`. Declare a
+read-only, shared Terraform bind mount from `/mnt/bindmounts/zipline-shared`
+to `/srv/zipline-media/Shared` in the existing guest. Mount its dedicated
+parent into Docker so the NFS submount retains `nosymfollow`.
+
+Run `ansible-playbook zipline-clips.yml --ask-vault-pass` to install the
+publisher. Its Compose override survives ordinary Zipline updates. For a
+first-deployment pilot, pass `-e zipline_clips_start_timer=false` and run
+`systemctl start zipline-shared-clips.service` inside the guest to scan.
+Check the timer with `systemctl list-timers zipline-shared-clips.timer`.

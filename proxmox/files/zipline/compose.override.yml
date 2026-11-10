@@ -1,0 +1,10 @@
+# Managed by HomelabAnsible for Shared clips
+services:
+  zipline:
+    volumes:
+      - type: bind
+        source: /srv/zipline-media
+        target: /srv/zipline-media
+        read_only: true
+        bind:
+          create_host_path: false

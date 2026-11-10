@@ -1,0 +1,18 @@
+---
+- name: Mount the opt-in clips directory on each Zipline cluster node
+  hosts: proxmox_cluster
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Require the configured read-only export
+      ansible.builtin.assert:
+        that: zipline_clips_export | default('') is match('^[^/ ]+:/[^ ]+/Shared$')
+
+    - name: Mount Shared read-only for the Terraform guest bind mount
+      ansible.posix.mount:
+        path: /mnt/bindmounts/zipline-shared
+        src: "{{ zipline_clips_export }}"
+        fstype: nfs
+        opts: ro,vers=4.2,soft,timeo=40,retrans=2,nodev,nosuid,noexec,nosymfollow,_netdev,nofail,x-systemd.automount
+        state: mounted
+        backup: false

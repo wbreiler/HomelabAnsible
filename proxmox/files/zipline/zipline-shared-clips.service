@@ -1,0 +1,8 @@
+[Unit]
+Description=Publish opted-in NAS clips to Zipline
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/zipline/shared-clips.py
