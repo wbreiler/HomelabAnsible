@@ -4,7 +4,6 @@
     that:
       - zipline_image is match('^ghcr.io/diced/zipline:[^@]+@sha256:[0-9a-f]{64}$')
       - zipline_postgres_image is match('^docker.io/library/postgres:[^@]+@sha256:[0-9a-f]{64}$')
-      - zipline_discord_clip | default('') is match('^(shared-[0-9a-f]{32}[.]mp4)?$')
       - zipline_port | int > 0
       - zipline_port | int < 65536
 
@@ -107,6 +106,7 @@
           - sh
           - -ceu
           - |
+            install -d -m 0755 /opt/zipline/preview-catalog
             file=/opt/zipline/discord-preview.cjs
             tmp=$(mktemp)
             trap 'rm -f "$tmp"' EXIT
@@ -118,9 +118,9 @@
         stdin: "{{ lookup('file', 'discord-preview.cjs') }}"
       register: zipline_preview_worker
       changed_when: "'changed' in zipline_preview_worker.stdout"
-      when: zipline_discord_clip | default('') | length > 0
+      when: zipline_clips_export | default('') | length > 0
 
-    - name: Remove the managed preview worker when its clip is withdrawn from inventory
+    - name: Remove the managed preview worker when Shared publication is disabled
       ansible.builtin.command:
         argv:
           - pct
@@ -135,7 +135,7 @@
             if test -n "$id"; then docker rm -f "$id"; fi
       register: zipline_preview_remove
       changed_when: zipline_preview_remove.stdout | length > 0
-      when: zipline_discord_clip | default('') | length == 0
+      when: zipline_clips_export | default('') | length == 0
 
     - name: Render Zipline Compose configuration
       ansible.builtin.template:
@@ -180,6 +180,28 @@
           - -d
       register: zipline_up
       changed_when: "zipline_up.stderr is search('(?i)creat|start|pull')"
+
+    - name: Enforce the preview worker's no-swap limit
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ lxc_resolved_vmid }}"
+          - --
+          - sh
+          - -ceu
+          - |
+            id=$(docker compose --project-directory /opt/zipline ps -q discord-preview)
+            if test "$(docker exec "$id" cat /sys/fs/cgroup/memory.swap.max)" != 0; then
+              limit=$(docker inspect --format '{{ '{{.HostConfig.Memory}}' }}' "$id")
+              test "$limit" -gt 0
+              docker update --memory "$limit" --memory-swap "$limit" "$id" >/dev/null
+              test "$(docker exec "$id" cat /sys/fs/cgroup/memory.swap.max)" = 0
+              echo changed
+            fi
+      register: zipline_preview_swap
+      changed_when: "'changed' in zipline_preview_swap.stdout"
+      when: zipline_clips_export | default('') | length > 0
 
     - name: Verify Zipline HTTP health
       ansible.builtin.command:

@@ -23,17 +23,19 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_http_version 1.1;
-{% if zipline_discord_clip | default('') %}
-    location ~ "^/view/{{ zipline_discord_clip.split('.')[0] }}(?:[.]mp4)?$" {
+{% if zipline_clips_export | default('') %}
+    location ~ "^/view/(?<zipline_preview_id>shared-[0-9a-f]{32})(?:[.](?:mp4|m4v|mov|mkv|webm))?$" {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header Accept-Encoding "";
         proxy_pass http://{{ zipline_ip.stdout | trim }}:{{ zipline_port }};
-        sub_filter '<meta property="og:video:url" content="https://{{ zipline_domain }}/raw/'
-                   '<meta property="og:video:url" content="https://{{ zipline_domain }}/discord-media/1080p/';
+{% for extension in ['mp4', 'm4v', 'mov', 'mkv', 'webm'] %}
+        sub_filter '<meta property="og:video:url" content="https://{{ zipline_domain }}/raw/${zipline_preview_id}.{{ extension }}"'
+                   '<meta property="og:video:url" content="https://{{ zipline_domain }}/discord-media/1080p/${zipline_preview_id}.mp4"';
+{% endfor %}
     }
-    location ~ "^/discord-media/(?:(?:v2|1080p)/)?{{ zipline_discord_clip.split('.')[0] }}[.]mp4$" {
+    location ~ "^/discord-media/(?:(?:v2|1080p)/)?shared-[0-9a-f]{32}[.]mp4$" {
         proxy_buffering off;
         proxy_pass http://{{ zipline_ip.stdout | trim }}:3001;
     }

@@ -197,6 +197,33 @@ def publish(source, entry, root_id, user):
     return True
 
 
+def preview_catalog(files):
+    """Only this catalog, never Zipline credentials, is mounted in the encoder."""
+    directory = APP / "preview-catalog"
+    directory.mkdir(mode=0o755, exist_ok=True)
+    # The publisher normally has umask 077. The encoder runs as nobody.
+    directory.chmod(0o755)
+    existing = {entry["id"] for entry in files.values() if entry.get("published")}
+    if existing:
+        rows = sql('SELECT id FROM "File" WHERE id IN (' + ",".join(map(literal, existing)) + ');')
+        existing = set(rows.splitlines())
+    catalog = {entry["storage"]: name for name, entry in files.items()
+               if "storage" in entry and (not entry.get("published") or entry["id"] in existing)}
+    path = directory / "clips.json"
+    data = json.dumps(catalog, sort_keys=True)
+    if not path.exists() or path.read_text() != data:
+        tmp = path.with_suffix(".new")
+        tmp.write_text(data)
+        tmp.chmod(0o644)
+        tmp.replace(path)
+
+
+def ready_previews():
+    result = subprocess.run(COMPOSE + ["discord-preview", "ls", "-1", "/dev/shm"],
+                            text=True, stdout=subprocess.PIPE, check=True, timeout=15)
+    return set(result.stdout.splitlines())
+
+
 def reconcile():
     current, folders = snapshot()  # A mount or scan failure must never look like an empty share.
     state = json.loads(STATE.read_text()) if STATE.exists() else {"folder": secrets.token_hex(16), "files": {}}
@@ -228,6 +255,15 @@ def reconcile():
         if "id" not in entry:
             entry.update(id=secrets.token_hex(16), storage="shared-" + secrets.token_hex(16) + Path(name).suffix.lower())
             save(state)
+    preview_catalog(files)
+    pending = [(name, entry) for name, entry in files.items()
+               if "storage" in entry and not entry.get("published")]
+    if not pending:
+        return
+    prepared = ready_previews()
+    for name, entry in pending:
+        if entry["storage"].rsplit(".", 1)[0] + ".mp4" not in prepared:
+            continue
         try:
             ready = publish(SHARED / name, entry, state["folder"], user)
         except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired) as error:

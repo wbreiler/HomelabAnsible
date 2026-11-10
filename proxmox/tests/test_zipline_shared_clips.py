@@ -63,6 +63,35 @@ class SharedClipsTest(unittest.TestCase):
             self.assertEqual(unrelated.read_bytes(), b"unrelated")
             self.assertFalse((uploads / "renamed.mp4").is_symlink())
 
+    def test_preview_readiness_and_dashboard_deletion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "admin.json").write_text('{"username":"owner"}')
+            current = {"Nested/Silent.webm": [20, 1000, 50]}
+            with (patch.object(clips, "APP", root), patch.object(clips, "STATE", root / "state"),
+                  patch.object(clips, "snapshot", return_value=(current, ["Nested"])),
+                  patch.object(clips, "sql", return_value="owner-id"),
+                  patch.object(clips, "ready_previews", return_value=set()) as ready,
+                  patch.object(clips, "publish", return_value=True) as publish,
+                  patch.object(clips.time, "time") as clock):
+                clock.return_value = 1
+                clips.reconcile()
+                clock.return_value = 15
+                clips.reconcile()
+                publish.assert_not_called()
+                state = clips.json.loads(clips.STATE.read_text())
+                entry = state["files"]["Nested/Silent.webm"]
+                manifest = root / "preview-catalog/clips.json"
+                self.assertEqual(clips.json.loads(manifest.read_text()),
+                                 {entry["storage"]: "Nested/Silent.webm"})
+                ready.return_value = {entry["storage"].rsplit(".", 1)[0] + ".mp4"}
+                clips.reconcile()
+                publish.assert_called_once()
+                # Dashboard deletion removes the encoding request while preserving the source.
+                clips.reconcile()
+                self.assertEqual(clips.json.loads(manifest.read_text()), {})
+                self.assertTrue(clips.json.loads(clips.STATE.read_text())["files"]["Nested/Silent.webm"]["published"])
+
     def test_wait_retry_remove_and_reentry(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -70,6 +99,9 @@ class SharedClipsTest(unittest.TestCase):
             current = {"My clip.mp4": [10, 1000, 100]}
             with (patch.object(clips, "APP", root), patch.object(clips, "STATE", root / "state"),
                   patch.object(clips, "snapshot", return_value=(current, [])), patch.object(clips, "sql", return_value="owner-id"),
+                  patch.object(clips, "ready_previews", side_effect=lambda: {
+                      entry["storage"].rsplit(".", 1)[0] + ".mp4" for entry in
+                      clips.json.loads(clips.STATE.read_text())["files"].values() if "storage" in entry}),
                   patch.object(clips, "publish", side_effect=[False, True, True]) as publish,
                   patch.object(clips, "remove_entry") as remove, patch.object(clips.time, "time") as clock):
                 clock.return_value = 1

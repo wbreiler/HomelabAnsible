@@ -99,6 +99,8 @@ header contains the API token. The returned URL is `{json:files[0].url}`.
 
 ```sh
 python3 tests/test_zipline_client.py
+python3 tests/test_zipline_shared_clips.py
+node roles/zipline/files/discord-preview.cjs --self-test
 ansible-lint
 ansible-playbook -i tests/test-inventory.yml site.yml --syntax-check
 ```
@@ -113,8 +115,9 @@ shortcut require user interaction and remain unverified.
 Move a finished clip into the SMB share's **Shared** folder or one of its subfolders.
 A move within the same share keeps the media on the NAS. The publisher scans
 every five seconds and waits until the file identity, size, and modification
-time stay stable for ten seconds. Open **Shared clips** in the Zipline
-dashboard to copy the public link. MP4, M4V, MOV, WebM, and MKV are eligible.
+time stay stable for ten seconds. The preview worker then prepares each new clip
+in sequence. It appears in Zipline when its Discord preview is ready. Open
+**Shared clips** in the Zipline dashboard to copy the public link. MP4, M4V, MOV, WebM, and MKV are eligible.
 Zipline mirrors the directory hierarchy, including empty folders. For example,
 `Shared/Overwatch` appears under **Shared clips → Overwatch**. Hidden entries
 and symbolic links are excluded. Browser playback depends on the codecs.
@@ -127,14 +130,27 @@ video URL and, when available, a JPEG thumbnail in its Open Graph metadata.
 The `/raw/` URL serves the media itself. The proxy preserves direct PNG
 responses for the 16-character screenshot URLs used by the Mac and ShareX.
 
-For a large 16:9 MP4, set `zipline_discord_clip` in local inventory to its
-published `shared-<32 hex characters>.mp4` name. Apply the Zipline role with
-proxy management enabled. The viewer advertises a full-duration 1080p60
-H.264/AAC preview. Browsers can still open the original. The worker prepares a
-fast-start MP4 in RAM when it starts. It checks the viewer every 30 seconds and releases the buffer when the clip is withdrawn.
-Every download first checks anonymous access with Zipline. The complete preview
-has a known length and supports byte ranges. The worker caps its output at
-32 MiB and encoding time at four minutes.
+The Shared publisher automatically prepares a full-duration 1080p60 H.264/AAC
+preview for every supported clip, including subfolders. Portrait and other
+aspect ratios retain their proportions with padding. Copy the ordinary
+dashboard URL after the file appears. The viewer advertises the ready MP4.
+The original remains available from the viewer and its raw URL.
+
+The worker uses the existing read-only, no-symlink-follow NFS mount. A separate
+read-only catalog lists only settled files and published records. It has no
+Zipline credentials. Completed previews and temporary encoding output stay in
+a private tmpfs. Container swap is disabled. The cache rebuilds after a worker
+or guest restart, so existing links can need preparation time after a restart.
+The original Overwatch clip took about 80 seconds to prepare on this guest.
+
+Completed previews share a 512 MiB RAM budget, with at most 32 MiB per clip.
+Bitrate adjusts to clip duration and collection size while keeping 1080p60.
+Long clips and larger collections receive stronger compression. The worker
+encodes one clip at a time and retries failures after one minute. View its
+status with `docker compose --project-directory /opt/zipline logs discord-preview`.
+Every preview download checks anonymous access with Zipline. Withdrawal removes
+the catalog entry and releases the corresponding RAM file on the next worker
+scan. The encoder cancels work for withdrawn files.
 
 Move a clip out of Shared to withdraw it. The next scan removes its Zipline
 record. Deleting a file in Zipline leaves the NAS file intact and suppresses
@@ -155,8 +171,9 @@ read-only, shared Terraform bind mount from `/mnt/bindmounts/zipline-shared`
 to `/srv/zipline-media/Shared` in the existing guest. Mount its dedicated
 parent into Docker so the NFS submount retains `nosymfollow`.
 
-Run `ansible-playbook zipline-clips.yml --ask-vault-pass` to install the
-publisher. Its Compose override survives ordinary Zipline updates. For a
+With `zipline_clips_export` configured, apply the Zipline role with proxy
+management enabled to install the preview worker and media routes. Run
+`ansible-playbook zipline-clips.yml --ask-vault-pass` to install the publisher. Its Compose override survives ordinary Zipline updates. For a
 first-deployment pilot, pass `-e zipline_clips_start_timer=false` and run
 `systemctl start zipline-shared-clips.service` inside the guest to scan.
 Check the timer with `systemctl list-timers zipline-shared-clips.timer`.

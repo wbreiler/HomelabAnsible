@@ -731,7 +731,10 @@ Use `../terraform/README.md` for provisioning and media management.
 * Preserve direct PNG and extensionless screenshot links when changing video
   previews. Test the public viewer metadata, thumbnail, and raw video ranges.
   For an opted-in Discord preview, also verify a complete download within ten seconds,
-  seeking, and withdrawal.
+  seeking, and withdrawal. Shared publication waits for a ready RAM preview.
+  Keep the preview catalog separate from secrets, preserve the RAM budget and
+  disabled container swap, and test nested silent/non-MP4 inputs before changing
+  the encoder or publisher.
 * NAS clips require explicit placement in the SMB Shared tree. Mirror its visible
   folders, including empty ones, under the existing dashboard folder. Preserve the
   nested read-only NFS mount, Docker no-symlink-follow check, per-file settling
