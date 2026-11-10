@@ -119,6 +119,14 @@ Zipline mirrors the directory hierarchy, including empty folders. For example,
 `Shared/Overwatch` appears under **Shared clips → Overwatch**. Hidden entries
 and symbolic links are excluded. Browser playback depends on the codecs.
 
+For Discord, paste the clip's public viewer URL (`/view/<filename>`) in a
+message. The copied public clip link also opens this viewer. The publishing
+account stores `view.enabled` and `view.embedMediaOnly` in its Zipline user
+settings. Enable both when recreating the account. The viewer includes the
+video URL and, when available, a JPEG thumbnail in its Open Graph metadata.
+The `/raw/` URL serves the media itself. The proxy preserves direct PNG
+responses for the 16-character screenshot URLs used by the Mac and ShareX.
+
 Move a clip out of Shared to withdraw it. The next scan removes its Zipline
 record. Deleting a file in Zipline leaves the NAS file intact and suppresses
 republication until a scan observes removal or a change. Anyone who already

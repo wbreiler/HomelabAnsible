@@ -728,6 +728,8 @@ Use `../terraform/README.md` for provisioning and media management.
 * Optional `zipline_manage_proxy` manages an isolated NPM configuration and
   requires the `homelab-zipline` certificate first. See `docs/zipline.md`.
 * The Mac client and Automator action are under `files/zipline/`.
+* Preserve direct PNG and extensionless screenshot links when changing video
+  previews. Test the public viewer metadata, thumbnail, and raw video ranges.
 * NAS clips require explicit placement in the SMB Shared tree. Mirror its visible
   folders, including empty ones, under the existing dashboard folder. Preserve the
   nested read-only NFS mount, Docker no-symlink-follow check, per-file settling

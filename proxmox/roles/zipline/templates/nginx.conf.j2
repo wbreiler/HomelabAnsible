@@ -19,11 +19,21 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/homelab-zipline/privkey.pem;
     client_max_body_size 26m;
     add_header Cache-Control $zipline_shared_cache_control always;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_http_version 1.1;
+    # The screenshot clients share both /<16-character name> and /<name>.png.
+    location ~ "^/(?<zipline_screenshot>[A-Za-z0-9_-]{16})(?:[.]png)?$" {
+        proxy_pass http://{{ zipline_ip.stdout | trim }}:{{ zipline_port }}/raw/$zipline_screenshot.png$is_args$args;
+        proxy_intercept_errors on;
+        error_page 401 403 404 = @zipline_file;
+    }
+    location @zipline_file {
+        # Let Zipline handle protected files and extensionless names belonging to other media.
+        proxy_pass http://{{ zipline_ip.stdout | trim }}:{{ zipline_port }};
+    }
     location / {
         proxy_pass http://{{ zipline_ip.stdout | trim }}:{{ zipline_port }};
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_http_version 1.1;
     }
 }
