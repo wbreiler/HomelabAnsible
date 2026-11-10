@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import time
+import uuid
 
 SHARED = Path("/srv/zipline-media/Shared")
 UPLOADS = Path("/var/lib/zipline/uploads")
@@ -58,15 +59,68 @@ def snapshot():
     if not any(fields[4] == str(SHARED) and {"ro", "nosymfollow"} <= set(fields[5].split(","))
                for fields in (line.split() for line in mounts.splitlines())):
         raise RuntimeError("Docker has lost the protected Shared mount")
-    current = {}
-    for path in SHARED.iterdir():
-        if path.name.startswith(".") or path.suffix.lower() not in MEDIA or not path.name.isprintable():
-            continue
-        try:
-            current[path.name] = signature(path)
-        except FileNotFoundError:
-            continue
-    return {name: sig for name, sig in current.items() if sig}
+    return scan_tree(SHARED)
+
+
+def scan_tree(root):
+    files = {}
+    folders = []
+    pending = [root]
+    device = root.stat().st_dev
+    while pending:
+        directory = pending.pop()
+        for path in directory.iterdir():
+            if path.name.startswith(".") or not path.name.isprintable():
+                continue
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                continue
+            if info.st_dev != device:
+                continue
+            relative = str(path.relative_to(root))
+            if stat.S_ISDIR(info.st_mode):
+                folders.append(relative)
+                pending.append(path)
+            elif stat.S_ISREG(info.st_mode) and info.st_size and path.suffix.lower() in MEDIA:
+                files[relative] = [info.st_ino, info.st_size, info.st_mtime_ns]
+    return files, sorted(folders)
+
+
+def folder_id(root_id, path):
+    if path == Path("."):
+        return root_id
+    return uuid.uuid5(uuid.UUID(root_id), str(path)).hex
+
+
+def folder_inserts(root_id, paths, user):
+    statements = []
+    for path in sorted(paths, key=lambda p: len(p.parts)):
+        is_root = path == Path(".")
+        name = "Shared clips" if is_root else path.name
+        parent = "NULL" if is_root else literal(folder_id(root_id, path.parent))
+        statements.append(f'''INSERT INTO "Folder" (id,"updatedAt",name,"userId","parentId")
+            VALUES ({literal(folder_id(root_id, path))},now(),{literal(name)},{user},{parent})
+            ON CONFLICT (id) DO NOTHING;''')
+    return "\n".join(statements)
+
+
+def sync_folders(state, folders, user):
+    root_id = state["folder"]
+    current = {Path(name) for name in folders}
+    old = {Path(name) for name in state.get("directories", [])}
+    statements = [folder_inserts(root_id, current | {Path(".")}, user)]
+    for path in sorted(old - current, key=lambda p: len(p.parts), reverse=True):
+        fid = literal(folder_id(root_id, path))
+        # Keep folders that the dashboard owner has repurposed or populated.
+        statements.append(f'''DELETE FROM "Folder" WHERE id={fid} AND "userId"={user}
+            AND "parentId"={literal(folder_id(root_id, path.parent))}
+            AND name={literal(path.name)}
+            AND NOT EXISTS (SELECT 1 FROM "File" WHERE "folderId"={fid})
+            AND NOT EXISTS (SELECT 1 FROM "Folder" WHERE "parentId"={fid});''')
+    sql("BEGIN;\n" + "\n".join(statements) + "\nCOMMIT;")
+    state["directories"] = folders
+    save(state)
 
 
 def remove_entry(source, entry):
@@ -105,7 +159,7 @@ def complete_movie(source, size):
     return {b"moov", b"mdat"} <= boxes
 
 
-def publish(source, entry, folder, owner):
+def publish(source, entry, root_id, user):
     # Make the preview from the NAS directly. Zipline's own worker stages full videos.
     if not complete_movie(source, entry["sig"][1]):
         return False
@@ -129,13 +183,10 @@ def publish(source, entry, folder, owner):
     os.chmod(output.name, 0o644)
     Path(output.name).replace(UPLOADS / thumb)
     fid = literal(entry["id"])
-    folder = literal(folder)
-    user = '(SELECT id FROM "User" WHERE username=' + literal(owner) + ')'
-    if not sql(f"SELECT {user};"):
-        raise RuntimeError("Zipline owner is missing")
+    parents = source.relative_to(SHARED).parents
+    folder = literal(folder_id(root_id, parents[0]))
     sql(f"""BEGIN;
-        INSERT INTO "Folder" (id,"updatedAt",name,"userId") VALUES ({folder},now(),'Shared clips',{user})
-            ON CONFLICT (id) DO NOTHING;
+        {folder_inserts(root_id, parents, user)}
         INSERT INTO "File" (id,"updatedAt",name,"originalName",size,type,"userId","folderId")
             VALUES ({fid},now(),{literal(storage)},{literal(source.name)},{entry['sig'][1]},
                     {literal(MEDIA[source.suffix.lower()])},{user},{folder})
@@ -147,7 +198,7 @@ def publish(source, entry, folder, owner):
 
 
 def reconcile():
-    current = snapshot()  # A mount or scan failure must never look like an empty share.
+    current, folders = snapshot()  # A mount or scan failure must never look like an empty share.
     state = json.loads(STATE.read_text()) if STATE.exists() else {"folder": secrets.token_hex(16), "files": {}}
     files = state["files"]
     for name, entry in list(files.items()):
@@ -157,6 +208,15 @@ def reconcile():
             del files[name]
             save(state)
     owner = json.loads((APP / "admin.json").read_text())["username"]
+    user = None
+    structure_changed = folders != state.get("directories")
+    if structure_changed or any(not entry.get("published") for entry in files.values()):
+        owner_id = sql('SELECT id FROM "User" WHERE username=' + literal(owner) + ';')
+        if not owner_id:
+            raise RuntimeError("Zipline owner is missing")
+        user = literal(owner_id)
+    if structure_changed:
+        sync_folders(state, folders, user)
     for name, sig in current.items():
         if name not in files:
             files[name] = {"sig": sig, "seen": time.time()}
@@ -169,7 +229,7 @@ def reconcile():
             entry.update(id=secrets.token_hex(16), storage="shared-" + secrets.token_hex(16) + Path(name).suffix.lower())
             save(state)
         try:
-            ready = publish(SHARED / name, entry, state["folder"], owner)
+            ready = publish(SHARED / name, entry, state["folder"], user)
         except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired) as error:
             print(f"Skipped one unavailable clip ({type(error).__name__})", file=sys.stderr)
             continue

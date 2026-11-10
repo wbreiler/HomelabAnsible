@@ -23,6 +23,30 @@ class SharedClipsTest(unittest.TestCase):
             link.symlink_to(media)
             self.assertIsNone(clips.signature(link))
 
+    def test_nested_scan_and_folder_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Shared"
+            game = root / "Overwatch"
+            nested = game / "Player's picks"
+            nested.mkdir(parents=True)
+            (game / "Empty").mkdir()
+            hidden = root / ".staging"
+            hidden.mkdir()
+            (hidden / "secret.mp4").write_bytes(b"private")
+            (root / "shortcut").symlink_to(hidden, target_is_directory=True)
+            for folder in (root, game, nested):
+                (folder / "round.mp4").write_bytes(b"video")
+            files, folders = clips.scan_tree(root)
+            self.assertEqual(set(files), {"round.mp4", "Overwatch/round.mp4", "Overwatch/Player's picks/round.mp4"})
+            self.assertEqual(folders, ["Overwatch", "Overwatch/Empty", "Overwatch/Player's picks"])
+            root_id = "a" * 32
+            relative = nested.relative_to(root)
+            game_id = clips.folder_id(root_id, relative.parent)
+            self.assertEqual(clips.folder_id(root_id, Path(".")), root_id)
+            inserts = clips.folder_inserts(root_id, [relative, *relative.parents], "'owner'")
+            self.assertIn(f"'Overwatch','owner','{root_id}'", inserts)
+            self.assertIn(f"'Player''s picks','owner','{game_id}'", inserts)
+
     def test_withdrawal_only_unlinks_managed_alias(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -45,7 +69,7 @@ class SharedClipsTest(unittest.TestCase):
             (root / "admin.json").write_text('{"username":"owner"}')
             current = {"My clip.mp4": [10, 1000, 100]}
             with (patch.object(clips, "APP", root), patch.object(clips, "STATE", root / "state"),
-                  patch.object(clips, "snapshot", return_value=current),
+                  patch.object(clips, "snapshot", return_value=(current, [])), patch.object(clips, "sql", return_value="owner-id"),
                   patch.object(clips, "publish", side_effect=[False, True, True]) as publish,
                   patch.object(clips, "remove_entry") as remove, patch.object(clips.time, "time") as clock):
                 clock.return_value = 1

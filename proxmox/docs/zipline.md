@@ -110,13 +110,14 @@ shortcut require user interaction and remain unverified.
 
 ## Publish a clip from the NAS
 
-Move a finished clip into the top level of the SMB share's **Shared** folder.
+Move a finished clip into the SMB share's **Shared** folder or one of its subfolders.
 A move within the same share keeps the media on the NAS. The publisher scans
 every five seconds and waits until the file identity, size, and modification
 time stay stable for ten seconds. Open **Shared clips** in the Zipline
 dashboard to copy the public link. MP4, M4V, MOV, WebM, and MKV are eligible.
-Browser playback depends on the codecs. Hidden files, subdirectories, and
-symbolic links are excluded.
+Zipline mirrors the directory hierarchy, including empty folders. For example,
+`Shared/Overwatch` appears under **Shared clips → Overwatch**. Hidden entries
+and symbolic links are excluded. Browser playback depends on the codecs.
 
 Move a clip out of Shared to withdraw it. The next scan removes its Zipline
 record. Deleting a file in Zipline leaves the NAS file intact and suppresses
