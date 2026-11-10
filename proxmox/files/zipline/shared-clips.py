@@ -17,7 +17,7 @@ STATE = APP / "shared-clips.json"
 COMPOSE = ["docker", "compose", "--project-directory", str(APP), "exec", "-T"]
 MEDIA = {".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime",
          ".webm": "video/webm", ".mkv": "video/x-matroska"}
-SETTLE_SECONDS = 120
+SETTLE_SECONDS = 10
 
 
 def save(state):

@@ -50,10 +50,16 @@ class SharedClipsTest(unittest.TestCase):
                   patch.object(clips, "remove_entry") as remove, patch.object(clips.time, "time") as clock):
                 clock.return_value = 1
                 clips.reconcile()
-                clock.return_value = 115
+                clock.return_value = 10
                 clips.reconcile()
                 publish.assert_not_called()
-                clock.return_value = 125
+                current["My clip.mp4"] = [10, 1200, 105]
+                clock.return_value = 11
+                clips.reconcile()
+                clock.return_value = 20
+                clips.reconcile()
+                publish.assert_not_called()
+                clock.return_value = 21
                 clips.reconcile()
                 clips.reconcile()
                 clips.reconcile()
