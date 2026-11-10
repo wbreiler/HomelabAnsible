@@ -730,7 +730,8 @@ Use `../terraform/README.md` for provisioning and media management.
 * The Mac client and Automator action are under `files/zipline/`.
 * Preserve direct PNG and extensionless screenshot links when changing video
   previews. Test the public viewer metadata, thumbnail, and raw video ranges.
-  For an opted-in Discord preview, also verify cold streaming, seeking, and RAM buffer expiry.
+  For an opted-in Discord preview, also verify a complete download within ten seconds,
+  seeking, and withdrawal.
 * NAS clips require explicit placement in the SMB Shared tree. Mirror its visible
   folders, including empty ones, under the existing dashboard folder. Preserve the
   nested read-only NFS mount, Docker no-symlink-follow check, per-file settling
