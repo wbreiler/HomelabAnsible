@@ -1,0 +1,24 @@
+{
+  "app_observer_config": {
+    "bind": "192.0.2.10",
+    "clients": ["192.0.2.10", "192.0.2.20"],
+    "token": "REPLACE_WITH_A_RANDOM_PRIVATE_TOKEN_AT_LEAST_32_CHARACTERS",
+    "apps": {
+      "sonarr": {
+        "host": "sonarr-guest",
+        "kind": "arr",
+        "url": "http://192.0.2.30:8989",
+        "api_version": "v3",
+        "key": "READ_FROM_THE_EXISTING_PRIVATE_APP_CONFIGURATION",
+        "logs": [{"host": "sonarr-guest", "job": "sonarr"}]
+      },
+      "forgejo": {
+        "host": "forgejo-guest",
+        "kind": "forgejo",
+        "url": "http://192.0.2.31:3000/api/healthz",
+        "logs": [{"host": "forgejo-guest", "job": "systemd-journal", "unit": "forgejo.service"}]
+      },
+      "unconfigured-app": {"host": "another-guest", "kind": "unknown"}
+    }
+  }
+}

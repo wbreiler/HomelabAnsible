@@ -33,7 +33,8 @@ The guide also covers [guest mount checks](docs/offsite-observer.md#guest-mount-
 
 [Ask the lab](docs/netdata.md) connects local Netdata measurements to the OpenAI
 API through the existing Open WebUI. It is read-only and uses a separate, explicit
-Netdata deployment playbook.
+Netdata deployment playbook. [Application observations](docs/app-observer.md)
+add app self-checks, queue summaries, Docker healthchecks, and filtered logs.
 
 ## Features
 

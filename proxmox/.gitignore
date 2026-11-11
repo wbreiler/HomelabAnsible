@@ -47,3 +47,4 @@ Thumbs.db
 # Private Netdata deployment and streaming credential
 /.netdata-inventory.yml
 /.netdata-stream-key
+/.app-observer.json

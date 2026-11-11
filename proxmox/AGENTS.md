@@ -318,8 +318,12 @@ Use `../terraform/README.md` for provisioning and media management.
   private streaming credential. Keep the TrueNAS collector separate from its
   appliance agent. See [Ask the lab](docs/netdata.md).
 * Open WebUI owns the private OpenAI connection and native MCP tool allowlist.
-  Preserve unrelated providers and tools. Never expose function execution,
-  logs, SSH credentials, or repair tools through this model.
+  Preserve unrelated providers and tools. Never expose generic function
+  execution, raw logs, SSH credentials, or repair tools through this model.
+* `app-observer.yml` adds fixed app self-checks and filtered diagnostics. Preserve
+  source allowlists, redaction, ingestion-time labels, and unknown/partial
+  health states. Do not replace these with arbitrary URL, shell, or LogQL tools.
+  See [application observations](docs/app-observer.md).
 * Verify fresh measurements and an actual tool-assisted chat. Container resource
   metrics do not establish application health or update availability.
 

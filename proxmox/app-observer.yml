@@ -1,0 +1,7 @@
+---
+- name: Configure fixed read-only application observations
+  hosts: netdata-parent
+  become: true
+  gather_facts: false
+  roles:
+    - app_observer

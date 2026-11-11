@@ -1,0 +1,72 @@
+---
+- name: Require explicit private observer configuration
+  ansible.builtin.assert:
+    that:
+      - app_observer_config.token | default('') | length >= 32
+      - app_observer_config.apps | default({}) | length > 0
+      - app_observer_config.clients | default([]) | length > 0
+  no_log: true
+
+- name: Create the observer code directory
+  ansible.builtin.file:
+    path: /opt/app-observer
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install the read-only observer
+  ansible.builtin.copy:
+    src: '{{ playbook_dir }}/files/app-observer/server.py'
+    dest: /opt/app-observer/server.py
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart app observer
+
+- name: Install private observer settings
+  ansible.builtin.copy:
+    content: '{{ app_observer_config | to_nice_json }}'
+    dest: /etc/app-observer.json
+    owner: root
+    group: root
+    mode: '0600'
+    backup: true
+    validate: /usr/bin/python3 /opt/app-observer/server.py --check %s
+  no_log: true
+  diff: false
+  notify: Restart app observer
+  when: not ansible_check_mode
+
+- name: Install the isolated observer service
+  ansible.builtin.template:
+    src: app-observer.service.j2
+    dest: /etc/systemd/system/app-observer.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart app observer
+
+- name: Start the observer
+  ansible.builtin.systemd_service:
+    name: app-observer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: not ansible_check_mode
+
+- name: Apply observer changes before verification
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify authenticated observation inventory
+  ansible.builtin.uri:
+    url: 'http://{{ app_observer_config.bind }}:19998/apps'
+    headers:
+      Authorization: 'Bearer {{ app_observer_config.token }}'
+    return_content: true
+  register: app_observer_api
+  until: app_observer_api.status | default(0) == 200
+  retries: 5
+  delay: 2
+  no_log: true
+  when: not ansible_check_mode

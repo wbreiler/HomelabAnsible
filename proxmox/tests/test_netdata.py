@@ -60,6 +60,18 @@ class NetdataIntegration(unittest.TestCase):
         self.assertFalse(webui.model_matches(saved, model))
         self.assertFalse(webui.model_matches(None, model))
 
+    def test_optional_observers_keep_credentials_out_of_model_and_preserve_connections(self):
+        self.settings['observers'] = [{'id': 'homelab-apps', 'name': 'Linux apps',
+                                      'url': 'http://192.0.2.2:19998', 'token': 'private-observer-token'}]
+        first = webui.desired_config(self.current, self.connections, self.settings)
+        self.assertEqual(first, webui.desired_config(first[0], first[1], self.settings))
+        self.assertEqual(first[1][0], self.connections[0])
+        self.assertEqual(first[1][-1]['key'], 'private-observer-token')
+        self.assertNotIn('private-observer-token', str(first[2]))
+        self.assertIn('server:homelab-apps', first[2]['meta']['toolIds'])
+        self.assertEqual(first[1][-1]['config']['function_name_filter_list'],
+                         ['list_apps', 'get_app_health', 'get_app_logs'])
+
     def test_netdata_templates_separate_stream_credentials_from_web_config(self):
         env = Environment(loader=FileSystemLoader(ROOT / 'roles/netdata/templates'), undefined=StrictUndefined)
         values = {'netdata_parent': False, 'netdata_hostname': 'test-node', 'netdata_bind': '127.0.0.1',
