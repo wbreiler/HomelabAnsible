@@ -10,6 +10,7 @@ observations. Use the same Open WebUI model. Ask, for example:
 - Why does Sonarr report a warning?
 - Does Forgejo have failed mirror jobs despite passing its database check?
 - Is Plex healthy, and what remains unverified?
+- What runs on my Minecraft guest, and does its game endpoint respond?
 
 The Linux observer runs beside Loki as a systemd dynamic user. The TrueNAS
 observer is a separate custom app. Both use the same standard-library Python
@@ -26,6 +27,7 @@ Open WebUI authenticates to each observer and sends selected results to OpenAI.
 | `json_health` | Built-in JSON status. `healthy_status` defaults to `healthy`. |
 | `http` | Response status only. This yields `responsive`, not `healthy`. |
 | `docker` | Exact configured container states, healthcheck status, restart count, and OOM/exit evidence. |
+| `minecraft` | Java server-list response, reported version/protocol, aggregate player counts, and response time. This yields `responsive`, not `healthy`. |
 | `unknown` | Explicit missing coverage. Resource metrics remain available through Netdata. |
 
 Health responses include up to three filtered diagnostic excerpts from each
@@ -41,8 +43,23 @@ A missing endpoint, authentication failure, or invalid response remains unknown.
 At the 2026-11-10 deployment, the private registry contained 27 Linux app entries
 and 12 TrueNAS app entries. These counts describe a snapshot, not automatic
 coverage of every future guest. Some entries intentionally report missing checks.
-Minecraft, LANCache internals, and several utility guests still need dedicated
-functional checks. No agent or command executor was installed in those guests.
+LANCache internals and several utility guests still need dedicated functional
+checks. No agent or command executor was installed in those guests.
+
+The Minecraft adapter uses only a fixed private IP and port. It sends a status
+handshake and status request, with an eight-second deadline and 1 MiB read cap.
+It does not log in or use RCON. Player names, UUID samples, MOTD, favicon, and
+mod lists are excluded. Player login, TPS/MSPT, world saving, and mod behavior
+remain unverified. Status response time is not tick latency. The wire exchange
+follows the [mcstatus Java status implementation](https://github.com/py-mine/mcstatus/blob/main/mcstatus/_protocol/java_client.py).
+Minecraft log coverage remains absent unless a separately reviewed source exists.
+
+Optional `identity` metadata exposes only `software`, `distribution`, and
+`verified_at`. All three fields are required. Verify these against deployment
+inventory and live guest evidence before adding them. This is a dated operator
+snapshot, not automatic discovery or an installed-version check. Refresh it
+after repurposing a guest. Do not copy environment files or raw guest descriptions.
+The live Minecraft response supplies its own reported version separately.
 
 ## Read and privacy boundaries
 
@@ -147,7 +164,8 @@ Run `tests/test_app_observer.py` and `tests/test_netdata.py` with Ansible's Pyth
 The HTTP boundary test needs permission to bind a temporary loopback port.
 Fixtures verify authentication, forbidden methods/routes, query bounds,
 redirect rejection, credential filtering, Docker framing, partial health,
-old event timestamps, and preservation of unrelated WebUI settings.
+old event timestamps, Minecraft framing/privacy/deadlines, identity validation,
+and preservation of unrelated WebUI settings.
 
 Run full Ansible lint and syntax checks in both projects. Verify live app
 responses, denied unauthenticated requests, unchanged app states, storage health,

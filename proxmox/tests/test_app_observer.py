@@ -24,6 +24,36 @@ def config():
     }}
 
 
+def varint(value):
+    data = bytearray()
+    while value > 127:
+        data.append((value & 127) | 128)
+        value >>= 7
+    return bytes(data) + bytes([value])
+
+
+def minecraft_frame(data):
+    raw = json.dumps(data).encode()
+    payload = b'\x00' + varint(len(raw)) + raw
+    return varint(len(payload)) + payload
+
+
+class StatusSocket:
+    def __init__(self, data):
+        self.data = data
+        self.sent = b''
+        self.closed = False
+
+    def __enter__(self): return self
+    def __exit__(self, *args): self.closed = True
+    def settimeout(self, value): pass
+    def sendall(self, value): self.sent += value
+
+    def recv(self, size):
+        chunk, self.data = self.data[:1], self.data[1:]
+        return chunk  # Exercise fragmented TCP reads, including multi-byte VarInts.
+
+
 class Observations(unittest.TestCase):
     def setUp(self):
         self.app = observer.Observer(config())
@@ -120,6 +150,67 @@ class Observations(unittest.TestCase):
         self.assertEqual(result['unavailable_sources'], ['two'])
         self.assertEqual(len(result['entries']), 1)
         self.assertEqual(observer.select_fields({'status': 'secret-value'}, ['status'], ['secret-value']), {'status': '[redacted]'})
+
+    def test_minecraft_status_is_bounded_responsive_and_excludes_player_data(self):
+        cfg = config()
+        identity = {'software': 'Minecraft Java', 'distribution': 'Example pack', 'verified_at': '2026-11-11T07:00:00Z'}
+        cfg['apps']['minecraft'] = {'kind': 'minecraft', 'host': 'test-node', 'address': '192.0.2.3', 'port': 25565, 'identity': identity}
+        app = observer.Observer(cfg)
+        sock = StatusSocket(minecraft_frame({
+            'version': {'name': '1.21.1', 'protocol': 767},
+            'players': {'online': 2, 'max': 20, 'sample': [{'name': 'PrivatePlayer', 'id': 'private-uuid'}]},
+            'description': 'Private MOTD', 'favicon': 'private-image', 'forgeData': {'mods': ['PrivateMod']}}))
+        with patch.object(observer.socket, 'create_connection', return_value=sock) as connect:
+            result = app.health('minecraft')
+        connect.assert_called_once_with(('192.0.2.3', 25565), timeout=8)
+        host = b'192.0.2.3'
+        handshake = b'\x00\x2f' + bytes([len(host)]) + host + struct.pack('>H', 25565) + b'\x01'
+        self.assertEqual(sock.sent, bytes([len(handshake)]) + handshake + b'\x01\x00')
+        self.assertTrue(sock.closed)
+        self.assertEqual(result['status'], 'responsive')
+        self.assertEqual(result['checks']['players_online'], 2)
+        self.assertEqual(result['checks']['reported_version'], '1.21.1')
+        self.assertEqual(result['identity'], identity)
+        self.assertEqual(app.catalog()['apps'][-1]['identity'], identity)
+        self.assertIn('tick rate', result['scope'])
+        self.assertNotIn('Private', json.dumps(result))
+        self.assertNotIn('private-', json.dumps(result))
+        self.assertEqual(app.logs('minecraft')['coverage'], 'not_collected')
+
+    def test_minecraft_rejects_bad_frames_types_eof_timeouts_and_trickle_reads(self):
+        data = {'version': {'name': '1.21.1', 'protocol': 767}, 'players': {'online': 0, 'max': 20}}
+        invalid = [b'', b'\x80' * 5, varint(observer.MAX_BYTES + 1), b'\x02\x01\x00',
+                   b'\x03\x00\x02{', b'\x02\x00\x00', b'\x03\x00\x01\xff',
+                   minecraft_frame([]), minecraft_frame(data)[:-1]]
+        for section, field, value in [('players', 'online', True), ('players', 'max', -1),
+                                      ('version', 'protocol', '767'), ('version', 'name', ['x'])]:
+            bad = copy.deepcopy(data); bad[section][field] = value
+            invalid.append(minecraft_frame(bad))
+        for frame in invalid:
+            with self.subTest(frame=frame[:15]), patch.object(observer.socket, 'create_connection', return_value=StatusSocket(frame)):
+                with self.assertRaises(observer.Unavailable):
+                    observer.minecraft_status('192.0.2.3', 25565)
+        with patch.object(observer.socket, 'create_connection', side_effect=TimeoutError):
+            with self.assertRaises(observer.Unavailable): observer.minecraft_status('192.0.2.3', 25565)
+        with patch.object(observer.socket, 'create_connection', return_value=StatusSocket(minecraft_frame(data))), patch.object(observer.time, 'monotonic', side_effect=[0, 1, 9]):
+            with self.assertRaises(observer.Unavailable): observer.minecraft_status('192.0.2.3', 25565)
+        cfg = config(); cfg['apps']['minecraft'] = {'kind': 'minecraft', 'host': 'test-node', 'address': '192.0.2.3', 'port': 25565}
+        with patch.object(observer, 'minecraft_status', side_effect=observer.Unavailable('unavailable')):
+            result = observer.Observer(cfg).health('minecraft')
+        self.assertEqual(result['status'], 'unknown')
+        self.assertIn('Player login', result['scope'])
+
+    def test_minecraft_and_identity_configuration_fail_closed(self):
+        for address, port in [('example.com', 25565), ('8.8.8.8', 25565), (None, 25565),
+                              ('192.0.2.3', True), ('192.0.2.3', 0), ('192.0.2.3', 65536),
+                              ('fe80::1%en0', 25565)]:
+            cfg = config(); cfg['apps']['mc'] = {'kind': 'minecraft', 'host': 'test-node', 'address': address, 'port': port}
+            with self.subTest(address=address, port=port), self.assertRaises(ValueError): observer.Observer(cfg)
+        for identity in [{'software': 'x', 'secret': 'not-allowed'}, [],
+                         {'software': 'x', 'distribution': 'y', 'verified_at': '2026-11-11'},
+                         {'software': 'x\n', 'distribution': 'y', 'verified_at': '2026-11-11T07:00:00Z'}]:
+            cfg = config(); cfg['apps']['other']['identity'] = identity
+            with self.assertRaises(ValueError): observer.Observer(cfg)
 
     def test_http_auth_methods_and_fixed_route_boundary(self):
         server = observer.Server(('127.0.0.1', 0), observer.Handler)

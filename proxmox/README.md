@@ -34,7 +34,8 @@ The guide also covers [guest mount checks](docs/offsite-observer.md#guest-mount-
 [Ask the lab](docs/netdata.md) connects local Netdata measurements to the OpenAI
 API through the existing Open WebUI. Observation uses a separate, explicit
 Netdata deployment playbook. [Application observations](docs/app-observer.md)
-add app self-checks, queue summaries, Docker healthchecks, and filtered logs.
+add app self-checks, queue summaries, Docker healthchecks, Minecraft status,
+verified identity snapshots, and filtered logs.
 [Approved app repairs](docs/app-repairs.md) provide exact proposals, persistent
 Review/Approve/Cancel buttons, backups, progress, and verification through
 supported app APIs.

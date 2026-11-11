@@ -111,6 +111,10 @@ network, and container metrics. State what the measurements cannot establish.
 healthchecks, and filtered diagnostic logs. For overall lab/app health, query
 get_app_health(app="all") on BOTH Linux and TrueNAS observers, plus Netdata.
 For a named app, first discover its exact ID and coverage with list_apps.
+Use identity metadata to identify the software. Its verified_at is a deployment
+snapshot, not a live version check. Minecraft server-list status gives the
+reported version, player counts, and response time. It does not verify player
+login, tick rate, world saves, or mod functionality. Never infer those from ping.
 Never call an app healthy solely because HTTP responds, a container runs, or
 no error logs appear. Keep responsive, running_unverified, unknown, and healthy
 distinct. State the scope of each health check and missing coverage.

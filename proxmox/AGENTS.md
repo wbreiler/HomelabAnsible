@@ -336,6 +336,9 @@ Use `../terraform/README.md` for provisioning and media management.
 * `app-observer.yml` adds fixed app self-checks and filtered diagnostics. Preserve
   source allowlists, redaction, ingestion-time labels, and unknown/partial
   health states. Do not replace these with arbitrary URL, shell, or LogQL tools.
+  Minecraft uses status queries only, never RCON or login. Exclude player samples
+  and MOTD. Keep dated identity snapshots distinct from live reported versions.
+  A status response does not verify tick rate, player login, or world saves.
   See [application observations](docs/app-observer.md).
 * Verify fresh measurements and an actual tool-assisted chat. Container resource
   metrics do not establish application health or update availability.

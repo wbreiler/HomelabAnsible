@@ -18,6 +18,17 @@
         "url": "http://192.0.2.31:3000/api/healthz",
         "logs": [{"host": "forgejo-guest", "job": "systemd-journal", "unit": "forgejo.service"}]
       },
+      "minecraft": {
+        "host": "minecraft-guest",
+        "kind": "minecraft",
+        "address": "192.0.2.32",
+        "port": 25565,
+        "identity": {
+          "software": "Minecraft Java",
+          "distribution": "Example modpack",
+          "verified_at": "2026-11-11T00:00:00Z"
+        }
+      },
       "unconfigured-app": {"host": "another-guest", "kind": "unknown"}
     }
   }
