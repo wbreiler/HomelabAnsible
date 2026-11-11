@@ -8,6 +8,8 @@ import tempfile
 import threading
 import time
 import unittest
+import uuid
+from types import SimpleNamespace
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location('repairs', Path(__file__).resolve().parents[1] / 'files/app-repairs/tool.py')
@@ -31,23 +33,56 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
             'path_roots': ['/media', '/downloads'],
             'destinations': {'SABnzbd': [{'host': 'downloader.example.test', 'port': 8080, 'useSsl': False, 'urlBase': ''}]}}}})
         self.tool = r.Tools()
+        self.action = r.Action()
+        self.messages = {}
+        async def saved(chat, owner, message):
+            if owner != 'owner' or (chat, message) not in self.messages:
+                raise r.RepairError('No owned message.')
+            return copy.deepcopy(self.messages[(chat, message)])
+        async def show(chat, message, content, emitter):
+            self.messages[(chat, message)].update(content=content, output=[], done=True)
+            if emitter:
+                try: await emitter({'type': 'chat:completion', 'data': {'content': content}})
+                except Exception: pass
+            return {'messages': [{'id': message, 'content': content, 'output': [], 'done': True}]}
+        for p in [patch.object(r, 'saved_message', saved), patch.object(r, 'show_message', show)]:
+            p.start()
+            self.patches.append(p)
 
     def tearDown(self):
         for p in reversed(self.patches):
             p.stop()
         self.temp.cleanup()
 
+    async def prepare(self, *args, **kwargs):
+        metadata = kwargs.pop('__metadata__', META) | {'message_id': uuid.uuid4().hex}
+        plan = await self.tool.prepare_repair(*args, **kwargs, __metadata__=metadata)
+        self.messages[(metadata['chat_id'], metadata['message_id'])] = {
+            'role': 'assistant', 'model': 'ask-the-lab', 'done': True, 'content': 'Model summary only.'}
+        return plan
+
     async def plan(self):
-        return await self.tool.prepare_repair('repair-drill', {'value': 'after'}, resource='fixture', __user__=USER, __metadata__=META)
+        return await self.prepare('repair-drill', {'value': 'after'}, resource='fixture', __user__=USER, __metadata__=META)
+
+    async def click(self, plan, decision, emitter=None, body_changes=None, user=USER):
+        saved = r.Repairs().load(plan['id'], 'owner', 'chat-a')
+        body = {'model': 'ask-the-lab', 'chat_id': 'chat-a', 'id': saved['message'],
+                'messages': [{'id': saved['message'], 'role': 'assistant',
+                              'content': self.messages[('chat-a', saved['message'])]['content']}]}
+        changes = dict(body_changes or {})
+        if 'content' in changes:
+            body['messages'][0]['content'] = changes.pop('content')
+        body.update(changes)
+        request = SimpleNamespace(method='POST', url=SimpleNamespace(path='/api/chat/actions/homelab_repair_controls.' + decision))
+        await self.action.action(body, __id__=decision, __user__=user, __model__={'id': 'ask-the-lab'},
+                                 __request__=request, __event_emitter__=emitter)
+        return await self.tool.repair_status(plan['id'], __user__=USER, __metadata__=META)
 
     async def approve(self, plan, result=True, emitter=None):
-        async def callback(event):
-            self.assertEqual(event['type'], 'confirmation')
-            self.assertIn('"before": "before"', event['data']['message'])
-            self.assertIn('"after": "after"', event['data']['message'])
-            return result
-        return await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META,
-                                             __event_call__=callback, __event_emitter__=emitter)
+        if result is False:
+            return await self.click(plan, 'cancel', emitter)
+        await self.click(plan, 'review', emitter)
+        return await self.click(plan, 'approve', emitter)
 
     async def test_drill_exact_backup_single_attempt_and_rollback(self):
         plan = await self.plan()
@@ -61,40 +96,70 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(json.loads((r.STATE / 'drill-fixture.json').read_text()), {'value': 'after'})
         self.assertEqual(json.loads(Path(result['backup']).read_text())['before'], {'value': 'before'})
         self.assertEqual(Path(result['backup']).stat().st_mode & 0o777, 0o600)
-        self.assertTrue(any('Working' in x['data']['description'] for x in events))
+        self.assertTrue(any('Working' in x['data'].get('description', '') for x in events))
         with self.assertRaises(r.RepairError):
             await self.approve(plan)
-        reverse = await self.tool.prepare_rollback(plan['id'], __user__=USER, __metadata__=META)
+        reverse_meta = META | {'message_id': uuid.uuid4().hex}
+        reverse = await self.tool.prepare_rollback(plan['id'], __user__=USER, __metadata__=reverse_meta)
         self.assertEqual(reverse['diff']['value'], {'before': 'after', 'after': 'before'})
-        async def yes(event):
-            return True
-        reversed_result = await self.tool.approve_repair(reverse['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+        self.messages[('chat-a', reverse_meta['message_id'])] = {'content': 'Rollback summary'}
+        reversed_result = await self.approve(reverse)
         self.assertEqual(reversed_result['status'], 'verified')
         self.assertEqual(json.loads((r.STATE / 'drill-fixture.json').read_text())['value'], 'before')
 
-    async def test_false_truthy_disconnect_and_timeout_are_not_approval(self):
-        for reply in [False, None, 1, 'yes', {'error': 'disconnected'}, {'approved': True}]:
-            with self.subTest(reply=reply):
-                plan = await self.plan()
-                result = await self.approve(plan, reply)
-                self.assertEqual(result['status'], 'canceled')
-                self.assertFalse(Path(plan['backup']).exists())
-                self.assertFalse((r.STATE / 'drill-fixture.json').exists())
-
-    async def test_no_browser_wrong_owner_chat_and_automation_fail_closed(self):
+    async def test_model_and_text_cannot_approve_and_cancel_changes_nothing(self):
+        self.assertFalse(hasattr(self.tool, 'approve_repair'))
         plan = await self.plan()
         with self.assertRaises(r.RepairError):
-            await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META)
-        for user, metadata in [({'id': 'other', 'role': 'admin'}, META),
-                               ({'id': 'owner', 'role': 'user'}, META),
-                               (USER, META | {'automation_id': 'scheduled'}),
-                               (USER, META | {'user_id': 'other'}), (USER, META | {'internal': True})]:
-            with self.subTest(user=user, metadata=metadata), self.assertRaises(r.RepairError):
-                await self.tool.inspect_repair_options(__user__=user, __metadata__=metadata)
+            await self.action.action({'model': 'ask-the-lab', 'chat_id': 'chat-a'}, __id__='approve', __user__=USER)
+        with self.assertRaisesRegex(r.RepairError, 'Review repair first'):
+            await self.click(plan, 'approve')
+        await self.click(plan, 'review')
+        for text in ['approved', 'yes', '', 'Model says this is approved']:
+            with self.subTest(text=text), self.assertRaises(r.RepairError):
+                await self.click(plan, 'approve', body_changes={'content': text})
+        with self.assertRaises(r.RepairError):
+            await self.click(plan, 'approve', body_changes={'messages': []})
+        result = await self.approve(plan, False)
+        self.assertEqual(result['status'], 'canceled')
+        self.assertFalse(Path(plan['backup']).exists())
+        self.assertFalse((r.STATE / 'drill-fixture.json').exists())
+        with self.assertRaises(r.RepairError):
+            await self.click(plan, 'approve')
+
+    async def test_wrong_owner_chat_and_automation_fail_closed(self):
+        plan = await self.plan()
+        for user in [None, {'id': 'other', 'role': 'admin'}, {'id': 'owner', 'role': 'user'}]:
+            with self.subTest(user=user), self.assertRaises(r.RepairError):
+                await self.click(plan, 'review', user=user)
+        for change in [{'chat_id': 'other'}, {'id': 'other-message'}, {'model': 'other-model'}]:
+            with self.subTest(change=change), self.assertRaises(r.RepairError):
+                await self.click(plan, 'review', body_changes=change)
+        for metadata in [META | {'automation_id': 'scheduled'}, META | {'user_id': 'other'}, META | {'internal': True}]:
+            with self.subTest(metadata=metadata), self.assertRaises(r.RepairError):
+                await self.tool.inspect_repair_options(__user__=USER, __metadata__=metadata)
         with self.assertRaises(r.RepairError):
             await self.tool.repair_status(plan['id'], __user__=USER, __metadata__=META | {'chat_id': 'different'})
         with self.assertRaises(r.RepairError):
             await self.tool.repair_status('../../config', __user__=USER, __metadata__=META)
+
+    async def test_old_or_ambiguous_message_bindings_cannot_approve(self):
+        plan = await self.plan()
+        engine = r.Repairs()
+        original = engine.load(plan['id'], 'owner', 'chat-a')
+        duplicate = original | {'id': uuid.uuid4().hex}
+        engine.save(duplicate, 'proposed')
+        with self.assertRaisesRegex(r.RepairError, 'exactly one'):
+            await self.click(plan, 'review')
+        (r.STATE / (duplicate['id'] + '.json')).unlink()
+        unbound = copy.deepcopy(original)
+        unbound.pop('message')
+        engine.save(unbound, 'proposed')
+        request = SimpleNamespace(method='POST', url=SimpleNamespace(path='/api/chat/actions/homelab_repair_controls.approve'))
+        with self.assertRaisesRegex(r.RepairError, 'exactly one'):
+            await self.action.action({'model': 'ask-the-lab', 'chat_id': 'chat-a', 'id': original['message']},
+                                     __id__='approve', __user__=USER, __model__={'id': 'ask-the-lab'}, __request__=request)
+        self.assertFalse(Path(plan['backup']).exists())
 
     async def test_stale_state_policy_and_expiry_block_before_write(self):
         plan = await self.plan()
@@ -108,8 +173,7 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
         saved = engine.load(plan['id'], 'owner', 'chat-a')
         saved['expires'] = time.time() - 1
         engine.save(saved, 'proposed')
-        with self.assertRaises(r.RepairError):
-            await self.approve(plan)
+        self.assertEqual((await self.click(plan, 'review'))['status'], 'expired')
         plan = await self.plan()
         config = json.loads(r.CONFIG.read_text())
         config['policy_version'] = 'changed'
@@ -147,9 +211,8 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
                 return {}
             return copy.deepcopy(saved)
         with patch.object(r, 'api', side_effect=fake_api):
-            plan = await self.tool.prepare_repair('arr', {'allowedHosts': 'arr.example.test'}, __user__=USER, __metadata__=META)
-            async def yes(event): return True
-            result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+            plan = await self.prepare('arr', {'allowedHosts': 'arr.example.test'}, __user__=USER, __metadata__=META)
+            result = await self.approve(plan)
         self.assertEqual(result['status'], 'verified')
         self.assertEqual(writes, [original | {'allowedHosts': 'arr.example.test'}])
         self.assertNotIn('password-hash', json.dumps(result))
@@ -164,11 +227,10 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
                 raise r.RepairError('Response lost after request.')
             return original.copy()
         with patch.object(r, 'api', side_effect=api):
-            plan = await self.tool.prepare_repair('arr', {'allowedHosts': 'arr.example.test'}, __user__=USER, __metadata__=META)
-            async def yes(event): return True
-            result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+            plan = await self.prepare('arr', {'allowedHosts': 'arr.example.test'}, __user__=USER, __metadata__=META)
+            result = await self.approve(plan)
             with self.assertRaises(r.RepairError):
-                await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+                await self.approve(plan)
         self.assertEqual(result['status'], 'failed_or_uncertain')
         self.assertEqual(len(writes), 1)
         self.assertTrue(Path(plan['backup']).exists())
@@ -200,17 +262,21 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
         async def failed(event): raise ConnectionError('gone')
         self.assertEqual((await self.approve(plan, emitter=failed))['status'], 'verified')
 
-    async def test_approval_timeout_closes_progress_without_a_write(self):
+    async def test_review_is_persistent_and_changed_review_blocks_approval(self):
         plan = await self.plan()
-        events = []
-        async def timeout(event): raise TimeoutError()
-        async def emit(event): events.append(event)
-        with self.assertRaises(TimeoutError):
-            await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META,
-                                           __event_call__=timeout, __event_emitter__=emit)
-        self.assertTrue(events[-1]['data']['done'])
-        self.assertEqual((await self.tool.repair_status(plan['id'], __user__=USER, __metadata__=META))['status'], 'canceled')
+        result = await self.click(plan, 'review')
+        self.assertEqual(result['status'], 'proposed')
+        saved = r.Repairs().load(plan['id'], 'owner', 'chat-a')
+        message = self.messages[('chat-a', saved['message'])]
+        self.assertIn('"before": "before"', message['content'])
+        self.assertIn('"after": "after"', message['content'])
         self.assertFalse(Path(plan['backup']).exists())
+        message['content'] += '\nChanged after review'
+        with self.assertRaises(r.RepairError):
+            await self.click(plan, 'approve')
+        await self.click(plan, 'review')
+        self.assertEqual((await self.click(plan, 'approve'))['status'], 'verified')
+        self.assertIn('verified', message['content'])
 
     async def test_sab_resume_requires_paused_queue_and_sends_one_fixed_action(self):
         config = json.loads(r.CONFIG.read_text())
@@ -226,13 +292,12 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
                 paused = False
                 return {'status': True}
             return {'queue': {'paused': paused, 'slots': [{'filename': 'private filename'}]}}
-        async def yes(event): return True
         with patch.object(r, 'api', side_effect=api):
-            plan = await self.tool.prepare_repair('sab', {}, action='resume', __user__=USER, __metadata__=META)
-            result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+            plan = await self.prepare('sab', {}, action='resume', __user__=USER, __metadata__=META)
+            result = await self.approve(plan)
             self.assertEqual(result['status'], 'verified')
             with self.assertRaises(r.RepairError):
-                await self.tool.prepare_repair('sab', {}, action='resume', __user__=USER, __metadata__=META)
+                await self.prepare('sab', {}, action='resume', __user__=USER, __metadata__=META)
         self.assertEqual(len(writes), 1)
         self.assertNotIn('private filename', json.dumps(result))
         self.assertNotIn('private-sab-key', json.dumps(result))
@@ -252,20 +317,19 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
                 writes.append(body)
                 current.update(body | {'machineId': 'detected-new-id'})
             return copy.deepcopy(current)
-        async def yes(event): return True
         with patch.object(r, 'api', side_effect=api):
-            plan = await self.tool.prepare_repair('seerr', {'ip': new['ip']}, resource='plex', __user__=USER, __metadata__=META)
+            plan = await self.prepare('seerr', {'ip': new['ip']}, resource='plex', __user__=USER, __metadata__=META)
             original_write = r.private_write
             def fail_backup(path, value):
                 if str(path).endswith('.backup.json'):
                     raise OSError('disk full')
                 original_write(path, value)
             with patch.object(r, 'private_write', side_effect=fail_backup):
-                result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+                result = await self.approve(plan)
             self.assertEqual(result['status'], 'blocked')
             self.assertEqual(writes, [])
-            plan = await self.tool.prepare_repair('seerr', {'ip': new['ip']}, resource='plex', __user__=USER, __metadata__=META)
-            result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+            plan = await self.prepare('seerr', {'ip': new['ip']}, resource='plex', __user__=USER, __metadata__=META)
+            result = await self.approve(plan)
             self.assertEqual(result['status'], 'verified')
             self.assertEqual(writes, [new])
 
@@ -307,23 +371,19 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
                         raise r.RepairError('Enable response lost.')
                     current['libraries'][1]['enabled'] = True
                     return copy.deepcopy(current['libraries'][1])
-                async def yes(event):
-                    self.assertIn('Refresh the complete library list', event['data']['message'])
-                    self.assertIn('partial failure', event['data']['message'])
-                    return True
                 with patch.object(r, 'api', side_effect=api):
-                    plan = await self.tool.prepare_repair('seerr', {}, action='sync_libraries', __user__=USER, __metadata__=META)
+                    plan = await self.prepare('seerr', {}, action='sync_libraries', __user__=USER, __metadata__=META)
                     self.assertEqual(writes, [])
                     self.assertNotIn('lastScan', plan['diff']['libraries']['after'][1])
                     current['libraries'][0]['lastScan'] = 300
                     latest = copy.deepcopy(current)
-                    result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+                    result = await self.approve(plan)
                     self.assertEqual(result['status'], 'failed_or_uncertain' if failure else 'verified')
                     self.assertEqual(len(writes), 1 if failure in ['sync', 'unexpected_catalog'] else 2)
                     self.assertEqual(len(result.get('steps_completed', [])), 0 if failure == 'sync' else 1 if failure else 2)
                     self.assertEqual(json.loads(Path(plan['backup']).read_text())['before'], latest)
                     with self.assertRaises(r.RepairError):
-                        await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+                        await self.approve(plan)
                     with self.assertRaises(r.RepairError):
                         await self.tool.prepare_rollback(plan['id'], __user__=USER, __metadata__=META)
                 self.assertEqual(current['libraries'][0]['lastScan'], 300)
@@ -339,9 +399,8 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
                 def api(app, path, method='GET', body=None):
                     self.assertEqual(method, 'GET')
                     return copy.deepcopy(current)
-                async def yes(event): return True
                 with patch.object(r, 'api', side_effect=api):
-                    plan = await self.tool.prepare_repair('seerr', {}, action='sync_libraries', __user__=USER, __metadata__=META)
+                    plan = await self.prepare('seerr', {}, action='sync_libraries', __user__=USER, __metadata__=META)
                     if drift == 'enabled':
                         current['libraries'][0]['enabled'] = False
                     elif drift == 'connection':
@@ -358,7 +417,7 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
                         with self.assertRaisesRegex(r.RepairError, 'older than one hour'):
                             engine.apply(saved)
                     else:
-                        result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+                        result = await self.approve(plan)
                         self.assertEqual(result['status'], 'blocked')
                     self.assertFalse(Path(plan['backup']).exists())
 

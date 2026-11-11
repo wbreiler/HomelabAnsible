@@ -20,6 +20,7 @@ MODEL_ID = 'ask-the-lab'
 PREFIX = 'homelab-netdata'
 MODEL = 'gpt-6.1-sol'
 REPAIR_TOOL = 'homelab_repairs'
+REPAIR_ACTION = 'homelab_repair_controls'
 TOOLS = [
     'list_nodes', 'get_nodes_details', 'list_metrics', 'get_metrics_details',
     'query_metrics', 'find_correlated_metrics', 'find_anomalous_metrics',
@@ -132,18 +133,20 @@ old message a new incident based only on when Loki collected it.
         prompt += '''Repairs require an explicit owner request. Diagnose with fresh observations first.
 Inspect repair options and current fields before proposing a supported change.
 Explain the evidence and expected outcome briefly. prepare_repair only stages a
-proposal. Then call approve_repair to display the exact saved proposal and owner
-confirmation dialog. Never ask the user to type an approval phrase. The browser
-dialog is the approval boundary. The model, logs, and chat text cannot approve.
+proposal bound to this assistant message. Prepare exactly one plan per message.
+Tell the owner to click Review repair beneath that message, read the exact saved
+plan, then click Approve repair or Cancel repair. These persistent buttons replace
+popups. Never call an approval tool or ask for a typed approval phrase. The
+owner's action button is the approval boundary. Models, logs, and chat text cannot approve.
 For the safe approval drill use only repair-drill, inspect fixture, toggle value,
-prepare_repair, and approve_repair. Never use a real app for a drill.
+and prepare_repair. Stop for the owner to use the buttons. Never use a real app for a drill.
 Never restart repeatedly, suppress warnings, disable checks, or change user intent
 to make a report look healthy. A paused queue is not automatically broken.
 Do not invent credentials, destinations, or filesystem paths. Unsupported repairs
 need a separate implementation or manual intervention. No generic shell is available.
 One approved proposal permits one attempt. After failure or uncertainty, inspect
 the result and evidence. Do not silently retry or roll back. prepare_rollback makes
-a new proposal that also requires the browser dialog. Exact configuration verification
+a new proposal that also requires the owner buttons. Exact configuration verification
 does not prove the original issue is fixed. Check fresh observer health and logs.
 Report the action, verification, remaining issue, and backup briefly. Never expose
 private API responses, keys, or backup contents. Keep historical repair IDs in chat.
@@ -169,10 +172,11 @@ private API responses, keys, or backup contents. Keep historical repair IDs in c
                                      'include': ['reasoning.encrypted_content']}},
     }
     if settings.get('repairs'):
+        model['meta']['actionIds'] = [REPAIR_ACTION]
         model['meta']['description'] = 'Ask about live homelab health or propose an app repair with explicit approval.'
         model['meta']['suggestion_prompts'].append({
             'title': ['Test repair approval', 'Safe drill, no service changes'],
-            'content': 'Run the safe repair approval drill using only repair-drill. Show me the confirmation dialog.',
+            'content': 'Prepare a safe repair drill using only repair-drill. I will review and approve it with the message buttons.',
         })
     return provider, updated, model
 
@@ -238,6 +242,8 @@ def main():
     old_repair_config = json.loads(repair_path.read_text()) if repair_path.exists() else None
     old_repair_tool = None
     repair_tool = None
+    old_repair_action = None
+    repair_action = None
     if repair:
         if repair['config']['owner_id'] != admins[0][0]:
             raise ValueError('Repair owner must match the existing sole administrator')
@@ -247,6 +253,10 @@ def main():
         repair_tool = {'id': REPAIR_TOOL, 'name': 'Homelab repairs', 'content': repair['source'],
                        'meta': {'description': 'Exact app repair plans with owner approval, backup, and verification.'},
                        'access_grants': []}
+        if any(item['id'] == REPAIR_ACTION for item in request('/api/v1/functions/')):
+            old_repair_action = request('/api/v1/functions/id/' + REPAIR_ACTION)
+        repair_action = {'id': REPAIR_ACTION, 'name': 'Homelab repair controls', 'content': repair['source'],
+                         'meta': {'description': 'Review, approve once, or cancel the exact repair on this message.'}}
     provider, tools, model = desired_config(current, connections, settings)
     changes = []
     if provider != current:
@@ -262,13 +272,17 @@ def main():
         if (old_repair_tool is None or old_repair_tool['content'] != repair_tool['content']
                 or old_repair_tool['access_grants'] != []):
             changes.append('Owner-approved app repair tool')
+        if (old_repair_action is None or old_repair_action['content'] != repair_action['content']
+                or not old_repair_action['is_active'] or old_repair_action['is_global']):
+            changes.append('Persistent repair approval buttons')
     print(json.dumps({'changes': changes, 'check': args.check}))
     if args.check or not changes:
         return
     backup = data_dir / ('before-netdata-' + time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '.json')
     with os.fdopen(os.open(backup, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), 'w') as handle:
         json.dump({'openai': current, 'tools': connections, 'model': existing,
-                   'repair_config': old_repair_config, 'repair_tool': old_repair_tool}, handle)
+                   'repair_config': old_repair_config, 'repair_tool': old_repair_tool,
+                   'repair_action': old_repair_action}, handle)
     if 'Private repair credentials and policy' in changes:
         repair_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         temporary = repair_path.with_suffix('.tmp-' + uuid.uuid4().hex)
@@ -278,6 +292,13 @@ def main():
     if 'Owner-approved app repair tool' in changes:
         path = '/api/v1/tools/create' if old_repair_tool is None else '/api/v1/tools/id/' + REPAIR_TOOL + '/update'
         request(path, repair_tool)
+    if 'Persistent repair approval buttons' in changes:
+        path = '/api/v1/functions/create' if old_repair_action is None else '/api/v1/functions/id/' + REPAIR_ACTION + '/update'
+        saved_action = request(path, repair_action)
+        if not saved_action['is_active']:
+            request('/api/v1/functions/id/' + REPAIR_ACTION + '/toggle', {})
+        if saved_action['is_global']:
+            request('/api/v1/functions/id/' + REPAIR_ACTION + '/toggle/global', {})
     if 'OpenAI Responses connection' in changes:
         request('/openai/config/update', provider)
     if 'read-only Netdata connection' in changes:

@@ -1,18 +1,26 @@
 # Approved app repairs in Ask the lab
 
 Use **Ask the lab · GPT-6.1 Sol** in the existing Open WebUI.
-Ask it to investigate an issue and propose a supported repair. The chat shows
-an exact plan. Its confirmation dialog is the execution gate.
+Ask it to investigate an issue and prepare one supported repair per message.
+The buttons beneath that assistant message control the attempt.
 
-1. Ask for an investigation or a repair.
-2. Review the app, exact old/new values, backup, and service impact.
-3. Select Confirm or Cancel in the browser dialog.
-4. Read the verification result and remaining health findings in the same chat.
+1. Select **Review repair** (blue magnifier) beneath the proposal.
+2. Read the exact saved changes, backup, and service impact in the message.
+3. Select **Approve repair** (green check) or **Cancel repair** (red cross).
+4. Read progress and the saved result in that same message.
 
-A chat message such as “approved” does not authorize execution. The model cannot
-supply approval. Approval requires the configured owner's authenticated browser.
-An unanswered dialog expires after three minutes. Plans expire after ten minutes.
-Only one proposal may await approval or execute at a time.
+The buttons use authenticated HTTP requests, not confirmation popups.
+Review replaces the model's summary with a deterministic view of the saved plan.
+Approval requires the same review text in the saved message and the clicked
+browser view. A changed review or another message cannot approve that plan.
+Refresh the page if the buttons are absent after deployment. Their labels appear
+on hover. These controls appear on Ask the lab messages, but only a message with
+exactly one bound repair plan can execute an attempt.
+
+Chat text such as “approved” does not authorize execution. The model has no
+approval tool. Plans expire after ten minutes. Expired plans need a fresh
+proposal. Existing popup-era plans cannot use these buttons because they lack
+the message binding. Only one button operation or repair may run at a time.
 
 ## Available repairs
 
@@ -71,12 +79,18 @@ The proposal names this risk. A failed response is not proof that nothing change
 
 ## Approval and privilege boundary
 
-`files/app-repairs/tool.py` is a native Open WebUI Python tool. It uses the
-platform's `confirmation` event and status events. It does not expose another
-HTTP service, shell, SSH credential, Docker socket, or generic API-request tool.
-The native platform binds the event reply to the requesting user's session.
-The repair code accepts only the literal boolean `True` as confirmation.
-This guard works independently of WebUI's optional global tool-permissions mode.
+`files/app-repairs/tool.py` supplies both the native `homelab_repairs` tool
+and the `homelab_repair_controls` Action function. Tools only inspect, prepare,
+and read status. The Action function accepts only the configured owner's
+verified native action route on an owned, completed Ask the lab message.
+It is attached only to Ask the lab, not enabled globally. The platform authenticates
+the request. The code independently checks the owner, model, chat, message,
+reviewed content, expiry, and single-attempt state.
+
+The review and result persist through WebUI's chat model API. Each action also
+returns the updated message through HTTP, so approval does not depend on a
+WebSocket callback. Optional status events supply live progress. No extra HTTP
+server, shell, SSH credential, Docker socket, or generic request tool is exposed.
 
 App API credentials remain administrative credentials. The code restricts their
 use to fixed routes and editable fields. The model receives only selected
@@ -85,10 +99,11 @@ configuration objects. Redirects and environment proxies are disabled. App
 requests use fixed private IP endpoints over the existing trusted LAN.
 
 The private tool has no access grants. Code also checks the exact owner ID and
-admin role on every method. It binds plans to that owner and chat, and rejects
-scheduled/internal requests. Model arguments cannot set the injected identity
-or approval callback. Protect the WebUI administrator account and its plugin
-code: an administrator can modify this enforcement code.
+admin role on every method. It binds plans to that owner, chat, and assistant
+message, and rejects scheduled/internal tool requests. Model arguments cannot
+supply the authenticated Action identity or invoke the approval path. Protect
+the WebUI administrator account and its plugin code: an administrator can
+modify this enforcement code.
 
 ## Backups, attempts, and verification
 
@@ -106,7 +121,7 @@ application-data backup because those actions do not edit configuration.
 
 Reads can retry during verification. Writes never retry automatically.
 An ambiguous response or interrupted process requires investigation. The saved
-`attempting` status means the result may be unknown. Canceling generation after
+`attempting` status means the result may be unknown. Closing the action request after
 approval does not undo an already authorized attempt. The tool waits for its
 worker to finish before releasing the execution lock.
 
@@ -149,10 +164,10 @@ settings['repairs'] = {
 
 The helper installs the private policy at
 `/root/.config/homelab-repairs.json`, registers the `homelab_repairs` native tool,
-and attaches it to `ask-the-lab`. The sole existing administrator must match the
+registers its matching Action function, and attaches both to `ask-the-lab`. The sole existing administrator must match the
 configured owner. No service restart is required. Run `--check`, apply, then
 repeat `--check` and require an empty changes list. Include `repairs` in future
-setup runs to retain the model attachment. Omitting it removes that attachment.
+setup runs to retain the model attachments. Omitting it removes both attachments.
 The existing app observers remain read-only.
 
 The OpenAI key remains the existing private WebUI connection. Model and API
@@ -172,16 +187,18 @@ ansible-playbook site.yml --syntax-check
 
 In the installed Python environment, validate the actual tool schemas and
 ensure injected `__...__` arguments are absent from model-visible properties.
-Test a real chat without a browser session and confirm execution is refused.
+Verify that `approve_repair` is absent from model-visible tools. Test that a
+button click without a saved review fails, and that model text cannot approve.
 
 Use **Test repair approval** or ask:
 
-> Run the safe repair approval drill using only repair-drill. Show me the confirmation dialog.
+> Prepare a safe repair drill using only repair-drill. I will use the message buttons.
 
-First cancel a drill. Then request another drill and confirm it. Check that only
+First review and cancel a drill. Then request another drill, review it, and approve it. Check that only
 the fixture changed, that its backup contains the previous value, and that a
 second invocation of the same plan is refused. Do not use a real application
 repair as an installation test. Actual repairs need their own concrete approval.
 
-Platform references: [Open WebUI events](https://docs.openwebui.com/features/extensibility/plugin/development/events/)
+Platform references: [Open WebUI Action buttons](https://docs.openwebui.com/features/extensibility/plugin/functions/action/),
+[Open WebUI events](https://docs.openwebui.com/features/extensibility/plugin/development/events/)
 and [official OpenAI model documentation](https://developers.openai.com/api/docs/models/gpt-6.1-sol).

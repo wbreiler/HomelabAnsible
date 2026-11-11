@@ -1,11 +1,12 @@
 """
 title: Homelab repairs
 author: HomelabAnsible
-version: 1.2.0
+version: 1.3.0
 description: Review an exact app repair, approve once, and verify the result.
 """
 import asyncio
 import copy
+from datetime import datetime, timezone
 import fcntl
 import hashlib
 import ipaddress
@@ -253,7 +254,9 @@ class Repairs:
             raise RepairError('The expected catalog differs from the verified Plex evidence.')
         return target
 
-    def prepare(self, name, action, resource, record_id, changes, owner, chat, restore=False):
+    def prepare(self, name, action, resource, record_id, changes, owner, chat, restore=False, message=None):
+        if not isinstance(message, str) or not message:
+            raise RepairError('Prepare repairs in a saved chat message.')
         app = self.app(name)
         if action not in ['configure', 'restart', 'resume', 'sync_libraries']:
             raise RepairError('Unsupported repair action.')
@@ -283,7 +286,7 @@ class Repairs:
         ident = uuid.uuid4().hex
         plan = {'id': ident, 'app': name, 'host': app['host'], 'action': action, 'resource': resource,
                 'record_id': record_id, 'diff': diff, 'before': before, 'policy': digest(self.config),
-                'owner': owner, 'chat': chat, 'created': time.time(), 'expires': time.time() + 600,
+                'owner': owner, 'chat': chat, 'message': message, 'created': time.time(), 'expires': time.time() + 600,
                 'status': 'proposed', 'restore': restore, 'backup': str(STATE / (ident + '.backup.json')),
                 'risk': {'configure': 'Only these settings change. App jobs can behave differently immediately. No service restart is included.',
                          'restart': 'This app will briefly disconnect. Active jobs can be interrupted. No configuration change is included.',
@@ -420,11 +423,11 @@ class Tools:
 
     async def prepare_repair(self, app: str, changes: dict, action: str = 'configure', resource: str = 'host', record_id: int = 0,
                              __user__: dict = None, __metadata__: dict = None) -> dict:
-        """Prepare an exact proposal without changing an app. Inspect options first. configure uses a flat changes object. restart/resume/sync_libraries use changes={}. Seerr libraries are read-only fields: use sync_libraries, which refreshes the complete catalog then restores the approved replacement enabled flag. Its old scan marker resets; no automatic rollback. For a safe drill use app=repair-drill, resource=fixture, and toggle value between before and after. Then call approve_repair to show the owner the confirmation dialog."""
+        """Prepare an exact proposal without changing an app. Inspect options first. configure uses a flat changes object. restart/resume/sync_libraries use changes={}. Seerr libraries are read-only fields: use sync_libraries, which refreshes the complete catalog then restores the approved replacement enabled flag. Its old scan marker resets; no automatic rollback. For a safe drill use app=repair-drill, resource=fixture, and toggle value between before and after. Tell the owner to click Review repair beneath this message, then Approve repair or Cancel repair. Only the buttons can authorize an attempt; there is no approval tool or popup."""
         engine = Repairs()
         engine.authorize(__user__, __metadata__)
         return await asyncio.to_thread(engine.prepare, app, action, resource, record_id, changes,
-                                       __user__['id'], __metadata__['chat_id'])
+                                       __user__['id'], __metadata__['chat_id'], message=__metadata__.get('message_id'))
 
     async def prepare_rollback(self, repair_id: str, __user__: dict = None, __metadata__: dict = None) -> dict:
         """Prepare a separately approved reversal of one configuration repair in this chat. Does not execute it. Recovery actions have no configuration rollback."""
@@ -434,7 +437,7 @@ class Tools:
         if previous['action'] != 'configure' or previous['status'] not in ['verified', 'unverified', 'failed_or_uncertain']:
             raise RepairError('No attempted configuration repair is available to reverse.')
         return await asyncio.to_thread(engine.prepare, previous['app'], 'configure', previous['resource'], previous['record_id'],
-                                       {k: v['before'] for k, v in previous['diff'].items()}, __user__['id'], __metadata__['chat_id'], True)
+                                       {k: v['before'] for k, v in previous['diff'].items()}, __user__['id'], __metadata__['chat_id'], True, message=__metadata__.get('message_id'))
 
     async def repair_status(self, repair_id: str, __user__: dict = None, __metadata__: dict = None) -> dict:
         """Read the saved proposal, backup receipt, and result. An attempting status after interruption means outcome unknown. Never repeat it automatically."""
@@ -442,60 +445,131 @@ class Tools:
         engine.authorize(__user__, __metadata__)
         return engine.public(engine.load(repair_id, __user__['id'], __metadata__['chat_id']))
 
-    async def approve_repair(self, repair_id: str, __user__: dict = None, __metadata__: dict = None,
-                             __event_call__=None, __event_emitter__=None) -> dict:
-        """Display the exact saved plan in an owner confirmation dialog. Only a literal browser approval permits one attempt. Text approval, this tool call, and the model cannot approve. No automatic retry."""
+
+
+def review_text(plan):
+    expires = datetime.fromtimestamp(plan['expires'], timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+    text = (f"### Repair review: {plan['app']}\n\n"
+            f"**{plan['host']} · {plan['action']} · {plan['status'].replace('_', ' ')}**\n\n"
+            f"Proposal: `{plan['id']}` · Expires: {expires}\n\n"
+            + '```json\n' + json.dumps(plan['diff'], indent=2) + '\n```\n\n'
+            + '\n'.join(f"{i}. {step}" for i, step in enumerate(plan.get('steps', []), 1))
+            + '\n\n' + plan['risk'] + '\n\nBackup before the attempt: `' + plan['backup'] + '`.'
+            + '\n\nFor restart/resume, the backup is a precheck receipt, not an application-data backup.')
+    if plan['status'] == 'proposed':
+        text += '\n\nSelect **Approve repair** below to authorize this one attempt, or **Cancel repair**. No popup. No automatic retry.'
+    if plan.get('result'):
+        text += '\n\n**Result:** ' + plan['result'].get('detail', '')
+    if plan.get('steps_completed'):
+        text += '\n\nCompleted: ' + ' '.join(plan['steps_completed'])
+    return text
+
+
+async def saved_message(chat, owner, message):
+    from open_webui.models.chats import Chats
+    if not await Chats.get_chat_by_id_and_user_id(chat, owner):
+        raise RepairError('The repair chat must belong to the configured owner.')
+    value = await Chats.get_message_by_id_and_message_id(chat, message)
+    if not value or value.get('role') != 'assistant' or value.get('model') != 'ask-the-lab' or value.get('done') is not True:
+        raise RepairError('Select a completed Ask the lab proposal message.')
+    return value
+
+
+async def show_message(chat, message, content, emitter):
+    from open_webui.models.chats import Chats
+    update = {'id': message, 'content': content, 'output': [], 'done': True, 'error': None}
+    if not await Chats.upsert_message_to_chat_by_id_and_message_id(chat, message, update):
+        raise RepairError('Could not save the repair message. Check repair_status before another attempt.')
+    if emitter:
+        try:
+            await emitter({'type': 'chat:completion', 'data': update})
+        except Exception:
+            pass  # The HTTP response and saved chat remain available without WebSockets.
+    return {'messages': [update]}
+
+
+class Action:
+    # Tiny inline SVGs keep the three buttons distinct without an external image host.
+    actions = [
+        {'id': ident, 'name': name, 'icon_url': 'data:image/svg+xml,' + urllib.parse.quote(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="' + color +
+            '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + shape + '</svg>')}
+        for ident, name, color, shape in [
+            ('review', 'Review repair', '#6b9fff', '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>'),
+            ('approve', 'Approve repair', '#22c55e', '<path d="m4 12 5 5 11-11"/>'),
+            ('cancel', 'Cancel repair', '#ef4444', '<path d="m6 6 12 12M6 18 18 6"/>')]]
+
+    async def action(self, body: dict, __id__=None, __user__=None, __model__=None, __request__=None, __event_emitter__=None):
         engine = Repairs()
-        engine.authorize(__user__, __metadata__)
-        if not __event_call__ or not __metadata__.get('session_id'):
-            raise RepairError('Open this chat in the browser to approve. No live approval channel is available.')
+        engine.authorize(__user__, {'chat_id': body.get('chat_id'), 'user_id': (__user__ or {}).get('id')})
+        if (__id__ not in ['review', 'approve', 'cancel'] or not __request__
+                or __request__.method != 'POST'
+                or __request__.url.path != '/api/chat/actions/homelab_repair_controls.' + __id__
+                or body.get('model') != 'ask-the-lab' or (__model__ or {}).get('id') != 'ask-the-lab'):
+            raise RepairError('Use the repair buttons in Ask the lab. Models and chat text cannot approve.')
+        chat, message = body['chat_id'], body.get('id')
+        value = await saved_message(chat, __user__['id'], message)
         with open(STATE / 'execution.lock', 'a') as lock:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                raise RepairError('Another repair is awaiting approval or running. Finish it first.') from None
-            plan = engine.load(repair_id, __user__['id'], __metadata__['chat_id'])
-            if plan['status'] != 'proposed' or time.time() >= plan['expires']:
-                raise RepairError('This proposal expired or was already handled. Prepare a fresh one.')
-            engine.save(plan, 'awaiting_approval')
-            message = (f"App: {plan['app']} on {plan['host']}\nAction: {plan['action']}\n"
-                       f"Resource: {plan['resource']} / record {plan['record_id']}\n\n"
-                       + json.dumps(plan['diff'], indent=2) + '\n\n'
-                       + '\n'.join(plan.get('steps', [])) + '\n\n'
-                       + plan['risk'] + '\n\nBackup before the attempt: ' + plan['backup']
-                       + '\nNo configuration change means this backup is a precheck receipt only.'
-                       + '\nOne attempt. No automatic retries or rollback. Approval expires in three minutes.')
-            await status(__event_emitter__, 'Waiting for your approval. No app changes yet.')
+                raise RepairError('A repair is already running. Check its saved result before another attempt.') from None
+            plans = []
+            for path in STATE.glob('*.json'):
+                if re.fullmatch(r'[a-f0-9]{32}\.json', path.name):
+                    candidate = json.loads(path.read_text())
+                    if (candidate.get('owner'), candidate.get('chat'), candidate.get('message')) == (__user__['id'], chat, message):
+                        plans.append(candidate)
+            if len(plans) != 1:
+                raise RepairError('This message needs exactly one new repair proposal. Ask for a fresh proposal in this chat.')
+            plan = plans[0]
+            if plan['status'] != 'proposed':
+                if __id__ == 'review':
+                    return await show_message(chat, message, review_text(plan), __event_emitter__)
+                raise RepairError('This proposal was already handled. No second attempt is allowed.')
+            if time.time() >= plan['expires']:
+                engine.save(plan, 'expired', {'detail': 'The proposal expired. Ask for a fresh proposal.'})
+                return await show_message(chat, message, review_text(plan), __event_emitter__)
+            if __id__ == 'review':
+                content = review_text(plan)
+                response = await show_message(chat, message, content, __event_emitter__)
+                plan['review_hash'] = digest(content)
+                engine.save(plan, 'proposed')
+                return response
+            if __id__ == 'cancel':
+                engine.save(plan, 'canceled', {'detail': 'Canceled by the owner. No repair ran.'})
+                return await show_message(chat, message, review_text(plan), __event_emitter__)
+            content = review_text(plan)
+            visible = [m for m in body.get('messages', [])
+                       if isinstance(m, dict) and m.get('id') == message and m.get('role') == 'assistant']
+            if (plan.get('review_hash') != digest(content) or value.get('content') != content
+                    or len(visible) != 1 or visible[0].get('content') != content):
+                raise RepairError('Click Review repair first, read the saved plan, then click Approve repair on that message.')
+            plan['approved_at'] = time.time()
+            plan['approval_method'] = 'owner_action_button'
+            engine.save(plan, 'approved')
             try:
-                approved = await asyncio.wait_for(__event_call__({'type': 'confirmation', 'data': {
-                    'title': 'Approve one repair attempt?', 'message': message}}), timeout=180)
-                if approved is not True:
-                    engine.save(plan, 'canceled', {'detail': 'No repair was authorized.'})
-                elif time.time() >= plan['expires']:
-                    engine.save(plan, 'expired', {'detail': 'Approval arrived after expiry. Nothing changed.'})
-                else:
-                    async def attempt():
-                        await status(__event_emitter__, 'Working: checking current state and saving the backup…')
-                        await asyncio.to_thread(engine.apply, plan)
-                        await status(__event_emitter__, 'Working: attempt sent. Verifying the result…')
-                        result = await asyncio.to_thread(engine.verify, plan)
-                        engine.save(plan, 'verified' if result['verified'] else 'unverified', result)
-
-                    worker = asyncio.create_task(attempt())
-                    try:
-                        await asyncio.shield(worker)
-                    except asyncio.CancelledError:
-                        # Keep the execution lock until an already approved write finishes.
-                        await worker
-                        raise
-            except (TimeoutError, asyncio.CancelledError):
+                async def attempt():
+                    await show_message(chat, message, review_text(plan) + '\n\n**Working: checking state and saving the backup…**', __event_emitter__)
+                    await status(__event_emitter__, 'Working: checking current state and saving the backup…')
+                    await asyncio.to_thread(engine.apply, plan)
+                    await status(__event_emitter__, 'Working: attempt sent. Verifying the result…')
+                    result = await asyncio.to_thread(engine.verify, plan)
+                    engine.save(plan, 'verified' if result['verified'] else 'unverified', result)
+                worker = asyncio.create_task(attempt())
+                try:
+                    await asyncio.shield(worker)
+                except asyncio.CancelledError:
+                    await worker
+                    raise
+            except asyncio.CancelledError:
                 if plan['status'] not in ['verified', 'unverified']:
-                    engine.save(plan, 'failed_or_uncertain' if plan['status'] == 'attempting' else 'canceled',
-                                {'detail': 'Interrupted. Inspect the saved status and current app state before any new attempt.'})
+                    engine.save(plan, 'failed_or_uncertain' if plan['status'] == 'attempting' else 'blocked',
+                                {'detail': 'Interrupted. Inspect current state. Never repeat automatically.'})
                 raise
             except Exception as error:
                 engine.save(plan, 'failed_or_uncertain' if plan['status'] == 'attempting' else 'blocked',
                             {'detail': str(error) if isinstance(error, RepairError) else 'Operation failed. Inspect current app state. No automatic retry.'})
             finally:
                 await status(__event_emitter__, 'Repair: ' + plan['status'].replace('_', ' '), done=True)
-            return engine.public(plan)
+            return await show_message(chat, message, review_text(plan), __event_emitter__)

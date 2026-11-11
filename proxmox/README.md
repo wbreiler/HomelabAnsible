@@ -35,8 +35,9 @@ The guide also covers [guest mount checks](docs/offsite-observer.md#guest-mount-
 API through the existing Open WebUI. Observation uses a separate, explicit
 Netdata deployment playbook. [Application observations](docs/app-observer.md)
 add app self-checks, queue summaries, Docker healthchecks, and filtered logs.
-[Approved app repairs](docs/app-repairs.md) provide exact proposals, browser
-confirmation, backups, progress, and verification through supported app APIs.
+[Approved app repairs](docs/app-repairs.md) provide exact proposals, persistent
+Review/Approve/Cancel buttons, backups, progress, and verification through
+supported app APIs.
 
 ## Features
 

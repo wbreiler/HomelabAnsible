@@ -97,13 +97,17 @@ class NetdataIntegration(unittest.TestCase):
         self.assertEqual(first, webui.desired_config(first[0], first[1], self.settings))
         model = first[2]
         self.assertIn('homelab_repairs', model['meta']['toolIds'])
-        self.assertIn('browser dialog is the approval boundary', ' '.join(model['params']['system'].split()))
+        self.assertIn('action button is the approval boundary', ' '.join(model['params']['system'].split()))
+        self.assertEqual(model['meta']['actionIds'], ['homelab_repair_controls'])
+        self.assertNotIn('call approve_repair', model['params']['system'])
         self.assertNotIn('You cannot install, restart, repair', model['params']['system'])
         self.assertNotIn('private repair credential', str(first))
         self.assertNotIn('private tool source', str(first))
         self.assertFalse(model['meta']['capabilities']['builtin_tools'])
         del self.settings['repairs']
-        self.assertNotIn('homelab_repairs', webui.desired_config(first[0], first[1], self.settings)[2]['meta']['toolIds'])
+        readonly = webui.desired_config(first[0], first[1], self.settings)[2]['meta']
+        self.assertNotIn('homelab_repairs', readonly['toolIds'])
+        self.assertNotIn('actionIds', readonly)
 
 
 if __name__ == '__main__':

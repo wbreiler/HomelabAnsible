@@ -320,10 +320,13 @@ Use `../terraform/README.md` for provisioning and media management.
 * Open WebUI owns the private OpenAI connection and native MCP tool allowlist.
   Preserve unrelated providers and tools. Never expose generic function
   execution, raw logs, or SSH credentials through this model.
-* The optional native `homelab_repairs` tool uses an owner-bound browser
-  confirmation for each immutable app proposal. Preserve exact field and
-  destination allowlists, private backups, stale-state checks, single attempts,
-  and verification. Chat text is not approval. Never turn this into an arbitrary
+* The optional native `homelab_repairs` tool stages plans. Its matching
+  `homelab_repair_controls` Action uses owner-bound Review/Approve/Cancel buttons
+  for each immutable app proposal. No model-visible approval tool exists.
+  Bind each plan to its assistant message and compare the persisted and clicked
+  exact review before approval. Do not restore popup callbacks or text approvals.
+  Preserve exact field and destination allowlists, private backups, stale-state
+  checks, single attempts, and verification. Chat text is not approval. Never turn this into an arbitrary
   shell, HTTP, Docker, or file-edit tool. See [approved repairs](docs/app-repairs.md).
   Seerr's `libraries` field is read-only. Library repairs require a fresh,
   verified complete catalog and exactly one old/new ID pair. Explicit approval
