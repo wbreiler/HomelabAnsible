@@ -1,0 +1,20 @@
+services:
+  observer:
+    image: python:3.12-slim@sha256:05a994d2344eb364cc186910f4fc8786a38215f39f00d0acc25bff33a08f4177
+    command: [python3, -B, /app/server.py, /app/config.json]
+    user: '65534:65534'
+    group_add: ['{{ app_observer_socket.stat.gid }}']
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    volumes:
+      - {{ app_observer_dir }}/server.py:/app/server.py:ro
+      - {{ app_observer_dir }}/config.json:/app/config.json:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '2'}

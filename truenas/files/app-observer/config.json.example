@@ -1,0 +1,23 @@
+{
+  "app_observer_dir": "/mnt/example-pool/appdata/app-observer",
+  "app_observer_config": {
+    "bind": "192.0.2.14",
+    "clients": ["192.0.2.14", "192.0.2.20"],
+    "token": "REPLACE_WITH_A_SEPARATE_RANDOM_PRIVATE_TOKEN_AT_LEAST_32_CHARACTERS",
+    "apps": {
+      "media-app": {
+        "host": "nas",
+        "kind": "docker",
+        "containers": ["ix-media-app-media-app-1"]
+      },
+      "music-app": {
+        "host": "nas",
+        "kind": "arr",
+        "url": "http://192.0.2.14:8686",
+        "api_version": "v1",
+        "key": "READ_FROM_THE_EXISTING_PRIVATE_APP_CONFIGURATION",
+        "containers": ["ix-music-app-music-app-1"]
+      }
+    }
+  }
+}

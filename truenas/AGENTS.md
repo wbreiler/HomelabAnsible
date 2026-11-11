@@ -91,6 +91,13 @@ edits to the appliance filesystem or database.
   destinations. The Docker socket is privileged even with a read-only mount.
   See [Ask the lab](../proxmox/docs/netdata.md) for the model's narrower tool scope.
 
+- `playbooks/app-observer.yml` uses an explicitly approved Docker socket
+  collector for fixed health and filtered log reads. A read-only mount does not
+  restrict Docker API methods. Preserve the bounded routes, source-IP and token
+  checks, non-root container, image digest, and diagnostic filtering. Never
+  expose Docker operations or app credentials to the model. See
+  [application observations](../proxmox/docs/app-observer.md).
+
 For Zipline clips, export only the opt-in `Shared` directory read-only to the cluster nodes. Keep its containing SMB share out of the publisher. See [the publishing guide](../proxmox/docs/zipline.md#publish-a-clip-from-the-nas).
 
 ## Validation

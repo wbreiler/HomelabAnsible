@@ -1,0 +1,101 @@
+---
+- name: Configure read-only app health and diagnostic access
+  hosts: truenas
+  gather_facts: false
+  tasks:
+    - name: Require an explicit scoped application deployment
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode or truenas_allow_changes | default(false) | bool
+          - app_observer_dir is match('^/mnt/[^/]+/appdata/app-observer$')
+          - app_observer_config.token | default('') | length >= 32
+          - app_observer_config.apps | default({}) | length > 0
+      no_log: true
+
+    - name: Inspect the existing Docker socket
+      ansible.builtin.stat:
+        path: /var/run/docker.sock
+      register: app_observer_socket
+
+    - name: Inspect existing application storage
+      ansible.builtin.stat:
+        path: '{{ app_observer_dir | dirname }}'
+      register: app_observer_parent
+
+    - name: Require existing storage and Docker
+      ansible.builtin.assert:
+        that:
+          - app_observer_parent.stat.isdir | default(false)
+          - not app_observer_parent.stat.islnk | default(false)
+          - app_observer_socket.stat.issock | default(false)
+
+    - name: Create only the observer directory
+      ansible.builtin.file:
+        path: '{{ app_observer_dir }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Install the bounded observation service
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../proxmox/files/app-observer/server.py'
+        dest: '{{ app_observer_dir }}/server.py'
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart only the app observer
+
+    - name: Install private observer configuration
+      ansible.builtin.copy:
+        content: '{{ app_observer_config | to_nice_json }}'
+        dest: '{{ app_observer_dir }}/config.json'
+        owner: root
+        group: '{{ app_observer_socket.stat.gid }}'
+        mode: '0640'
+        backup: true
+      no_log: true
+      diff: false
+      notify: Restart only the app observer
+
+    - name: Read only the observer application
+      ansible.builtin.command:
+        argv: [midclt, call, app.query, '[["name","=","homelab-app-observer"]]', '{"extra":{"retrieve_config":true}}']
+      register: app_observer_existing
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Reconcile only the observer app through middleware
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
+      vars:
+        truenas_entities_apps: '{{ app_observer_existing.stdout | from_json }}'
+        desired_app:
+          name: homelab-app-observer
+          custom_app: true
+          state: RUNNING
+          custom_compose_config: "{{ lookup('template', '../files/app-observer/docker-compose.yml.j2') | from_yaml }}"
+      no_log: true
+
+    - name: Apply observer changes before verification
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify authenticated app inventory
+      ansible.builtin.uri:
+        url: 'http://{{ app_observer_config.bind }}:19998/apps'
+        headers:
+          Authorization: 'Bearer {{ app_observer_config.token }}'
+        return_content: true
+      register: app_observer_api
+      until: app_observer_api.status | default(0) == 200
+      retries: 10
+      delay: 3
+      no_log: true
+      when: not ansible_check_mode
+
+  handlers:
+    - name: Restart only the app observer
+      ansible.builtin.command:
+        argv: [midclt, call, -j, app.redeploy, homelab-app-observer]
+      changed_when: true
+      when: not ansible_check_mode

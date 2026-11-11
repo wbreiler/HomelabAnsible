@@ -23,6 +23,13 @@ Use `playbooks/netdata.yml` with `-e @group_vars/truenas.yml` and the normal
 mutation gate. Read the [deployment and permission guide](../proxmox/docs/netdata.md)
 for storage, Docker socket permissions, backup, and verification requirements.
 
+## Application observations
+
+`playbooks/app-observer.yml` deploys the separate, explicitly approved
+`homelab-app-observer` app. It reads fixed Docker health/log endpoints and app
+self-checks. The Docker socket remains privileged. Read the
+[permission and deployment guide](../proxmox/docs/app-observer.md) before use.
+
 ## Target
 
 | Setting | Value |
