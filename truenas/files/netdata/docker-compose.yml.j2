@@ -1,0 +1,25 @@
+services:
+  netdata:
+    image: netdata/netdata:v2.12.3@sha256:c7eab00e20901eb60595ebae0fbfe88e59464e663924461874719d40de0735d2
+    hostname: {{ inventory_hostname }}
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID, SYS_PTRACE]
+    environment:
+      DO_NOT_TRACK: '1'
+      NETDATA_CLAIM_TOKEN: ''
+    volumes:
+      - {{ netdata_config_dir }}/config:/etc/netdata
+      - {{ netdata_config_dir }}/lib:/var/lib/netdata
+      - {{ netdata_config_dir }}/cache:/var/cache/netdata
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '2'}

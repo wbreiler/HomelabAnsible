@@ -15,6 +15,14 @@ publication boundary. Its NFS export is read-only and restricted to the
 Proxmox nodes. Keep the Clips share root private. The existing Clips backup
 covers the media. See the [publishing guide](../proxmox/docs/zipline.md#publish-a-clip-from-the-nas).
 
+## Netdata collector
+
+The separate `homelab-netdata` custom app streams host and container resource
+metrics to the local Netdata parent. It leaves built-in reporting intact.
+Use `playbooks/netdata.yml` with `-e @group_vars/truenas.yml` and the normal
+mutation gate. Read the [deployment and permission guide](../proxmox/docs/netdata.md)
+for storage, Docker socket permissions, backup, and verification requirements.
+
 ## Target
 
 | Setting | Value |

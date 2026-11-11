@@ -1,0 +1,103 @@
+---
+- name: Install a separate Netdata collector without changing appliance reporting
+  hosts: truenas
+  gather_facts: false
+  vars:
+    netdata_parent: false
+    netdata_hostname: '{{ inventory_hostname }}'
+    netdata_bind: '127.0.0.1'
+    netdata_web_clients: ['127.0.0.1', '::1']
+    netdata_mcp_clients: ['127.0.0.1', '::1']
+    netdata_stream_clients: []
+    netdata_update_every: 5
+    netdata_stream_key: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../proxmox/.netdata-stream-key') | trim }}"
+  tasks:
+    - name: Require an authorized and bounded application deployment
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode or truenas_allow_changes | default(false) | bool
+          - >-
+            netdata_config_dir is match('^/mnt/[^/]+/appdata/netdata$')
+          - >-
+            netdata_parent_address is match('^[a-zA-Z0-9.-]+:[0-9]+$')
+          - >-
+            netdata_stream_key is match('^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$')
+      no_log: true
+
+    - name: Inspect the existing appdata parent
+      ansible.builtin.stat:
+        path: '{{ netdata_config_dir | dirname }}'
+      register: netdata_appdata
+
+    - name: Require existing application storage
+      ansible.builtin.assert:
+        that:
+          - netdata_appdata.stat.isdir | default(false)
+          - not netdata_appdata.stat.islnk | default(false)
+
+    - name: Create only Netdata application directories
+      ansible.builtin.file:
+        path: '{{ netdata_config_dir }}/{{ item }}'
+        state: directory
+        mode: '0755'
+      loop: ['', config, lib, cache]
+
+    - name: Configure local collection with shared Netdata templates
+      ansible.builtin.template:
+        src: '{{ playbook_dir }}/../../proxmox/roles/netdata/templates/{{ item }}.j2'
+        dest: '{{ netdata_config_dir }}/config/{{ item }}'
+        mode: "{{ '0600' if item == 'stream.conf' else '0644' }}"
+      loop: [netdata.conf, stream.conf]
+      no_log: true
+      diff: false
+      notify: Restart only the separate Netdata app
+
+    - name: Disable Netdata Cloud and external notification delivery
+      ansible.builtin.copy:
+        content: '{{ item.content }}'
+        dest: '{{ netdata_config_dir }}/config/{{ item.name }}'
+        mode: '0644'
+      loop:
+        - {name: cloud.conf, content: "[global]\n    enabled = no\n"}
+        - {name: health_alarm_notify.conf, content: "SEND_EMAIL=\"NO\"\n"}
+      notify: Restart only the separate Netdata app
+
+    - name: Read only the separate Netdata application
+      ansible.builtin.command:
+        argv: [midclt, call, app.query, '[["name","=","homelab-netdata"]]', '{"extra":{"retrieve_config":true}}']
+      check_mode: false
+      changed_when: false
+      register: netdata_existing_app
+      no_log: true
+
+    - name: Reconcile the separate collector through supported middleware
+      ansible.builtin.include_tasks: ../roles/truenas_entities/tasks/app.yml
+      vars:
+        truenas_entities_apps: '{{ netdata_existing_app.stdout | from_json }}'
+        desired_app:
+          name: homelab-netdata
+          custom_app: true
+          state: RUNNING
+          custom_compose_config: "{{ lookup('template', '../files/netdata/docker-compose.yml.j2') | from_yaml }}"
+      no_log: true
+
+    - name: Apply collector configuration before verification
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify the separate local collector
+      ansible.builtin.uri:
+        url: http://127.0.0.1:19999/api/v1/info
+        return_content: true
+      register: netdata_api
+      retries: 15
+      delay: 4
+      until: netdata_api.status | default(0) == 200
+      changed_when: false
+      when: not ansible_check_mode
+
+  handlers:
+    - name: Restart only the separate Netdata app
+      ansible.builtin.command:
+        argv: [midclt, call, -j, app.redeploy, homelab-netdata]
+      changed_when: true
+      when: not ansible_check_mode

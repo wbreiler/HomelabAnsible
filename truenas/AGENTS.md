@@ -85,6 +85,12 @@ edits to the appliance filesystem or database.
   Threadfin uses the canonical playlist/XMLTV links. Proxy/DNS ownership remains
   in `../proxmox/docs/local-services.md`. TrueNAS API proxy upstreams require TLS.
 
+- `playbooks/netdata.yml` manages only the separate `homelab-netdata` app and
+  its own directories under existing appdata. Never replace the appliance's
+  Netdata service. Preserve image pins, loopback binding, and explicit streaming
+  destinations. The Docker socket is privileged even with a read-only mount.
+  See [Ask the lab](../proxmox/docs/netdata.md) for the model's narrower tool scope.
+
 For Zipline clips, export only the opt-in `Shared` directory read-only to the cluster nodes. Keep its containing SMB share out of the publisher. See [the publishing guide](../proxmox/docs/zipline.md#publish-a-clip-from-the-nas).
 
 ## Validation

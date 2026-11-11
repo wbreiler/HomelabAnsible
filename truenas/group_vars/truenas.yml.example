@@ -9,3 +9,7 @@ truenas_allow_management_access_changes: false
 
 # Required by playbooks/fastchannels.yml. Resolve this name through local DNS.
 fastchannels_public_base_url: https://fastchannels.example.com
+
+# Optional separate Netdata collector. Existing appdata storage is required.
+netdata_config_dir: /mnt/example-pool/appdata/netdata
+netdata_parent_address: 192.0.2.10:19999
