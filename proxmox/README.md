@@ -6,30 +6,6 @@ This Ansible project automates the setup of a Proxmox VE cluster with PBS backup
 **PBS Server**: mnemosyne (10.10.20.2, `pbs_nodes` inventory group)
 **Second play**: `site.yml` also applies network tuning to both proxmox_cluster and pbs_nodes groups
 
-[Discord health and update queries](docs/maintenance-queries.md) provides
-owner-mentioned, read-only checks on PVE, PBS, and TrueNAS. One shared reply
-shows host sections, custom-app version comparisons, and the total estimated
-API cost. Optional thread replies retain each host's details and model.
-Image/source checks include pinned containers,
-native LXC apps, and Minecraft packs.
-Explicit `update APP on HOST` commands prepare one app update proposal.
-Owner approval starts a separate guarded executor. See
-[supported update paths](docs/maintenance-queries.md#initiate-an-app-update).
-`update all on HOST` and `update the homelab` prepare app and OS batches.
-`update apps on HOST` selects guarded apps and managed app packages.
-`update os on HOST` selects host and eligible guest APT updates, preserving holds.
-Both use the same proposal, owner approval, cancellation, and backup checks.
-One approval starts sequential work, with one channel summary and exact plans
-in its thread. Failures stop pending work. Batches never reboot hosts or guests.
-See [batch coverage and exclusions](docs/maintenance-queries.md#update-a-host-or-the-homelab).
-Read-only app/package planning checks three targets at a time. TrueNAS reuses
-fresh image observations within each batch and polls Discord between cron starts.
-Approved updates remain sequential.
-Stopped or missing TrueNAS containers remain visible as unavailable checks.
-Canceled batches retry failed result delivery without repeating updates.
-Deleted reports release pending requests. Early approval reactions show how to
-review and approve again. Package retention flags remain architecture-specific.
-
 ## Provisioning ownership
 
 Terraform owns all existing guest hardware and lifecycle declarations. See
@@ -682,7 +658,7 @@ ansible-playbook site.yml --tags lxc_auto_update \
 Set these flags in the ignored group variables to preserve the configuration.
 The scheduled updater compares failed systemd unit IDs before and after APT.
 If new units fail, the node's private `/var/lib/lxc-auto-update/last-run.json`
-records their names for that CT. See [maintenance failure briefs](docs/maintenance-briefs.md).
+records their names for that CT.
 
 The updater requires an LXC backup on `lxc_auto_update_backup_storage` from
 the last eight hours. A missing, stale, or failed-verification backup blocks
@@ -776,20 +752,6 @@ Disable the schedule with `lxc_app_updates_enabled: false` and redeploy the
 role. Use `lxc_app_updates_exclude` for individual catalog applications.
 
 #### Discord maintenance notifications
-
-Optional [maintenance failure briefs](docs/maintenance-briefs.md) add read-only
-explanations for failed OS/application runs. A per-node worker reads current
-reports and selected journal signals, then sends a Discord brief. OpenAI analysis
-uses a protected key file or Vault variable; without it, the worker sends factual
-briefs. Existing notifications remain independent. Deploy through `maintenance-briefs.yml`.
-Optional interactive repairs use a Discord bot: the owner requests a stronger-model
-proposal with 🔍 and approves one concrete attempt with ✅. The separate executor
-reuses guarded single-guest maintenance, retains backup/version checks, and never
-runs generated commands. See the same guide for credentials, limits, and tests.
-One status reply shows proposal preparation, approval, execution, review, and
-completion. Idle reaction checks run about every ten seconds.
-The same guide covers a real backup-prerequisite drill on the existing disposable
-Terraform pilot, with separate reports and Discord approval before any repair.
 
 Set `lxc_update_discord_webhook_url` in ignored group variables or Vault.
 It can reference an existing webhook, such as `"{{ diun_discord_webhook_url }}"`.

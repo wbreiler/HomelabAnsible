@@ -292,7 +292,7 @@ def install_native(app, target, pins, vmid):
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
 
 
-def update_packages(row, config, node, dry_run, retry_failed, approved_plan=None):
+def update_packages(row, config, node, dry_run, retry_failed):
     vmid = row['vmid']
     failure = PINS / f'packages-{vmid}.failed.json'
     if failure.exists() and not retry_failed:
@@ -312,8 +312,6 @@ def update_packages(row, config, node, dry_run, retry_failed, approved_plan=None
             changes[package] = target
             previous[package] = current
             print(f'{"PLAN" if dry_run else "UPDATE"} {vmid} {package}: {current} -> {target}', flush=True)
-    if approved_plan is not None and approved_plan != {'previous': previous, 'targets': changes}:
-        raise RuntimeError('managed package versions changed after approval')
     if not changes or dry_run:
         return {'app': 'packages', 'vmid': vmid, 'status': 'planned' if changes else 'current', 'previous': previous, 'targets': changes}
     backup(vmid, config, node)
@@ -340,24 +338,16 @@ def update_packages(row, config, node, dry_run, retry_failed, approved_plan=None
     return {'app': 'packages', 'vmid': vmid, 'status': 'updated', 'previous': previous, 'targets': changes}
 
 
-def resolve_update(app, spec, row, config, observe=True):
-    """Resolve immutable pins without changing a guest; proposals do not start age clocks."""
+def resolve_update(app, spec, row, config):
+    """Resolve immutable pins and record package candidate age."""
     vmid = row['vmid']
     current = current_version(app, spec, vmid)
     if 'package' in spec:
         versions = guest(vmid, 'apt-cache', 'madison', spec['package']).splitlines()
         candidates = [line.split('|')[1].strip() for line in versions if '|' in line]
         target = apt_candidate(current, candidates)
-        if target:
-            if observe:
-                ready = package_ready(vmid, spec['package'], target, config)
-            else:
-                path = PINS / f'candidate-{vmid}-{spec["package"]}.json'
-                seen = json.loads(path.read_text()) if path.exists() else {}
-                ready = (seen.get('version') == target and
-                         time.time() - seen['first_seen'] >= config['minimum_age_hours'] * 3600)
-            if not ready:
-                target = None
+        if target and not package_ready(vmid, spec['package'], target, config):
+            target = None
         pins = {app + '_version': target} if target else None
     else:
         endpoint = spec.get('api', 'https://api.github.com')
@@ -368,14 +358,12 @@ def resolve_update(app, spec, row, config, observe=True):
     return {'current': current, 'target': target, 'pins': pins}
 
 
-def update_one(app, spec, row, config, node, dry_run, retry_failed=False, approved_plan=None):
+def update_one(app, spec, row, config, node, dry_run, retry_failed=False):
     vmid = row['vmid']
     failure = PINS / f'{app}-{vmid}.failed.json'
     if failure.exists() and not retry_failed:
         raise RuntimeError('previous deployment failed; inspect the log before --retry-failed')
-    resolved = resolve_update(app, spec, row, config, observe=approved_plan is None)
-    if approved_plan is not None and resolved != approved_plan:
-        raise RuntimeError('release, installed version, or artifact changed after approval')
+    resolved = resolve_update(app, spec, row, config)
     current, target, pins = (resolved[key] for key in ('current', 'target', 'pins'))
     if not pins:
         if failure.exists():
