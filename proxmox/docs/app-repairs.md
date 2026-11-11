@@ -21,6 +21,7 @@ Chat text such as “approved” does not authorize execution. The model has no
 approval tool. Plans expire after ten minutes. Expired plans need a fresh
 proposal. Existing popup-era plans cannot use these buttons because they lack
 the message binding. Only one button operation or repair may run at a time.
+Repeated clicks on a handled proposal show its saved result without another attempt.
 
 ## Available repairs
 
@@ -196,7 +197,7 @@ Use **Test repair approval** or ask:
 
 First review and cancel a drill. Then request another drill, review it, and approve it. Check that only
 the fixture changed, that its backup contains the previous value, and that a
-second invocation of the same plan is refused. Do not use a real application
+second click shows the saved result without another attempt. Do not use a real application
 repair as an installation test. Actual repairs need their own concrete approval.
 
 Platform references: [Open WebUI Action buttons](https://docs.openwebui.com/features/extensibility/plugin/functions/action/),

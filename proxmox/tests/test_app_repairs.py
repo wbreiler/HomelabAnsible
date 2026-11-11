@@ -97,8 +97,8 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(json.loads(Path(result['backup']).read_text())['before'], {'value': 'before'})
         self.assertEqual(Path(result['backup']).stat().st_mode & 0o777, 0o600)
         self.assertTrue(any('Working' in x['data'].get('description', '') for x in events))
-        with self.assertRaises(r.RepairError):
-            await self.approve(plan)
+        with patch.object(r.Repairs, 'apply', side_effect=AssertionError('Duplicate must not execute')):
+            self.assertEqual(await self.approve(plan), result)
         reverse_meta = META | {'message_id': uuid.uuid4().hex}
         reverse = await self.tool.prepare_rollback(plan['id'], __user__=USER, __metadata__=reverse_meta)
         self.assertEqual(reverse['diff']['value'], {'before': 'after', 'after': 'before'})
@@ -124,8 +124,7 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['status'], 'canceled')
         self.assertFalse(Path(plan['backup']).exists())
         self.assertFalse((r.STATE / 'drill-fixture.json').exists())
-        with self.assertRaises(r.RepairError):
-            await self.click(plan, 'approve')
+        self.assertEqual((await self.click(plan, 'approve'))['status'], 'canceled')
 
     async def test_wrong_owner_chat_and_automation_fail_closed(self):
         plan = await self.plan()
@@ -229,8 +228,7 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(r, 'api', side_effect=api):
             plan = await self.prepare('arr', {'allowedHosts': 'arr.example.test'}, __user__=USER, __metadata__=META)
             result = await self.approve(plan)
-            with self.assertRaises(r.RepairError):
-                await self.approve(plan)
+            self.assertEqual(await self.approve(plan), result)
         self.assertEqual(result['status'], 'failed_or_uncertain')
         self.assertEqual(len(writes), 1)
         self.assertTrue(Path(plan['backup']).exists())
@@ -382,8 +380,7 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(len(writes), 1 if failure in ['sync', 'unexpected_catalog'] else 2)
                     self.assertEqual(len(result.get('steps_completed', [])), 0 if failure == 'sync' else 1 if failure else 2)
                     self.assertEqual(json.loads(Path(plan['backup']).read_text())['before'], latest)
-                    with self.assertRaises(r.RepairError):
-                        await self.approve(plan)
+                    self.assertEqual(await self.approve(plan), result)
                     with self.assertRaises(r.RepairError):
                         await self.tool.prepare_rollback(plan['id'], __user__=USER, __metadata__=META)
                 self.assertEqual(current['libraries'][0]['lastScan'], 300)

@@ -1,7 +1,7 @@
 """
 title: Homelab repairs
 author: HomelabAnsible
-version: 1.3.0
+version: 1.3.1
 description: Review an exact app repair, approve once, and verify the result.
 """
 import asyncio
@@ -524,9 +524,7 @@ class Action:
                 raise RepairError('This message needs exactly one new repair proposal. Ask for a fresh proposal in this chat.')
             plan = plans[0]
             if plan['status'] != 'proposed':
-                if __id__ == 'review':
-                    return await show_message(chat, message, review_text(plan), __event_emitter__)
-                raise RepairError('This proposal was already handled. No second attempt is allowed.')
+                return await show_message(chat, message, review_text(plan), __event_emitter__)
             if time.time() >= plan['expires']:
                 engine.save(plan, 'expired', {'detail': 'The proposal expired. Ask for a fresh proposal.'})
                 return await show_message(chat, message, review_text(plan), __event_emitter__)
