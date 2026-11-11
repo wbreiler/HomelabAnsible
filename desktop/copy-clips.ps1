@@ -1,12 +1,13 @@
 param(
     [switch]$Install,
     [switch]$FromExplorer,
+    [ValidateNotNullOrEmpty()]
+    [string]$Destination = '\\10.10.20.3\clips',
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [string[]]$Path
 )
 
 $ErrorActionPreference = 'Stop'
-$destination = '\\10.10.20.3\clips'
 
 if ($Install) {
     $folder = Join-Path $env:LOCALAPPDATA 'HomelabAnsible'

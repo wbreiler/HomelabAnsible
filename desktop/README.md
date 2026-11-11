@@ -53,6 +53,55 @@ leaves the original available for inspection, including files with additional
 NTFS data streams. Verification reads the uploaded file back over SMB.
 You can also run `.\copy-clips.ps1 "C:\Videos\My clip.mp4"` directly.
 
+### Isolated Clips regression tests
+
+Use a disposable Windows environment with Windows PowerShell 5.1, Robocopy,
+and a local NTFS `%TEMP%`. The harness needs no Pester installation or admin
+rights. From `desktop/`, run:
+
+```powershell
+powershell.exe -NoProfile -File .\tests\copy-clips.Tests.ps1
+```
+
+The harness creates synthetic recordings and destinations under a unique
+temporary directory. It permanently deletes only these fixtures and removes
+the directory afterward. Every transfer supplies the named `-Destination`
+override. The production default remains `\\10.10.20.3\clips`, and the Send To
+shortcut remains unchanged. Do not use real recordings as test fixtures.
+
+The 26 cases cover parameter binding, real Robocopy uploads and SHA-256 checks,
+existing destinations, duplicate names, batching, interrupted transfers,
+missing or short copies, hash mismatches, concurrent publication, source
+replacement, NTFS streams, open handles, relative paths, junctions, and cleanup.
+Duplicate selections keep the existing first-wins behavior: the first file
+can be deleted after verification. A second file with the same name stays.
+Selecting the same path twice does not protect that file from verified deletion.
+
+Fault cases replace only the Robocopy command expression in an in-memory copy
+of the parsed script. They inject deterministic failures without changing the
+verification or deletion functions. Real-copy cases execute the original script.
+The harness checks errors, retained contents, published contents, and staging
+cleanup. It prints PASS, FAIL, and SKIP results and exits nonzero on failure.
+
+Two network-source cases skip unless you supply an **existing scratch share
+on the disposable Windows machine**, for example:
+
+```powershell
+powershell.exe -NoProfile -File .\tests\copy-clips.Tests.ps1 -NetworkRoot '\\localhost\clips-test'
+```
+
+The harness accepts only localhost or loopback UNC paths. It creates a unique
+fixture directory inside that share. The mapped-drive case temporarily maps
+an unused drive letter without persistence, then removes that mapping.
+The harness does not create shares, change credentials, install the shortcut,
+or change OBS, Ansible, routing, or the production share.
+
+These tests do not prove SMB server durability, behavior during a process kill
+or power loss, Explorer UI behavior, or the live gaming PC setup. Injected
+transfer failures exercise normal exception cleanup, not recovery after a
+terminated process. Run the Windows suite before relying on its regression
+coverage. A static check on macOS cannot validate Windows file-handle semantics.
+
 `gaming_pc_install_approved_applications` is disabled, and the WinGet,
 interactive-user package, and optional-feature lists are empty. The role does
 not duplicate the ISO-owned software baseline. Windows/driver updates,

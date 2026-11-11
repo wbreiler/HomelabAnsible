@@ -63,6 +63,14 @@ context. They do not establish current availability or user access.
 
 ## Validation
 
+For `copy-clips.ps1`, use the isolated regression harness documented in the
+[README](README.md#isolated-clips-regression-tests). Run it only in a disposable
+Windows PowerShell 5.1 environment with local NTFS temporary storage. The
+harness supplies a temporary destination and synthetic files. Never substitute
+the production share or real recordings. Report Windows tests as unexecuted
+when no suitable isolated environment exists. Do not deploy the script or run
+`-Install` merely to test it.
+
 Run static checks before connecting to Windows:
 
 ```sh
