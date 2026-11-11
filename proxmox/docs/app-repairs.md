@@ -20,7 +20,7 @@ Only one proposal may await approval or execute at a time.
 | --- | --- | --- |
 | Sonarr, Radarr, Lidarr | Allowed hosts, existing download-client connection fields, existing remote-path mappings | Restart the application |
 | Prowlarr | Allowed hosts, existing download-client connection fields | Restart the application |
-| Seerr | Plex connection settings and explicitly verified library ID replacements | None |
+| Seerr | Plex connection settings | Verified library catalog sync and replacement selection |
 | SABnzbd | None | Resume a paused queue |
 | repair-drill | Toggle an isolated fixture between `before` and `after` | No service changes |
 
@@ -28,19 +28,36 @@ The live catalog determines which instances and records are configured.
 Download destinations must match an exact configured host/port/TLS/base-path
 combination. Mapping paths stay within configured media roots. Allowed hosts
 must retain the verified direct and reverse-proxy names. Existing records can
-be edited. The tool cannot create or delete records.
+be edited. Record creation and deletion are unavailable except through Seerr's
+explicit catalog refresh described below.
 
-Seerr library repairs change only configured old/new ID pairs whose names and
-types were verified against live Plex within the preceding hour. They preserve
-library order, enabled flags, names, types, scan metadata, and connection settings.
-Background `lastScan` timestamps can advance during review. The executor preserves
-their current values and excludes only these timestamps from the comparison.
-All other configuration drift still blocks execution.
-Unknown pairs and mixed connection/library changes fail. The private policy's
-`library_id_repairs` list stores `{name, type, from_id, to_id}` records, with a
-`library_id_repairs_verified_at` Unix timestamp. Refresh this evidence through
-read-only Plex queries before enabling a new pair. The tool receives no Plex
-credential. A rollback reverses an approved pair through a separate proposal.
+Seerr 3.5.0 marks `libraries` read-only on its Plex settings endpoint.
+A `sync_libraries` proposal instead uses two supported operations:
+
+1. POST `/api/v1/settings/plex/library/sync` without a body to refresh the complete catalog.
+2. PUT `/api/v1/settings/plex/library/{id}` with `{"enabled": true}` if the replacement was previously enabled.
+
+The proposal shows the expected complete catalog and both steps. Exactly one
+verified old/new ID pair must match the current configuration. Names and types
+must match fresh Plex evidence. Existing IDs retain their enabled flags and
+scan timestamps. A replacement ID starts disabled and loses its old scan marker.
+The second request restores its approved selection. No full scan or restart runs.
+Background `lastScan` timestamps may advance during review. Only those timestamps
+are excluded from the stale-state comparison. Other configuration drift blocks execution.
+
+The private policy's `library_id_repairs` list stores `{name, type, from_id, to_id}`
+records. `library_catalog` stores the complete expected `{id, name, type}` list.
+`library_id_repairs_verified_at` is their verification time in Unix seconds.
+Read Plex's library sections and verify the server identity before enabling a
+pair. Match Seerr's filter: only movie/show libraries with a metadata agent.
+Evidence expires after one hour and is checked again before execution.
+The repair tool receives no Plex credential.
+
+Sync refreshes the entire catalog. A catalog change on Plex after the read-only
+check can therefore affect Seerr. If the sync response differs from the expected
+catalog, the tool stops before the enable request. A partial failure can leave
+the replacement disabled. There is no automatic retry or library rollback.
+Inspect the saved step receipts and current configuration before a new proposal.
 
 This version cannot repair every observed issue. It cannot replace credentials,
 change indexer accounts, modify arbitrary files, manage Docker, install updates,
@@ -78,7 +95,8 @@ code: an administrator can modify this enforcement code.
 A proposal stores the original API resource privately. Immediately before a
 write, the executor checks the current resource and private policy against the
 saved plan. Stale plans require new approval. It saves and flushes a separate
-backup before marking an attempt as started and sending one mutation.
+backup before marking an attempt as started. Most actions send one mutation.
+A Seerr library repair sends the two fixed requests described above, at most once each.
 
 Backups and plan records live under `/root/.open-webui/repair-plans/` with
 mode `0700` on the directory and `0600` on JSON files. They can contain complete
@@ -98,10 +116,11 @@ and logs afterward. Restart verification requires a changed app start time.
 Resume verification requires an unpaused queue.
 
 Ask for a rollback of the repair ID to create a new configuration proposal.
-Rollback also requires approval. It reverses only the fields from the original
+Rollback also requires approval. Library sync has no supported rollback action.
+For editable fields, rollback reverses only the fields from the original
 attempt. It does not undo downloads, imports, or other jobs triggered meanwhile.
 Seerr's detected name/ID are derived again by its API. There is no automatic
-rollback. A manual recovery can use the protected backup and the app's own API.
+rollback. The protected backup supports investigation and separately reviewed recovery.
 
 The app APIs do not provide an atomic compare-and-swap for these settings.
 Avoid simultaneous edits in the app while approving a repair. The local lock

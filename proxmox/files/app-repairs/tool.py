@@ -1,7 +1,7 @@
 """
 title: Homelab repairs
 author: HomelabAnsible
-version: 1.1.0
+version: 1.2.0
 description: Review an exact app repair, approve once, and verify the result.
 """
 import asyncio
@@ -25,9 +25,11 @@ FIELDS = {
     'host': ['allowedHosts'],
     'downloadclient': ['host', 'port', 'useSsl', 'urlBase'],
     'remotepathmapping': ['host', 'remotePath', 'localPath'],
-    'plex': ['ip', 'port', 'useSsl', 'libraries'],
+    'plex': ['ip', 'port', 'useSsl'],
     'fixture': ['value'],
 }
+ACTIONS = {'arr': ['configure', 'restart'], 'sabnzbd': ['resume'],
+           'seerr': ['configure', 'sync_libraries'], 'drill': ['configure']}
 MAX_BYTES = 1024 * 1024
 
 
@@ -97,8 +99,8 @@ def projection(resource, value):
         raise RepairError('Unexpected app configuration format.')
     values = {x['name']: x.get('value') for x in value.get('fields', [])} if resource == 'downloadclient' else value
     result = {field: values[field] for field in FIELDS.get(resource, []) if field in values}
-    if 'libraries' in result:
-        libraries = result['libraries']
+    if resource == 'plex' and 'libraries' in values:
+        libraries = values['libraries']
         if not isinstance(libraries, list) or len(libraries) > 50 or not all(isinstance(x, dict) for x in libraries):
             raise RepairError('Unexpected library configuration format.')
         result['libraries'] = [{k: v for k, v in item.items() if k in ['id', 'name', 'type', 'enabled', 'lastScan']}
@@ -154,8 +156,7 @@ class Repairs:
     def inspect(self, name, resource):
         if name == 'all':
             return {'apps': {key: {'host': app['host'], 'resources': app['resources'],
-                                  'actions': ['configure'] + (['restart'] if app['kind'] == 'arr' else [])
-                                  if app['kind'] != 'sabnzbd' else ['resume']}
+                                  'actions': ACTIONS[app['kind']]}
                              for key, app in self.apps.items()},
                     'limits': 'Only listed apps, fields, and actions. No shell, host, storage, credential, update, or deletion operations.'}
         app = self.app(name)
@@ -163,7 +164,9 @@ class Repairs:
                   'allowed_hosts': app.get('allowed_hosts', []), 'destinations': app.get('destinations', {}),
                   'path_roots': app.get('path_roots', []),
                   'library_id_repairs': app.get('library_id_repairs', []),
-                  'library_id_repairs_verified_at': app.get('library_id_repairs_verified_at')}
+                  'library_id_repairs_verified_at': app.get('library_id_repairs_verified_at'),
+                  'library_catalog': app.get('library_catalog', []),
+                  'actions': ACTIONS[app['kind']]}
         if resource:
             if resource not in app['resources']:
                 raise RepairError('Unsupported resource.')
@@ -189,8 +192,6 @@ class Repairs:
                 valid = type(value) is int and 1 <= value <= 65535
             elif key == 'useSsl':
                 valid = type(value) is bool
-            elif key == 'libraries':
-                valid = isinstance(value, list) and 0 < len(value) <= 50 and all(isinstance(x, dict) for x in value)
             else:
                 valid = isinstance(value, str) and len(value) <= 512 and all(32 <= ord(c) < 127 for c in value)
             if not valid:
@@ -205,31 +206,11 @@ class Repairs:
                 raise RepairError('Allowed hosts must include the configured access names and contain no wildcards or unknown names.')
         if resource in ['downloadclient', 'plex']:
             kind = before.get('implementation', 'plex')
-            destination = {k: updated.get(k) for k in FIELDS[resource] if k != 'libraries'}
+            destination = {k: updated.get(k) for k in FIELDS[resource]}
             if resource == 'downloadclient':
                 destination['urlBase'] = destination['urlBase'] or ''
             if destination not in app.get('destinations', {}).get(kind, []):
                 raise RepairError('Connection changes must match an explicitly configured destination, including port and TLS.')
-        if 'libraries' in changes:
-            if resource != 'plex' or set(changes) != {'libraries'} or len(before['libraries']) != len(changes['libraries']):
-                raise RepairError('Library ID repairs cannot change other settings or add/remove libraries.')
-            if not restore and not 0 <= time.time() - app.get('library_id_repairs_verified_at', 0) <= 3600:
-                raise RepairError('Library ID evidence is older than one hour. Recheck Plex before proposing this repair.')
-            ids = []
-            for previous, replacement in zip(before['libraries'], changes['libraries']):
-                if (digest({k: v for k, v in previous.items() if k != 'id'})
-                        != digest({k: v for k, v in replacement.items() if k != 'id'})):
-                    raise RepairError('Preserve library order, names, types, enabled state, and scan metadata.')
-                ident = replacement.get('id')
-                if not isinstance(ident, str) or not re.fullmatch(r'[1-9][0-9]{0,8}', ident) or ident in ids:
-                    raise RepairError('Library IDs must be unique positive numeric strings.')
-                ids.append(ident)
-                if ident != previous['id']:
-                    pair = {'name': previous['name'], 'type': previous['type'],
-                            'from_id': ident if restore else previous['id'],
-                            'to_id': previous['id'] if restore else ident}
-                    if pair not in app.get('library_id_repairs', []):
-                        raise RepairError('This exact library ID replacement has not been verified against Plex.')
         if resource == 'remotepathmapping':
             if updated['host'] not in app.get('allowed_hosts', []):
                 raise RepairError('Unknown mapping host.')
@@ -240,30 +221,61 @@ class Repairs:
                     raise RepairError('Mapping paths must stay inside the configured media roots.')
         return {k: {'before': old[k], 'after': v} for k, v in changes.items() if old[k] != v}
 
+    def catalog(self, libraries):
+        if not isinstance(libraries, list) or len(libraries) > 50:
+            raise RepairError('Unexpected library catalog.')
+        try:
+            result = [{k: item[k] for k in ['id', 'name', 'type', 'enabled']} for item in libraries]
+            if any(not isinstance(x['id'], str) or not re.fullmatch(r'[1-9][0-9]{0,8}', x['id'])
+                   or not isinstance(x['name'], str) or not 1 <= len(x['name']) <= 512
+                   or x['type'] not in ['movie', 'show']
+                   or type(x['enabled']) is not bool for x in result) or len({x['id'] for x in result}) != len(result):
+                raise ValueError()
+            return sorted(result, key=lambda x: x['id'])
+        except (KeyError, TypeError, ValueError):
+            raise RepairError('Unexpected library catalog fields.') from None
+
+    def sync_target(self, app, before):
+        if not 0 <= time.time() - app.get('library_id_repairs_verified_at', 0) <= 3600:
+            raise RepairError('Plex catalog evidence is older than one hour. Recheck Plex before a new proposal.')
+        target = copy.deepcopy(projection('plex', before)['libraries'])
+        matches = 0
+        for pair in app.get('library_id_repairs', []):
+            for library in target:
+                if (library['id'], library['name'], library['type']) == (pair['from_id'], pair['name'], pair['type']):
+                    library['id'] = pair['to_id']
+                    library.pop('lastScan', None)
+                    matches += 1
+        if matches != 1:
+            raise RepairError('Exactly one verified replacement must match the current Seerr catalog.')
+        actual = [{k: x[k] for k in ['id', 'name', 'type']} for x in self.catalog(target)]
+        if actual != sorted(app.get('library_catalog', []), key=lambda x: x['id']):
+            raise RepairError('The expected catalog differs from the verified Plex evidence.')
+        return target
+
     def prepare(self, name, action, resource, record_id, changes, owner, chat, restore=False):
         app = self.app(name)
-        if action not in ['configure', 'restart', 'resume']:
+        if action not in ['configure', 'restart', 'resume', 'sync_libraries']:
             raise RepairError('Unsupported repair action.')
         if action == 'restart' and app['kind'] != 'arr' or action == 'resume' and app['kind'] != 'sabnzbd':
             raise RepairError('This recovery action is not supported for the app.')
+        if action == 'sync_libraries' and app['kind'] != 'seerr':
+            raise RepairError('Library sync is available only for Seerr.')
         if action == 'configure' and (resource not in app['resources'] or resource not in FIELDS):
             raise RepairError('Unsupported configuration resource.')
         if action != 'configure' and changes:
             raise RepairError('Recovery actions accept no field changes.')
         if action != 'configure':
-            resource, record_id = ('system' if action == 'restart' else 'queue'), 0
+            resource, record_id = {'restart': 'system', 'resume': 'queue', 'sync_libraries': 'plex'}[action], 0
         before = self.snapshot(name, action, resource, record_id)
         if not isinstance(before, dict):
             raise RepairError('Select a single record ID before proposing a change.')
         if action == 'configure' and resource == 'host':
             record_id = before['id']
-        if restore and resource == 'plex' and 'libraries' in changes:
-            changes = copy.deepcopy(changes)
-            for current, previous in zip(before['libraries'], changes['libraries']):
-                previous.pop('lastScan', None)
-                if 'lastScan' in current:
-                    previous['lastScan'] = current['lastScan']
         diff = self.validate(app, resource, before, changes, restore) if action == 'configure' else {}
+        if action == 'sync_libraries':
+            target = self.sync_target(app, before)
+            diff = {'libraries': {'before': projection('plex', before)['libraries'], 'after': target}}
         if action == 'configure' and not diff:
             raise RepairError('Those values already match. No repair is needed.')
         if action == 'resume' and before.get('paused') is not True:
@@ -275,11 +287,13 @@ class Repairs:
                 'status': 'proposed', 'restore': restore, 'backup': str(STATE / (ident + '.backup.json')),
                 'risk': {'configure': 'Only these settings change. App jobs can behave differently immediately. No service restart is included.',
                          'restart': 'This app will briefly disconnect. Active jobs can be interrupted. No configuration change is included.',
+                         'sync_libraries': 'Refresh Seerr libraries from Plex, then restore the approved enabled selection. Replaced libraries lose their old scan marker. A partial failure can leave the replaced library disabled. Unexpected catalog changes stop follow-up writes. No automatic rollback or service restart.',
                          'resume': 'Queued downloads will resume and consume network bandwidth and storage. No configuration change is included.'}[action]}
-        if app['kind'] == 'seerr':
+        if app['kind'] == 'seerr' and action == 'configure':
             plan['risk'] += ' Seerr tests Plex and can update its detected server name and ID. A failed API response can leave in-memory settings changed.'
-            if 'libraries' in diff:
-                plan['risk'] += ' Only verified library IDs change; current background scan timestamps are preserved at execution.'
+        if action == 'sync_libraries':
+            plan['steps'] = ['Refresh the complete library list from the current Plex server.',
+                             'Restore enabled=true only for the approved replacement library if previously enabled.']
         if app['kind'] == 'drill':
             plan['risk'] = 'DRILL: changes only a disposable repair fixture inside Open WebUI. No homelab service is affected.'
         private_write(STATE / (ident + '.json'), plan)
@@ -297,7 +311,7 @@ class Repairs:
         return plan
 
     def public(self, plan):
-        return {k: plan[k] for k in ['id', 'app', 'host', 'action', 'resource', 'record_id', 'diff', 'status', 'expires', 'backup', 'risk', 'result'] if k in plan}
+        return {k: plan[k] for k in ['id', 'app', 'host', 'action', 'resource', 'record_id', 'diff', 'status', 'expires', 'backup', 'risk', 'result', 'steps', 'steps_completed'] if k in plan}
 
     def save(self, plan, status, result=None):
         plan['status'] = status
@@ -308,17 +322,16 @@ class Repairs:
     def apply(self, plan):
         app = self.app(plan['app'])
         current = self.snapshot(plan['app'], plan['action'], plan['resource'], plan['record_id'])
-        library_repair = plan['resource'] == 'plex' and 'libraries' in plan['diff']
+        library_repair = plan['action'] == 'sync_libraries'
         observed = without_scan_times(current) if library_repair else current
         expected = without_scan_times(plan['before']) if library_repair else plan['before']
         if plan['policy'] != digest(json.loads(CONFIG.read_text())) or digest(observed) != digest(expected):
             raise RepairError('App state or repair policy changed. Prepare a fresh proposal.')
         changes = {k: v['after'] for k, v in plan['diff'].items()}
         if library_repair:
-            # Background scans advance these timestamps while the owner reviews the ID change.
-            changes['libraries'] = copy.deepcopy(current['libraries'])
-            for actual, approved in zip(changes['libraries'], plan['diff']['libraries']['after']):
-                actual['id'] = approved['id']
+            changes['libraries'] = self.sync_target(app, current)
+            if digest(without_scan_times(changes)) != digest(without_scan_times({'libraries': plan['diff']['libraries']['after']})):
+                raise RepairError('The expected catalog changed. Prepare a new proposal.')
         if plan['action'] == 'configure':
             self.validate(app, plan['resource'], current, changes, plan.get('restore', False))
         private_write(Path(plan['backup']), {'app': plan['app'], 'resource': plan['resource'],
@@ -326,6 +339,22 @@ class Repairs:
         self.save(plan, 'attempting')
         if app['kind'] == 'drill':
             private_write(STATE / 'drill-fixture.json', current | {k: d['after'] for k, d in plan['diff'].items()})
+        elif library_repair:
+            synced = api(app, '/api/v1/settings/plex/library/sync', 'POST')
+            plan['steps_completed'] = ['Library sync request completed.']
+            self.save(plan, 'attempting')
+            old_ids = {x['id'] for x in current['libraries']}
+            expected = copy.deepcopy(changes['libraries'])
+            for item in expected:
+                if item['id'] not in old_ids:
+                    item['enabled'] = False
+            if self.catalog(synced) != self.catalog(expected):
+                raise RepairError('Sync returned an unexpected catalog. No enable request was sent. Inspect Seerr before another attempt.')
+            for item in changes['libraries']:
+                if item['id'] not in old_ids and item['enabled']:
+                    api(app, '/api/v1/settings/plex/library/' + item['id'], 'PUT', {'enabled': True})
+                    plan['steps_completed'].append('Enabled replacement library ' + item['id'] + '.')
+                    self.save(plan, 'attempting')
         elif plan['action'] == 'configure':
             body = copy.deepcopy(current)
             for key, value in changes.items():
@@ -335,7 +364,8 @@ class Repairs:
                     body[key] = value
             path = self.resource_path(app, plan['resource'], plan['record_id'])
             if app['kind'] == 'seerr':
-                body = changes
+                # Seerr requires ip and port; name, machineId, and libraries are read-only.
+                body = {k: body[k] for k in FIELDS['plex'] if k in body}
             api(app, path, 'POST' if app['kind'] == 'seerr' else 'PUT', body)
         elif plan['action'] == 'restart':
             api(app, '/api/' + app.get('api_version', 'v3') + '/system/restart', 'POST', {})
@@ -353,10 +383,12 @@ class Repairs:
                 if plan['action'] == 'configure':
                     actual = projection(plan['resource'], value)
                     expected = {k: d['after'] for k, d in plan['diff'].items()}
-                    if plan['resource'] == 'plex' and 'libraries' in expected:
-                        actual, expected = without_scan_times(actual), without_scan_times(expected)
                     ok = all(actual.get(k) == v for k, v in expected.items())
                     detail = 'Exact settings verified. Use fresh app health and logs to determine whether the original issue is resolved.'
+                elif plan['action'] == 'sync_libraries':
+                    ok = (self.catalog(value['libraries']) == self.catalog(plan['diff']['libraries']['after'])
+                          and all(value.get(k) == plan['before'].get(k) for k in FIELDS['plex']))
+                    detail = 'Library IDs and enabled selection verified. A successful subsequent scan remains to be checked.'
                 elif plan['action'] == 'resume':
                     ok, detail = value.get('paused') is False, 'The queue is no longer paused. Download success remains unverified.'
                 else:
@@ -388,7 +420,7 @@ class Tools:
 
     async def prepare_repair(self, app: str, changes: dict, action: str = 'configure', resource: str = 'host', record_id: int = 0,
                              __user__: dict = None, __metadata__: dict = None) -> dict:
-        """Prepare an exact proposal without changing an app. Inspect options first. configure uses a flat changes object. restart/resume use changes={}. For a safe drill use app=repair-drill, resource=fixture, and toggle value between before and after. Then call approve_repair to show the owner the confirmation dialog."""
+        """Prepare an exact proposal without changing an app. Inspect options first. configure uses a flat changes object. restart/resume/sync_libraries use changes={}. Seerr libraries are read-only fields: use sync_libraries, which refreshes the complete catalog then restores the approved replacement enabled flag. Its old scan marker resets; no automatic rollback. For a safe drill use app=repair-drill, resource=fixture, and toggle value between before and after. Then call approve_repair to show the owner the confirmation dialog."""
         engine = Repairs()
         engine.authorize(__user__, __metadata__)
         return await asyncio.to_thread(engine.prepare, app, action, resource, record_id, changes,
@@ -429,6 +461,7 @@ class Tools:
             message = (f"App: {plan['app']} on {plan['host']}\nAction: {plan['action']}\n"
                        f"Resource: {plan['resource']} / record {plan['record_id']}\n\n"
                        + json.dumps(plan['diff'], indent=2) + '\n\n'
+                       + '\n'.join(plan.get('steps', [])) + '\n\n'
                        + plan['risk'] + '\n\nBackup before the attempt: ' + plan['backup']
                        + '\nNo configuration change means this backup is a precheck receipt only.'
                        + '\nOne attempt. No automatic retries or rollback. Approval expires in three minutes.')

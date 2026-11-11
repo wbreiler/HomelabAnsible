@@ -240,7 +240,7 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
     async def test_seerr_posts_only_approved_fields_and_backup_failure_blocks_write(self):
         config = json.loads(r.CONFIG.read_text())
         old = {'ip': 'old.example.test', 'port': 443, 'useSsl': True, 'machineId': 'old-id', 'libraries': []}
-        new = {'ip': '192.0.2.5', 'port': 32400, 'useSsl': False}
+        new = {'ip': '192.0.2.5', 'port': 443, 'useSsl': True}
         config['apps']['seerr'] = {'kind': 'seerr', 'host': 'guest', 'url': 'http://192.0.2.3:5055', 'key': 'secret',
                                    'resources': ['plex'], 'destinations': {'plex': [new, {k: old[k] for k in new}]}}
         r.private_write(r.CONFIG, config)
@@ -248,12 +248,13 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
         def api(app, path, method='GET', body=None):
             self.assertEqual(path, '/api/v1/settings/plex')
             if method == 'POST':
+                self.assertEqual(set(body), {'ip', 'port', 'useSsl'})
                 writes.append(body)
                 current.update(body | {'machineId': 'detected-new-id'})
             return copy.deepcopy(current)
         async def yes(event): return True
         with patch.object(r, 'api', side_effect=api):
-            plan = await self.tool.prepare_repair('seerr', new, resource='plex', __user__=USER, __metadata__=META)
+            plan = await self.tool.prepare_repair('seerr', {'ip': new['ip']}, resource='plex', __user__=USER, __metadata__=META)
             original_write = r.private_write
             def fail_backup(path, value):
                 if str(path).endswith('.backup.json'):
@@ -263,81 +264,117 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
                 result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
             self.assertEqual(result['status'], 'blocked')
             self.assertEqual(writes, [])
-            plan = await self.tool.prepare_repair('seerr', new, resource='plex', __user__=USER, __metadata__=META)
+            plan = await self.tool.prepare_repair('seerr', {'ip': new['ip']}, resource='plex', __user__=USER, __metadata__=META)
             result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
             self.assertEqual(result['status'], 'verified')
             self.assertEqual(writes, [new])
 
-    async def test_seerr_library_repair_changes_only_verified_id_with_backup_and_rollback(self):
-        old = {'ip': 'plex.example.test', 'port': 443, 'useSsl': True, 'machineId': 'same-server', 'libraries': [
+    def seerr_state(self):
+        current = {'ip': 'plex.example.test', 'port': 443, 'useSsl': True, 'machineId': 'same-server', 'libraries': [
             {'id': '1', 'name': 'Movies', 'type': 'movie', 'enabled': True, 'lastScan': 100},
             {'id': '4', 'name': 'Anime', 'type': 'show', 'enabled': True, 'lastScan': 200}]}
         config = json.loads(r.CONFIG.read_text())
         config['apps']['seerr'] = {'kind': 'seerr', 'host': 'guest', 'url': 'http://192.0.2.3:5055', 'key': 'secret',
-            'resources': ['plex'], 'destinations': {'plex': [{k: old[k] for k in ['ip', 'port', 'useSsl']}]},
+            'resources': ['plex'], 'destinations': {'plex': [{k: current[k] for k in ['ip', 'port', 'useSsl']}]},
             'library_id_repairs_verified_at': time.time(),
+            'library_catalog': [{'id': '1', 'name': 'Movies', 'type': 'movie'}, {'id': '3', 'name': 'Anime', 'type': 'show'}],
             'library_id_repairs': [{'name': 'Anime', 'type': 'show', 'from_id': '4', 'to_id': '3'}]}
         r.private_write(r.CONFIG, config)
-        new = copy.deepcopy(old['libraries'])
-        new[1]['id'] = '3'
-        current, writes = copy.deepcopy(old), []
-        def api(app, path, method='GET', body=None):
-            self.assertEqual(path, '/api/v1/settings/plex')
-            if method == 'POST':
-                writes.append(copy.deepcopy(body))
-                current.update(copy.deepcopy(body))
-            return copy.deepcopy(current)
-        async def yes(event): return True
-        with patch.object(r, 'api', side_effect=api):
-            plan = await self.tool.prepare_repair('seerr', {'libraries': new}, resource='plex', __user__=USER, __metadata__=META)
-            self.assertEqual(writes, [])
-            current['libraries'][0]['lastScan'] = 300
-            latest = copy.deepcopy(current)
-            applied = copy.deepcopy(new)
-            applied[0]['lastScan'] = 300
-            result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
-            self.assertEqual(result['status'], 'verified')
-            self.assertEqual(writes, [{'libraries': applied}])
-            self.assertEqual(json.loads(Path(plan['backup']).read_text())['before'], latest)
-            rollback = await self.tool.prepare_rollback(plan['id'], __user__=USER, __metadata__=META)
-            result = await self.tool.approve_repair(rollback['id'], __user__=USER, __metadata__=META, __event_call__=yes)
-            self.assertEqual(result['status'], 'verified')
-            self.assertEqual(current, latest)
-            plan = await self.tool.prepare_repair('seerr', {'libraries': applied}, resource='plex', __user__=USER, __metadata__=META)
-            current['libraries'][0]['enabled'] = False
-            result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
-            self.assertEqual(result['status'], 'blocked')
-            self.assertEqual(len(writes), 2)
+        return current
+
+    async def test_seerr_sync_uses_supported_contract_and_stops_on_partial_failure(self):
+        # Contract: Seerr 3.5.0 seerr-api.yml and server/api/plexapi.ts syncLibraries.
+        for failure in [None, 'sync', 'enable', 'unexpected_catalog']:
+            with self.subTest(failure=failure):
+                current = self.seerr_state()
+                writes = []
+                def api(app, path, method='GET', body=None):
+                    if method == 'GET':
+                        self.assertEqual(path, '/api/v1/settings/plex')
+                        return copy.deepcopy(current)
+                    self.assertTrue(Path(plan['backup']).exists())
+                    writes.append((method, path, body))
+                    if path == '/api/v1/settings/plex/library/sync':
+                        self.assertEqual((method, body), ('POST', None))
+                        if failure == 'sync':
+                            raise r.RepairError('Sync response lost.')
+                        current['libraries'][1] = {'id': '3', 'name': 'Anime', 'type': 'show', 'enabled': False}
+                        if failure == 'unexpected_catalog':
+                            current['libraries'].append({'id': '9', 'name': 'New library', 'type': 'movie', 'enabled': False})
+                        return copy.deepcopy(current['libraries'])
+                    self.assertEqual((method, path, body), ('PUT', '/api/v1/settings/plex/library/3', {'enabled': True}))
+                    if failure == 'enable':
+                        raise r.RepairError('Enable response lost.')
+                    current['libraries'][1]['enabled'] = True
+                    return copy.deepcopy(current['libraries'][1])
+                async def yes(event):
+                    self.assertIn('Refresh the complete library list', event['data']['message'])
+                    self.assertIn('partial failure', event['data']['message'])
+                    return True
+                with patch.object(r, 'api', side_effect=api):
+                    plan = await self.tool.prepare_repair('seerr', {}, action='sync_libraries', __user__=USER, __metadata__=META)
+                    self.assertEqual(writes, [])
+                    self.assertNotIn('lastScan', plan['diff']['libraries']['after'][1])
+                    current['libraries'][0]['lastScan'] = 300
+                    latest = copy.deepcopy(current)
+                    result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+                    self.assertEqual(result['status'], 'failed_or_uncertain' if failure else 'verified')
+                    self.assertEqual(len(writes), 1 if failure in ['sync', 'unexpected_catalog'] else 2)
+                    self.assertEqual(len(result.get('steps_completed', [])), 0 if failure == 'sync' else 1 if failure else 2)
+                    self.assertEqual(json.loads(Path(plan['backup']).read_text())['before'], latest)
+                    with self.assertRaises(r.RepairError):
+                        await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+                    with self.assertRaises(r.RepairError):
+                        await self.tool.prepare_rollback(plan['id'], __user__=USER, __metadata__=META)
+                self.assertEqual(current['libraries'][0]['lastScan'], 300)
+                if failure != 'sync':
+                    self.assertNotIn('lastScan', current['libraries'][1])
+                    self.assertEqual(current['libraries'][1]['enabled'], failure is None)
+                self.assertEqual({k: current[k] for k in r.FIELDS['plex']}, {k: latest[k] for k in r.FIELDS['plex']})
+
+    async def test_seerr_sync_rechecks_evidence_and_settings_before_any_write(self):
+        for drift in ['enabled', 'expired_evidence', 'connection', 'policy']:
+            with self.subTest(drift=drift):
+                current = self.seerr_state()
+                def api(app, path, method='GET', body=None):
+                    self.assertEqual(method, 'GET')
+                    return copy.deepcopy(current)
+                async def yes(event): return True
+                with patch.object(r, 'api', side_effect=api):
+                    plan = await self.tool.prepare_repair('seerr', {}, action='sync_libraries', __user__=USER, __metadata__=META)
+                    if drift == 'enabled':
+                        current['libraries'][0]['enabled'] = False
+                    elif drift == 'connection':
+                        current['ip'] = 'different.example.test'
+                    elif drift == 'policy':
+                        config = json.loads(r.CONFIG.read_text())
+                        config['apps']['seerr']['library_id_repairs'][0]['to_id'] = '9'
+                        r.private_write(r.CONFIG, config)
+                    saved = json.loads((r.STATE / (plan['id'] + '.json')).read_text())
+                    engine = r.Repairs()
+                    if drift == 'expired_evidence':
+                        # Keep the ten-minute plan live while its one-hour evidence expires.
+                        engine.apps['seerr']['library_id_repairs_verified_at'] = time.time() - 3601
+                        with self.assertRaisesRegex(r.RepairError, 'older than one hour'):
+                            engine.apply(saved)
+                    else:
+                        result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+                        self.assertEqual(result['status'], 'blocked')
+                    self.assertFalse(Path(plan['backup']).exists())
+
+    async def test_seerr_rejects_readonly_library_writes_and_unverified_sync(self):
+        current = self.seerr_state()
         engine = r.Repairs()
         app = engine.app('seerr')
-        private = copy.deepcopy(old)
-        private['libraries'][0]['futurePrivateField'] = 'do-not-expose'
-        self.assertNotIn('do-not-expose', json.dumps(r.projection('plex', private)))
-        for change in [{'id': '99'}, {'id': '1'}, {'enabled': False}, {'enabled': 1}, {'name': 'Other'}, {'type': 'movie'}, {'lastScan': 999}]:
-            bad = copy.deepcopy(new)
-            bad[1].update(change)
-            with self.subTest(change=change), self.assertRaises(r.RepairError):
-                engine.validate(app, 'plex', old, {'libraries': bad})
-        for bad in [new[:1], list(reversed(new)), new + [new[0]]]:
-            with self.assertRaises(r.RepairError):
-                engine.validate(app, 'plex', old, {'libraries': bad})
         with self.assertRaises(r.RepairError):
-            engine.validate(app, 'plex', old, {'libraries': new, 'port': 443})
-        with self.assertRaises(r.RepairError):
-            engine.validate(app | {'library_id_repairs_verified_at': time.time()-3601}, 'plex', old, {'libraries': new})
-
-    async def test_library_evidence_expiring_during_approval_blocks_before_write(self):
-        plan = await self.plan()
-        calls = 0
-        def late_expiry(engine, *args, **kwargs):
-            nonlocal calls
-            calls += 1
-            raise r.RepairError('Evidence expired during approval.')
-        with patch.object(r.Repairs, 'validate', late_expiry):
-            result = await self.approve(plan)
-        self.assertEqual(result['status'], 'blocked')
-        self.assertEqual(calls, 1)
-        self.assertFalse(Path(plan['backup']).exists())
+            engine.validate(app, 'plex', current, {'libraries': current['libraries']})
+        for override in [{'library_id_repairs_verified_at': 0}, {'library_catalog': []},
+                         {'library_id_repairs': []}, {'library_id_repairs': [
+                             {'name': 'Anime', 'type': 'show', 'from_id': '4', 'to_id': '1'}]}]:
+            with self.subTest(override=override), self.assertRaises(r.RepairError):
+                engine.sync_target(app | override, current)
+        current['libraries'][0]['futurePrivateField'] = 'do-not-expose'
+        self.assertNotIn('do-not-expose', json.dumps(r.projection('plex', current)))
 
 
 if __name__ == '__main__':

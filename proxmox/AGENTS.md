@@ -325,9 +325,11 @@ Use `../terraform/README.md` for provisioning and media management.
   destination allowlists, private backups, stale-state checks, single attempts,
   and verification. Chat text is not approval. Never turn this into an arbitrary
   shell, HTTP, Docker, or file-edit tool. See [approved repairs](docs/app-repairs.md).
-  Seerr library repairs require fresh, explicitly verified old/new ID pairs.
-  Preserve enabled flags and all other library metadata. Do not use a generic
-  library sync, which can disable a library whose ID changed.
+  Seerr's `libraries` field is read-only. Library repairs require a fresh,
+  verified complete catalog and exactly one old/new ID pair. Explicit approval
+  covers a complete catalog sync followed by restoring the replacement's enabled
+  selection. Show the lost scan marker and partial-failure risk. Unexpected
+  catalogs stop the second write. Never retry or roll back automatically.
 * `app-observer.yml` adds fixed app self-checks and filtered diagnostics. Preserve
   source allowlists, redaction, ingestion-time labels, and unknown/partial
   health states. Do not replace these with arbitrary URL, shell, or LogQL tools.
