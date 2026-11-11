@@ -739,6 +739,8 @@ Use `../terraform/README.md` for provisioning and media management.
   disabled container swap. Clip count must not reduce encoding quality. Queue
   new previews at capacity. Test nested silent/non-MP4 inputs before changing
   the encoder or publisher.
+* Honor `zipline_clips_start_timer: false` by disabling the publisher timer.
+  Preserve existing records, originals, and RAM previews when publication stops.
 * NAS clips require explicit placement in the SMB Shared tree. Mirror its visible
   folders, including empty ones, under the existing dashboard folder. Preserve the
   nested read-only NFS mount, Docker no-symlink-follow check, per-file settling

@@ -513,3 +513,4 @@ homelable_scanner_ranges:
 install_zipline: false
 # Optional read-only opt-in directory, used by zipline-clips-storage.yml.
 # zipline_clips_export: nas.example.internal:/pool/clips/Shared
+# zipline_clips_start_timer: false  # Disable automatic publication; keep existing links.

@@ -92,3 +92,22 @@
           register: zipline_clips_timer
           changed_when: "'changed' in zipline_clips_timer.stdout"
           when: zipline_clips_start_timer | default(true) | bool
+
+        - name: Disable automatic publication when requested
+          ansible.builtin.command:
+            argv:
+              - pct
+              - exec
+              - "{{ zipline_clips_vmid }}"
+              - --
+              - sh
+              - -ceu
+              - |
+                if systemctl is-enabled --quiet zipline-shared-clips.timer ||
+                   systemctl is-active --quiet zipline-shared-clips.timer; then
+                  systemctl disable --now zipline-shared-clips.timer
+                  echo changed
+                fi
+          register: zipline_clips_timer_disabled
+          changed_when: "'changed' in zipline_clips_timer_disabled.stdout"
+          when: not (zipline_clips_start_timer | default(true) | bool)

@@ -112,6 +112,14 @@ shortcut require user interaction and remain unverified.
 
 ## Publish a clip from the NAS
 
+Automatic publication is disabled in the current deployment
+(`zipline_clips_start_timer: false`). Adding files to Shared does not publish
+them. Existing links and their RAM previews remain available. Moving an
+existing source out of Shared no longer triggers automatic record cleanup.
+Delete its record in Zipline to withdraw the link while publication is disabled.
+
+The workflow below applies when the publisher is enabled or run manually.
+
 Move a finished clip into the SMB share's **Shared** folder or one of its subfolders.
 A move within the same share keeps the media on the NAS. The publisher scans
 every five seconds and waits until the file identity, size, and modification
@@ -128,12 +136,13 @@ account stores the rich-card appearance in its native Zipline **Viewing Files**
 settings. These settings apply to existing and future viewer links:
 
 - Enable **View Routes** and **Embed**. Disable **Media-only link preview**.
-- Set **Embed Site Name** to `will image vault` and **Embed Color** to `#8B5CF6`.
+- Set **Embed Site Name** to `Will Image Vault` and **Embed Color** to `#8B5CF6`.
 - Set **Embed Title** to
-  `{file.originalName::exists["{file.originalName}"||"{file.name}"]}`.
+  `{file.originalName::exists["{file.originalName::title}"||"{file.name::title}"]}`.
 - Leave **Embed Description** empty.
 
-The title uses the original filename, with the stored name as a fallback.
+The title capitalizes the first letter of the original filename, with the
+stored name as a fallback.
 The viewer includes the video URL and, when available, a JPEG thumbnail in
 its Open Graph metadata. Discord controls the final card layout. Paste a new
 viewer URL with a fresh query string after changing the settings to test it
@@ -188,6 +197,10 @@ parent into Docker so the NFS submount retains `nosymfollow`.
 With `zipline_clips_export` configured, apply the Zipline role with proxy
 management enabled to install the preview worker and media routes. Run
 `ansible-playbook zipline-clips.yml --ask-vault-pass` to install the publisher. Its Compose override survives ordinary Zipline updates. For a
-first-deployment pilot, pass `-e zipline_clips_start_timer=false` and run
-`systemctl start zipline-shared-clips.service` inside the guest to scan.
+manual-only deployment, set `zipline_clips_start_timer: false` in the local
+variables and apply `zipline-clips.yml`. This disables and stops the timer,
+including on an existing deployment. A scan already in progress can finish.
+Run `systemctl start zipline-shared-clips.service` inside the guest only when
+a manual scan is intended. Set the variable to `true` and apply the playbook
+to restore automatic publication.
 Check the timer with `systemctl list-timers zipline-shared-clips.timer`.
