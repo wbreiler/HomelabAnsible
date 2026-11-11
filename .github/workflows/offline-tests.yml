@@ -44,5 +44,5 @@ jobs:
       - name: Run localhost ownership and check-mode fixtures
         run: |
           ansible-playbook -i localhost, tests/terraform-ownership.yml
-          ansible-playbook -i localhost, tests/check-mode.yml
+          ansible-playbook -i localhost, tests/check-mode.yml --check
           ansible-playbook -i localhost, tests/terraform-platform-ownership.yml
