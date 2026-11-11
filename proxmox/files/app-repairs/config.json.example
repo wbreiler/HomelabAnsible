@@ -1,0 +1,34 @@
+{
+  "owner_id": "EXISTING_OPEN_WEBUI_ADMIN_ID",
+  "apps": {
+    "sonarr": {
+      "kind": "arr",
+      "url": "http://192.0.2.30:8989",
+      "api_version": "v3",
+      "key": "EXISTING_APP_API_KEY",
+      "host": "sonarr-guest",
+      "resources": ["host", "downloadclient", "remotepathmapping"],
+      "required_hosts": ["192.0.2.30", "tv.example.test"],
+      "allowed_hosts": ["192.0.2.30", "tv.example.test", "downloads.example.test"],
+      "destinations": {
+        "SABnzbd": [{"host": "downloads.example.test", "port": 443, "useSsl": true, "urlBase": ""}]
+      },
+      "path_roots": ["/media/downloads", "/nzb"]
+    },
+    "seerr": {
+      "kind": "seerr",
+      "url": "http://192.0.2.31:5055",
+      "key": "EXISTING_APP_API_KEY",
+      "host": "seerr-guest",
+      "resources": ["plex"],
+      "destinations": {"plex": [{"ip": "192.0.2.40", "port": 32400, "useSsl": false}]}
+    },
+    "sabnzbd": {
+      "kind": "sabnzbd",
+      "url": "http://192.0.2.40:8080",
+      "key": "EXISTING_APP_API_KEY",
+      "host": "storage-host",
+      "resources": ["queue"]
+    }
+  }
+}

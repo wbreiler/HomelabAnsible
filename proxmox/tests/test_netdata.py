@@ -91,6 +91,20 @@ class NetdataIntegration(unittest.TestCase):
         self.assertIn('dbengine tier 0 retention size = 2GiB', parent)
         self.assertIn('allow streaming from = 192.0.2.3', parent)
 
+    def test_repair_tool_is_opt_in_and_secrets_never_enter_the_model(self):
+        self.settings['repairs'] = {'source': 'private tool source', 'config': {'key': 'private repair credential'}}
+        first = webui.desired_config(self.current, self.connections, self.settings)
+        self.assertEqual(first, webui.desired_config(first[0], first[1], self.settings))
+        model = first[2]
+        self.assertIn('homelab_repairs', model['meta']['toolIds'])
+        self.assertIn('browser dialog is the approval boundary', ' '.join(model['params']['system'].split()))
+        self.assertNotIn('You cannot install, restart, repair', model['params']['system'])
+        self.assertNotIn('private repair credential', str(first))
+        self.assertNotIn('private tool source', str(first))
+        self.assertFalse(model['meta']['capabilities']['builtin_tools'])
+        del self.settings['repairs']
+        self.assertNotIn('homelab_repairs', webui.desired_config(first[0], first[1], self.settings)[2]['meta']['toolIds'])
+
 
 if __name__ == '__main__':
     unittest.main()

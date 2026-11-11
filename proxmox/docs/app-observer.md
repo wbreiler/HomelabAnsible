@@ -1,5 +1,8 @@
 # Application health and filtered logs
 
+[Approved app repairs](app-repairs.md) use a separate native WebUI tool.
+The observation endpoints described here remain read-only.
+
 **Ask the lab** combines Netdata metrics with fixed read-only application
 observations. Use the same Open WebUI model. Ask, for example:
 

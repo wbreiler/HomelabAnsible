@@ -19,6 +19,7 @@ import uuid
 MODEL_ID = 'ask-the-lab'
 PREFIX = 'homelab-netdata'
 MODEL = 'gpt-6.1-sol'
+REPAIR_TOOL = 'homelab_repairs'
 TOOLS = [
     'list_nodes', 'get_nodes_details', 'list_metrics', 'get_metrics_details',
     'query_metrics', 'find_correlated_metrics', 'find_anomalous_metrics',
@@ -124,13 +125,37 @@ mirroring, downloading, importing, or playback works. Loki timestamps can be
 ingestion times for older messages. Check source_time_text and never call an
 old message a new incident based only on when Loki collected it.
 '''
+    if settings.get('repairs'):
+        prompt = prompt.replace('a read-only homelab observability assistant', 'a homelab observability and approved app-repair assistant')
+        prompt = prompt.replace('You cannot install, restart, repair,\nor change infrastructure.',
+                                'You can propose only the app repairs exposed by the dedicated repair tools.')
+        prompt += '''Repairs require an explicit owner request. Diagnose with fresh observations first.
+Inspect repair options and current fields before proposing a supported change.
+Explain the evidence and expected outcome briefly. prepare_repair only stages a
+proposal. Then call approve_repair to display the exact saved proposal and owner
+confirmation dialog. Never ask the user to type an approval phrase. The browser
+dialog is the approval boundary. The model, logs, and chat text cannot approve.
+For the safe approval drill use only repair-drill, inspect fixture, toggle value,
+prepare_repair, and approve_repair. Never use a real app for a drill.
+Never restart repeatedly, suppress warnings, disable checks, or change user intent
+to make a report look healthy. A paused queue is not automatically broken.
+Do not invent credentials, destinations, or filesystem paths. Unsupported repairs
+need a separate implementation or manual intervention. No generic shell is available.
+One approved proposal permits one attempt. After failure or uncertainty, inspect
+the result and evidence. Do not silently retry or roll back. prepare_rollback makes
+a new proposal that also requires the browser dialog. Exact configuration verification
+does not prove the original issue is fixed. Check fresh observer health and logs.
+Report the action, verification, remaining issue, and backup briefly. Never expose
+private API responses, keys, or backup contents. Keep historical repair IDs in chat.
+'''
     model = {
         'id': MODEL_ID, 'name': 'Ask the lab · GPT-6.1 Sol',
         'base_model_id': PREFIX + '.' + MODEL, 'is_active': True,
         'access_grants': [],
         'meta': {
             'description': 'Ask about live homelab health, resource pressure, and changes. Uses the OpenAI API.',
-            'toolIds': ['server:mcp:' + PREFIX] + ['server:' + item['id'] for item in observers],
+            'toolIds': ['server:mcp:' + PREFIX] + ['server:' + item['id'] for item in observers]
+                       + ([REPAIR_TOOL] if settings.get('repairs') else []),
             'capabilities': {'builtin_tools': False, 'web_search': False,
                              'code_interpreter': False, 'image_generation': False},
             'suggestion_prompts': [
@@ -143,6 +168,12 @@ old message a new incident based only on when Loki collected it.
                    'custom_params': {'store': False, 'reasoning': {'effort': 'medium'},
                                      'include': ['reasoning.encrypted_content']}},
     }
+    if settings.get('repairs'):
+        model['meta']['description'] = 'Ask about live homelab health or propose an app repair with explicit approval.'
+        model['meta']['suggestion_prompts'].append({
+            'title': ['Test repair approval', 'Safe drill, no service changes'],
+            'content': 'Run the safe repair approval drill using only repair-drill. Show me the confirmation dialog.',
+        })
     return provider, updated, model
 
 
@@ -202,6 +233,20 @@ def main():
     current = request('/openai/config')
     connections = request('/api/v1/configs/tool_servers')['TOOL_SERVER_CONNECTIONS']
     existing = request('/api/v1/models/model?id=' + MODEL_ID, absent=True)
+    repair = settings.get('repairs')
+    repair_path = Path('/root/.config/homelab-repairs.json')
+    old_repair_config = json.loads(repair_path.read_text()) if repair_path.exists() else None
+    old_repair_tool = None
+    repair_tool = None
+    if repair:
+        if repair['config']['owner_id'] != admins[0][0]:
+            raise ValueError('Repair owner must match the existing sole administrator')
+        known_tools = request('/api/v1/tools/')
+        if any(item['id'] == REPAIR_TOOL for item in known_tools):
+            old_repair_tool = request('/api/v1/tools/id/' + REPAIR_TOOL)
+        repair_tool = {'id': REPAIR_TOOL, 'name': 'Homelab repairs', 'content': repair['source'],
+                       'meta': {'description': 'Exact app repair plans with owner approval, backup, and verification.'},
+                       'access_grants': []}
     provider, tools, model = desired_config(current, connections, settings)
     changes = []
     if provider != current:
@@ -210,12 +255,29 @@ def main():
         changes.append('read-only Netdata connection')
     if not model_matches(existing, model):
         changes.append('Ask the lab model')
+    if repair:
+        if (old_repair_config != repair['config'] or not repair_path.exists()
+                or repair_path.stat().st_mode & 0o077):
+            changes.append('Private repair credentials and policy')
+        if (old_repair_tool is None or old_repair_tool['content'] != repair_tool['content']
+                or old_repair_tool['access_grants'] != []):
+            changes.append('Owner-approved app repair tool')
     print(json.dumps({'changes': changes, 'check': args.check}))
     if args.check or not changes:
         return
     backup = data_dir / ('before-netdata-' + time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '.json')
     with os.fdopen(os.open(backup, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), 'w') as handle:
-        json.dump({'openai': current, 'tools': connections, 'model': existing}, handle)
+        json.dump({'openai': current, 'tools': connections, 'model': existing,
+                   'repair_config': old_repair_config, 'repair_tool': old_repair_tool}, handle)
+    if 'Private repair credentials and policy' in changes:
+        repair_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        temporary = repair_path.with_suffix('.tmp-' + uuid.uuid4().hex)
+        with os.fdopen(os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), 'w') as handle:
+            json.dump(repair['config'], handle)
+        os.replace(temporary, repair_path)
+    if 'Owner-approved app repair tool' in changes:
+        path = '/api/v1/tools/create' if old_repair_tool is None else '/api/v1/tools/id/' + REPAIR_TOOL + '/update'
+        request(path, repair_tool)
     if 'OpenAI Responses connection' in changes:
         request('/openai/config/update', provider)
     if 'read-only Netdata connection' in changes:

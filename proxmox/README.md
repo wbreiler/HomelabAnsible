@@ -32,9 +32,11 @@ leaves monitoring disabled until private configuration and acceptance checks.
 The guide also covers [guest mount checks](docs/offsite-observer.md#guest-mount-checks) for the unprivileged container.
 
 [Ask the lab](docs/netdata.md) connects local Netdata measurements to the OpenAI
-API through the existing Open WebUI. It is read-only and uses a separate, explicit
+API through the existing Open WebUI. Observation uses a separate, explicit
 Netdata deployment playbook. [Application observations](docs/app-observer.md)
 add app self-checks, queue summaries, Docker healthchecks, and filtered logs.
+[Approved app repairs](docs/app-repairs.md) provide exact proposals, browser
+confirmation, backups, progress, and verification through supported app APIs.
 
 ## Features
 

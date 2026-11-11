@@ -48,3 +48,4 @@ Thumbs.db
 /.netdata-inventory.yml
 /.netdata-stream-key
 /.app-observer.json
+/.app-repairs.json

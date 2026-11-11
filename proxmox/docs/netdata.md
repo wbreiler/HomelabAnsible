@@ -2,9 +2,11 @@
 
 Netdata collects local measurements. The existing Open WebUI uses the OpenAI
 Responses API to interpret selected measurements when the owner asks a question.
-There is no Discord worker, repair workflow, or scheduled AI request.
+There is no Discord worker or scheduled AI request.
 [Application health and filtered logs](app-observer.md) provide additional
 read-only evidence through fixed observation tools.
+[Approved app repairs](app-repairs.md) add exact configuration proposals,
+browser confirmation, backups, progress, and verification in the same chat.
 
 Select **Ask the lab · GPT-6.1 Sol** in Open WebUI. Start with one question:
 
@@ -42,7 +44,9 @@ backup schedules remain separate.
 | Netdata parent dashboard | Explicit private network sources, no public listener or Cloud claim |
 | Parent MCP endpoint | Loopback and the explicitly configured Open WebUI address |
 
-The model has no SSH credentials, update commands, shell tool, or repair tool.
+The model has no SSH credentials, update commands, or shell tool.
+The optional native repair tool permits only configured app API operations
+after a separate owner confirmation for each exact proposal.
 Its Netdata allowlist excludes `execute_function` and function discovery.
 Separate app observers expose bounded, filtered diagnostic excerpts. Built-in WebUI tools are disabled for this model.
 The allowlist is enforced by Open WebUI. An administrator can change it.

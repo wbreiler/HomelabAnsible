@@ -319,7 +319,12 @@ Use `../terraform/README.md` for provisioning and media management.
   appliance agent. See [Ask the lab](docs/netdata.md).
 * Open WebUI owns the private OpenAI connection and native MCP tool allowlist.
   Preserve unrelated providers and tools. Never expose generic function
-  execution, raw logs, SSH credentials, or repair tools through this model.
+  execution, raw logs, or SSH credentials through this model.
+* The optional native `homelab_repairs` tool uses an owner-bound browser
+  confirmation for each immutable app proposal. Preserve exact field and
+  destination allowlists, private backups, stale-state checks, single attempts,
+  and verification. Chat text is not approval. Never turn this into an arbitrary
+  shell, HTTP, Docker, or file-edit tool. See [approved repairs](docs/app-repairs.md).
 * `app-observer.yml` adds fixed app self-checks and filtered diagnostics. Preserve
   source allowlists, redaction, ingestion-time labels, and unknown/partial
   health states. Do not replace these with arbitrary URL, shell, or LogQL tools.
