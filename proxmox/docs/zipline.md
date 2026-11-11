@@ -124,9 +124,20 @@ and symbolic links are excluded. Browser playback depends on the codecs.
 
 For Discord, paste the clip's public viewer URL (`/view/<filename>`) in a
 message. The copied public clip link also opens this viewer. The publishing
-account stores `view.enabled` and `view.embedMediaOnly` in its Zipline user
-settings. Enable both when recreating the account. The viewer includes the
-video URL and, when available, a JPEG thumbnail in its Open Graph metadata.
+account stores the rich-card appearance in its native Zipline **Viewing Files**
+settings. These settings apply to existing and future viewer links:
+
+- Enable **View Routes** and **Embed**. Disable **Media-only link preview**.
+- Set **Embed Site Name** to `will image vault` and **Embed Color** to `#8B5CF6`.
+- Set **Embed Title** to
+  `{file.originalName::exists["{file.originalName}"||"{file.name}"]}`.
+- Leave **Embed Description** empty.
+
+The title uses the original filename, with the stored name as a fallback.
+The viewer includes the video URL and, when available, a JPEG thumbnail in
+its Open Graph metadata. Discord controls the final card layout. Paste a new
+viewer URL with a fresh query string after changing the settings to test it
+without reusing a previously cached card.
 The `/raw/` URL serves the media itself. The proxy preserves direct PNG
 responses for the 16-character screenshot URLs used by the Mac and ShareX.
 

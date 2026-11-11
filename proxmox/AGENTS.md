@@ -728,6 +728,9 @@ Use `../terraform/README.md` for provisioning and media management.
 * Optional `zipline_manage_proxy` manages an isolated NPM configuration and
   requires the `homelab-zipline` certificate first. See `docs/zipline.md`.
 * The Mac client and Automator action are under `files/zipline/`.
+* Use native account **Viewing Files** settings for rich-card branding, title,
+  and color. Preserve those database settings during application deployments.
+  See `docs/zipline.md` for the configured fields.
 * Preserve direct PNG and extensionless screenshot links when changing video
   previews. Test the public viewer metadata, thumbnail, and raw video ranges.
   For an opted-in Discord preview, also verify a complete download within ten seconds,
