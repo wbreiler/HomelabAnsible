@@ -21,6 +21,8 @@
       "key": "EXISTING_APP_API_KEY",
       "host": "seerr-guest",
       "resources": ["plex"],
+      "library_id_repairs": [],
+      "library_id_repairs_verified_at": 0,
       "destinations": {"plex": [{"ip": "192.0.2.40", "port": 32400, "useSsl": false}]}
     },
     "sabnzbd": {

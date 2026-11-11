@@ -268,6 +268,77 @@ class RepairTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result['status'], 'verified')
             self.assertEqual(writes, [new])
 
+    async def test_seerr_library_repair_changes_only_verified_id_with_backup_and_rollback(self):
+        old = {'ip': 'plex.example.test', 'port': 443, 'useSsl': True, 'machineId': 'same-server', 'libraries': [
+            {'id': '1', 'name': 'Movies', 'type': 'movie', 'enabled': True, 'lastScan': 100},
+            {'id': '4', 'name': 'Anime', 'type': 'show', 'enabled': True, 'lastScan': 200}]}
+        config = json.loads(r.CONFIG.read_text())
+        config['apps']['seerr'] = {'kind': 'seerr', 'host': 'guest', 'url': 'http://192.0.2.3:5055', 'key': 'secret',
+            'resources': ['plex'], 'destinations': {'plex': [{k: old[k] for k in ['ip', 'port', 'useSsl']}]},
+            'library_id_repairs_verified_at': time.time(),
+            'library_id_repairs': [{'name': 'Anime', 'type': 'show', 'from_id': '4', 'to_id': '3'}]}
+        r.private_write(r.CONFIG, config)
+        new = copy.deepcopy(old['libraries'])
+        new[1]['id'] = '3'
+        current, writes = copy.deepcopy(old), []
+        def api(app, path, method='GET', body=None):
+            self.assertEqual(path, '/api/v1/settings/plex')
+            if method == 'POST':
+                writes.append(copy.deepcopy(body))
+                current.update(copy.deepcopy(body))
+            return copy.deepcopy(current)
+        async def yes(event): return True
+        with patch.object(r, 'api', side_effect=api):
+            plan = await self.tool.prepare_repair('seerr', {'libraries': new}, resource='plex', __user__=USER, __metadata__=META)
+            self.assertEqual(writes, [])
+            current['libraries'][0]['lastScan'] = 300
+            latest = copy.deepcopy(current)
+            applied = copy.deepcopy(new)
+            applied[0]['lastScan'] = 300
+            result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+            self.assertEqual(result['status'], 'verified')
+            self.assertEqual(writes, [{'libraries': applied}])
+            self.assertEqual(json.loads(Path(plan['backup']).read_text())['before'], latest)
+            rollback = await self.tool.prepare_rollback(plan['id'], __user__=USER, __metadata__=META)
+            result = await self.tool.approve_repair(rollback['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+            self.assertEqual(result['status'], 'verified')
+            self.assertEqual(current, latest)
+            plan = await self.tool.prepare_repair('seerr', {'libraries': applied}, resource='plex', __user__=USER, __metadata__=META)
+            current['libraries'][0]['enabled'] = False
+            result = await self.tool.approve_repair(plan['id'], __user__=USER, __metadata__=META, __event_call__=yes)
+            self.assertEqual(result['status'], 'blocked')
+            self.assertEqual(len(writes), 2)
+        engine = r.Repairs()
+        app = engine.app('seerr')
+        private = copy.deepcopy(old)
+        private['libraries'][0]['futurePrivateField'] = 'do-not-expose'
+        self.assertNotIn('do-not-expose', json.dumps(r.projection('plex', private)))
+        for change in [{'id': '99'}, {'id': '1'}, {'enabled': False}, {'enabled': 1}, {'name': 'Other'}, {'type': 'movie'}, {'lastScan': 999}]:
+            bad = copy.deepcopy(new)
+            bad[1].update(change)
+            with self.subTest(change=change), self.assertRaises(r.RepairError):
+                engine.validate(app, 'plex', old, {'libraries': bad})
+        for bad in [new[:1], list(reversed(new)), new + [new[0]]]:
+            with self.assertRaises(r.RepairError):
+                engine.validate(app, 'plex', old, {'libraries': bad})
+        with self.assertRaises(r.RepairError):
+            engine.validate(app, 'plex', old, {'libraries': new, 'port': 443})
+        with self.assertRaises(r.RepairError):
+            engine.validate(app | {'library_id_repairs_verified_at': time.time()-3601}, 'plex', old, {'libraries': new})
+
+    async def test_library_evidence_expiring_during_approval_blocks_before_write(self):
+        plan = await self.plan()
+        calls = 0
+        def late_expiry(engine, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+            raise r.RepairError('Evidence expired during approval.')
+        with patch.object(r.Repairs, 'validate', late_expiry):
+            result = await self.approve(plan)
+        self.assertEqual(result['status'], 'blocked')
+        self.assertEqual(calls, 1)
+        self.assertFalse(Path(plan['backup']).exists())
+
 
 if __name__ == '__main__':
     unittest.main()

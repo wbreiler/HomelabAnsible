@@ -20,7 +20,7 @@ Only one proposal may await approval or execute at a time.
 | --- | --- | --- |
 | Sonarr, Radarr, Lidarr | Allowed hosts, existing download-client connection fields, existing remote-path mappings | Restart the application |
 | Prowlarr | Allowed hosts, existing download-client connection fields | Restart the application |
-| Seerr | Plex IP/hostname, port, and TLS through its settings API | None |
+| Seerr | Plex connection settings and explicitly verified library ID replacements | None |
 | SABnzbd | None | Resume a paused queue |
 | repair-drill | Toggle an isolated fixture between `before` and `after` | No service changes |
 
@@ -29,6 +29,18 @@ Download destinations must match an exact configured host/port/TLS/base-path
 combination. Mapping paths stay within configured media roots. Allowed hosts
 must retain the verified direct and reverse-proxy names. Existing records can
 be edited. The tool cannot create or delete records.
+
+Seerr library repairs change only configured old/new ID pairs whose names and
+types were verified against live Plex within the preceding hour. They preserve
+library order, enabled flags, names, types, scan metadata, and connection settings.
+Background `lastScan` timestamps can advance during review. The executor preserves
+their current values and excludes only these timestamps from the comparison.
+All other configuration drift still blocks execution.
+Unknown pairs and mixed connection/library changes fail. The private policy's
+`library_id_repairs` list stores `{name, type, from_id, to_id}` records, with a
+`library_id_repairs_verified_at` Unix timestamp. Refresh this evidence through
+read-only Plex queries before enabling a new pair. The tool receives no Plex
+credential. A rollback reverses an approved pair through a separate proposal.
 
 This version cannot repair every observed issue. It cannot replace credentials,
 change indexer accounts, modify arbitrary files, manage Docker, install updates,

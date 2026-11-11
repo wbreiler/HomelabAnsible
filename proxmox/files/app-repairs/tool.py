@@ -1,7 +1,7 @@
 """
 title: Homelab repairs
 author: HomelabAnsible
-version: 1.0.0
+version: 1.1.0
 description: Review an exact app repair, approve once, and verify the result.
 """
 import asyncio
@@ -25,7 +25,7 @@ FIELDS = {
     'host': ['allowedHosts'],
     'downloadclient': ['host', 'port', 'useSsl', 'urlBase'],
     'remotepathmapping': ['host', 'remotePath', 'localPath'],
-    'plex': ['ip', 'port', 'useSsl'],
+    'plex': ['ip', 'port', 'useSsl', 'libraries'],
     'fixture': ['value'],
 }
 MAX_BYTES = 1024 * 1024
@@ -42,6 +42,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def without_scan_times(value):
+    value = copy.deepcopy(value)
+    for library in value.get('libraries', []):
+        library.pop('lastScan', None)
+    return value
 
 
 def private_write(path, value):
@@ -89,7 +96,14 @@ def projection(resource, value):
     if not isinstance(value, dict):
         raise RepairError('Unexpected app configuration format.')
     values = {x['name']: x.get('value') for x in value.get('fields', [])} if resource == 'downloadclient' else value
-    return {field: values[field] for field in FIELDS.get(resource, []) if field in values}
+    result = {field: values[field] for field in FIELDS.get(resource, []) if field in values}
+    if 'libraries' in result:
+        libraries = result['libraries']
+        if not isinstance(libraries, list) or len(libraries) > 50 or not all(isinstance(x, dict) for x in libraries):
+            raise RepairError('Unexpected library configuration format.')
+        result['libraries'] = [{k: v for k, v in item.items() if k in ['id', 'name', 'type', 'enabled', 'lastScan']}
+                               for item in libraries]
+    return result
 
 
 class Repairs:
@@ -147,7 +161,9 @@ class Repairs:
         app = self.app(name)
         result = {'app': name, 'host': app['host'], 'resources': app['resources'],
                   'allowed_hosts': app.get('allowed_hosts', []), 'destinations': app.get('destinations', {}),
-                  'path_roots': app.get('path_roots', [])}
+                  'path_roots': app.get('path_roots', []),
+                  'library_id_repairs': app.get('library_id_repairs', []),
+                  'library_id_repairs_verified_at': app.get('library_id_repairs_verified_at')}
         if resource:
             if resource not in app['resources']:
                 raise RepairError('Unsupported resource.')
@@ -173,6 +189,8 @@ class Repairs:
                 valid = type(value) is int and 1 <= value <= 65535
             elif key == 'useSsl':
                 valid = type(value) is bool
+            elif key == 'libraries':
+                valid = isinstance(value, list) and 0 < len(value) <= 50 and all(isinstance(x, dict) for x in value)
             else:
                 valid = isinstance(value, str) and len(value) <= 512 and all(32 <= ord(c) < 127 for c in value)
             if not valid:
@@ -187,11 +205,31 @@ class Repairs:
                 raise RepairError('Allowed hosts must include the configured access names and contain no wildcards or unknown names.')
         if resource in ['downloadclient', 'plex']:
             kind = before.get('implementation', 'plex')
-            destination = {k: updated.get(k) for k in FIELDS[resource]}
+            destination = {k: updated.get(k) for k in FIELDS[resource] if k != 'libraries'}
             if resource == 'downloadclient':
                 destination['urlBase'] = destination['urlBase'] or ''
             if destination not in app.get('destinations', {}).get(kind, []):
                 raise RepairError('Connection changes must match an explicitly configured destination, including port and TLS.')
+        if 'libraries' in changes:
+            if resource != 'plex' or set(changes) != {'libraries'} or len(before['libraries']) != len(changes['libraries']):
+                raise RepairError('Library ID repairs cannot change other settings or add/remove libraries.')
+            if not restore and not 0 <= time.time() - app.get('library_id_repairs_verified_at', 0) <= 3600:
+                raise RepairError('Library ID evidence is older than one hour. Recheck Plex before proposing this repair.')
+            ids = []
+            for previous, replacement in zip(before['libraries'], changes['libraries']):
+                if (digest({k: v for k, v in previous.items() if k != 'id'})
+                        != digest({k: v for k, v in replacement.items() if k != 'id'})):
+                    raise RepairError('Preserve library order, names, types, enabled state, and scan metadata.')
+                ident = replacement.get('id')
+                if not isinstance(ident, str) or not re.fullmatch(r'[1-9][0-9]{0,8}', ident) or ident in ids:
+                    raise RepairError('Library IDs must be unique positive numeric strings.')
+                ids.append(ident)
+                if ident != previous['id']:
+                    pair = {'name': previous['name'], 'type': previous['type'],
+                            'from_id': ident if restore else previous['id'],
+                            'to_id': previous['id'] if restore else ident}
+                    if pair not in app.get('library_id_repairs', []):
+                        raise RepairError('This exact library ID replacement has not been verified against Plex.')
         if resource == 'remotepathmapping':
             if updated['host'] not in app.get('allowed_hosts', []):
                 raise RepairError('Unknown mapping host.')
@@ -219,6 +257,12 @@ class Repairs:
             raise RepairError('Select a single record ID before proposing a change.')
         if action == 'configure' and resource == 'host':
             record_id = before['id']
+        if restore and resource == 'plex' and 'libraries' in changes:
+            changes = copy.deepcopy(changes)
+            for current, previous in zip(before['libraries'], changes['libraries']):
+                previous.pop('lastScan', None)
+                if 'lastScan' in current:
+                    previous['lastScan'] = current['lastScan']
         diff = self.validate(app, resource, before, changes, restore) if action == 'configure' else {}
         if action == 'configure' and not diff:
             raise RepairError('Those values already match. No repair is needed.')
@@ -228,12 +272,14 @@ class Repairs:
         plan = {'id': ident, 'app': name, 'host': app['host'], 'action': action, 'resource': resource,
                 'record_id': record_id, 'diff': diff, 'before': before, 'policy': digest(self.config),
                 'owner': owner, 'chat': chat, 'created': time.time(), 'expires': time.time() + 600,
-                'status': 'proposed', 'backup': str(STATE / (ident + '.backup.json')),
+                'status': 'proposed', 'restore': restore, 'backup': str(STATE / (ident + '.backup.json')),
                 'risk': {'configure': 'Only these settings change. App jobs can behave differently immediately. No service restart is included.',
                          'restart': 'This app will briefly disconnect. Active jobs can be interrupted. No configuration change is included.',
                          'resume': 'Queued downloads will resume and consume network bandwidth and storage. No configuration change is included.'}[action]}
         if app['kind'] == 'seerr':
             plan['risk'] += ' Seerr tests Plex and can update its detected server name and ID. A failed API response can leave in-memory settings changed.'
+            if 'libraries' in diff:
+                plan['risk'] += ' Only verified library IDs change; current background scan timestamps are preserved at execution.'
         if app['kind'] == 'drill':
             plan['risk'] = 'DRILL: changes only a disposable repair fixture inside Open WebUI. No homelab service is affected.'
         private_write(STATE / (ident + '.json'), plan)
@@ -262,8 +308,19 @@ class Repairs:
     def apply(self, plan):
         app = self.app(plan['app'])
         current = self.snapshot(plan['app'], plan['action'], plan['resource'], plan['record_id'])
-        if plan['policy'] != digest(json.loads(CONFIG.read_text())) or digest(current) != digest(plan['before']):
+        library_repair = plan['resource'] == 'plex' and 'libraries' in plan['diff']
+        observed = without_scan_times(current) if library_repair else current
+        expected = without_scan_times(plan['before']) if library_repair else plan['before']
+        if plan['policy'] != digest(json.loads(CONFIG.read_text())) or digest(observed) != digest(expected):
             raise RepairError('App state or repair policy changed. Prepare a fresh proposal.')
+        changes = {k: v['after'] for k, v in plan['diff'].items()}
+        if library_repair:
+            # Background scans advance these timestamps while the owner reviews the ID change.
+            changes['libraries'] = copy.deepcopy(current['libraries'])
+            for actual, approved in zip(changes['libraries'], plan['diff']['libraries']['after']):
+                actual['id'] = approved['id']
+        if plan['action'] == 'configure':
+            self.validate(app, plan['resource'], current, changes, plan.get('restore', False))
         private_write(Path(plan['backup']), {'app': plan['app'], 'resource': plan['resource'],
                                             'record_id': plan['record_id'], 'saved_at': time.time(), 'before': current})
         self.save(plan, 'attempting')
@@ -271,14 +328,14 @@ class Repairs:
             private_write(STATE / 'drill-fixture.json', current | {k: d['after'] for k, d in plan['diff'].items()})
         elif plan['action'] == 'configure':
             body = copy.deepcopy(current)
-            for key, change in plan['diff'].items():
+            for key, value in changes.items():
                 if plan['resource'] == 'downloadclient':
-                    next(x for x in body['fields'] if x['name'] == key)['value'] = change['after']
+                    next(x for x in body['fields'] if x['name'] == key)['value'] = value
                 else:
-                    body[key] = change['after']
+                    body[key] = value
             path = self.resource_path(app, plan['resource'], plan['record_id'])
             if app['kind'] == 'seerr':
-                body = {k: v['after'] for k, v in plan['diff'].items()}
+                body = changes
             api(app, path, 'POST' if app['kind'] == 'seerr' else 'PUT', body)
         elif plan['action'] == 'restart':
             api(app, '/api/' + app.get('api_version', 'v3') + '/system/restart', 'POST', {})
@@ -295,7 +352,10 @@ class Repairs:
                 value = self.snapshot(plan['app'], plan['action'], plan['resource'], plan['record_id'])
                 if plan['action'] == 'configure':
                     actual = projection(plan['resource'], value)
-                    ok = all(actual.get(k) == d['after'] for k, d in plan['diff'].items())
+                    expected = {k: d['after'] for k, d in plan['diff'].items()}
+                    if plan['resource'] == 'plex' and 'libraries' in expected:
+                        actual, expected = without_scan_times(actual), without_scan_times(expected)
+                    ok = all(actual.get(k) == v for k, v in expected.items())
                     detail = 'Exact settings verified. Use fresh app health and logs to determine whether the original issue is resolved.'
                 elif plan['action'] == 'resume':
                     ok, detail = value.get('paused') is False, 'The queue is no longer paused. Download success remains unverified.'
