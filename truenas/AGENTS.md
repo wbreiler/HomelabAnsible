@@ -69,48 +69,6 @@ edits to the appliance filesystem or database.
 
 ## Application and backup workflows
 
-- `playbooks/maintenance-queries.yml` installs the shared `maintenance_queries`
-  role from `../proxmox/roles` and reconciles only its named cron job through
-  middleware. Export a protected configuration backup first. Keep the worker
-  and credentials under `/root/homelab-status` with root-only permissions.
-  The minute cron worker polls every ten seconds within a bounded 50-second
-  window under its existing exclusive lock. Long checks finish normally and
-  overlap attempts exit without replay. Do not create another scheduler.
-  Direct `--inspect` diagnostics must still return evidence while that polling
-  lock is held. They must not change query state, cursors, or API counters.
-  Preserve owner mentions and fixed read-only probes. Custom apps use live
-  platform-aware registry/source comparisons; only OS availability is cached.
-  Never pull image layers or rebuild/deploy apps during inspection. This
-  workflow must not change SSH, accounts, pools, or network.
-  Preserve the shared `query_nodes` order. Only its first host writes the main
-  Discord summary; other hosts publish details inside the associated thread.
-  See [query coverage](../proxmox/docs/maintenance-queries.md).
-  The dedicated playbook also enables explicit app update proposals. Keep
-  inspections read-only. Only an exact, unexpired owner-approved proposal may
-  start the separate transient executor. A single-app request changes one
-  platform-pinned image. An approved batch can change multiple listed images
-  per app, retaining all other images/configuration and redeploying each app once.
-  Keep fleet execution sequential, stop pending work after failure/cancellation,
-  and publish exact version plans in the one channel summary's thread.
-  `update apps on HOST` uses that flow for custom apps only. `update os on HOST`
-  must explain the appliance-upgrade exclusion and produce no update actions.
-  Show the chosen scope and bind it to the sealed plan and approval record.
-  Preparation may compare three images concurrently and reuse one fresh Docker
-  inventory for that request. Execution must read current configuration and
-  image identities again. Never share that snapshot across requests or writes.
-  Keep apps absent from running-container inventory visible as unavailable in
-  reports. Exclude stopped or unchecked apps explicitly instead of calling them
-  current. Persist terminal delivery before closing local batch state.
-  Reject RC, pre-release, and preview image versions before creating a proposal.
-  Preserve delivery state during execution. A deleted reply must not block later
-  report requests, recreate approval, or replay an update.
-  Require recent successful backup evidence and preserve one-attempt semantics.
-  Tdarr's pre-update process check must include Docker's required PID column.
-  Block redeployment for active ffmpeg/HandBrakeCLI processes or missing evidence.
-  Catalog apps, local builds, and appliance OS upgrades remain manual. Never
-  run APT on TrueNAS. Never broaden this into host,
-  pool, network, account, or guest lifecycle maintenance.
-
 - Use the scoped playbooks under `playbooks/` for custom apps. Inspect their
   own gates before invocation. A `site.yml` tag does not deploy every custom app.
 - `playbooks/cloud-backup.yml` configures native encrypted backup tasks and

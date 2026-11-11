@@ -4,36 +4,6 @@
 
 Ansible-managed desired state for the TrueNAS host `erebus`.
 
-[Discord health and update queries](../proxmox/docs/maintenance-queries.md)
-uses the scoped `playbooks/maintenance-queries.yml` entry point. It installs a
-local read-only worker and one middleware cron job after a protected config
-backup. It shares the Proxmox role without altering appliance management access.
-Custom containers get live upstream image/source comparisons, including pinned
-images, local builds, and sidecars. Checks never pull layers or deploy updates.
-The configured host group shares one channel summary, with optional details in
-its thread and combined API cost accounting.
-Owner commands such as `update APP on HOST` now prepare app update proposals.
-An exact owner reaction authorizes one custom-app image update through a
-separate executor. The proposal states the backup age and complete app restart
-scope. Catalog apps and locally built images retain their manual workflows.
-See [app update approvals](../proxmox/docs/maintenance-queries.md#initiate-an-app-update).
-`update all on erebus` or `update the homelab` includes eligible custom apps
-in one approved batch. Each app redeploys once with its listed image changes.
-`update apps on erebus` prepares the same eligible custom apps with an explicit
-applications-only scope. `update os on erebus` explains the appliance exclusion
-and starts no updates. Both commands use the existing batch message and thread.
-TrueNAS OS upgrades, catalog apps, and local builds require their separate
-maintenance workflows. See [batch coverage](../proxmox/docs/maintenance-queries.md#update-a-host-or-the-homelab).
-The existing minute cron worker polls Discord about every ten seconds while
-idle. Image checks run three at a time and reuse fresh observations within the
-same batch. Approved app changes remain sequential.
-Stopped apps and missing container inventory remain explicit unavailable checks.
-Direct `--inspect` diagnostics also work while the cron worker holds its lock.
-Deleted report replies do not block later commands. Single-app proposals reject
-implementation changes during preparation and RC, pre-release, or preview images.
-Tdarr updates require a successful process check with no active ffmpeg or
-HandBrakeCLI transcodes. The check includes Docker's required PID column.
-
 [ISO web server](files/iso-server/SETUP.md): a deployed read-only custom app
 with a dedicated macvlan address. HTTP, Proxmox downloads, and repeat-run
 idempotency passed verification.
