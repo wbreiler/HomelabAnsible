@@ -1,0 +1,38 @@
+# Managed by HomelabAnsible. Metrics stay in the homelab.
+[global]
+    hostname = {{ netdata_hostname }}
+    update every = {{ netdata_update_every }}
+
+[db]
+{% if netdata_parent %}
+    db = dbengine
+    storage tiers = 2
+    dbengine tier 0 retention size = 2GiB
+    dbengine tier 0 retention time = 1d
+    dbengine tier 1 retention size = 2GiB
+    dbengine tier 1 retention time = 7d
+{% else %}
+    db = ram
+    retention = 720
+{% endif %}
+
+[web]
+    bind to = {{ netdata_bind }}
+    allow connections from = {{ (['localhost'] + netdata_web_clients + netdata_stream_clients) | unique | join(' ') }}
+    allow dashboard from = {{ (['localhost'] + netdata_web_clients) | unique | join(' ') }}
+    allow mcp from = {{ (['localhost'] + netdata_mcp_clients) | unique | join(' ') }}
+    allow connections by dns = no
+    allow dashboard by dns = no
+    allow mcp by dns = no
+    allow streaming by dns = no
+    allow streaming from = {{ netdata_stream_clients | join(' ') if netdata_parent else 'localhost' }}
+    allow netdata.conf from = localhost
+    allow management from = localhost
+    bearer token protection = no
+
+[ml]
+    enabled = {{ 'yes' if netdata_parent else 'no' }}
+
+[plugins]
+    ebpf = no
+    systemd-journal = no

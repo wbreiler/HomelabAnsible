@@ -41,6 +41,7 @@ python3 tests/test_native_app_updates.py
 python3 tests/test_lxc_update_notifications.py
 python3 tests/test_local_dns.py
 python3 tests/test_homebridge_mdns_proxy.py
+python3 tests/test_netdata.py
 ```
 
 These cover IP-tag parsing/filtering, the local upload client, and application
@@ -53,6 +54,9 @@ artifact integrity, backup gates, failed-retry blocking, saved pins, and
 native archive/release preservation. Run them with Ansible's Python environment.
 Notification tests cover stale reports, failure summaries, credential redaction,
 Discord message limits, disabled mentions, delivery confirmation, and rate limits.
+Netdata tests use Jinja2 to check network restrictions, private stream credentials,
+and preservation of unrelated Open WebUI providers and tools. See the
+[Netdata guide](../docs/netdata.md) for live chat acceptance.
 DNS tests verify additive records and conflict rejection. Homebridge tests
 validate public advertisement data without contacting Avahi or a gateway.
 Terraform mock tests and live adoption checks are documented in

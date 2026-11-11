@@ -31,6 +31,10 @@ application installer inside a dedicated Terraform-owned LXC. Installation
 leaves monitoring disabled until private configuration and acceptance checks.
 The guide also covers [guest mount checks](docs/offsite-observer.md#guest-mount-checks) for the unprivileged container.
 
+[Ask the lab](docs/netdata.md) connects local Netdata measurements to the OpenAI
+API through the existing Open WebUI. It is read-only and uses a separate, explicit
+Netdata deployment playbook.
+
 ## Features
 
 - **Repository Configuration**: Disables enterprise repositories (`.sources` format for PVE 9+) and configures the APT caching proxy

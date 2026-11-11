@@ -1,0 +1,14 @@
+{% if netdata_parent %}
+[{{ netdata_stream_key }}]
+    type = api
+    enabled = yes
+    allow from = {{ netdata_stream_clients | join(' ') }}
+    db = dbengine
+    health enabled = auto
+{% else %}
+[stream]
+    enabled = yes
+    destination = {{ netdata_parent_address }}
+    api key = {{ netdata_stream_key }}
+    send charts matching = *
+{% endif %}

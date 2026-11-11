@@ -310,6 +310,19 @@ Use `../terraform/README.md` for provisioning and media management.
   Export the current board before edits. Preserve `/var/lib/nexdeck` and uploads.
 * See `files/nexdeck/README.md` for editing, recovery, and guest-based tests.
 
+### netdata
+
+* Use the explicit `netdata.yml` inventory group. This standalone deployment is
+  intentionally separate from `site.yml` and does not provision guests.
+* Preserve pinned static artifacts, source ACLs, bounded retention, and the
+  private streaming credential. Keep the TrueNAS collector separate from its
+  appliance agent. See [Ask the lab](docs/netdata.md).
+* Open WebUI owns the private OpenAI connection and native MCP tool allowlist.
+  Preserve unrelated providers and tools. Never expose function execution,
+  logs, SSH credentials, or repair tools through this model.
+* Verify fresh measurements and an actual tool-assisted chat. Container resource
+  metrics do not establish application health or update availability.
+
 ### centralized_logging
 
 * Configure the existing logging guest and collectors. Loki queries stay on

@@ -1,0 +1,140 @@
+---
+- name: Validate the bounded Netdata deployment
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.architecture == 'x86_64'
+      - ansible_facts.distribution in ['Debian', 'Ubuntu']
+      - >-
+        netdata_hostname is match('^[a-zA-Z0-9][a-zA-Z0-9.-]+$')
+      - >-
+        netdata_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - >-
+        netdata_installer_checksum is match('^sha256:[0-9a-f]{64}$')
+      - >-
+        netdata_stream_key is match('^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$')
+      - >-
+        netdata_bind is match('^[0-9.: ]+$')
+      - netdata_web_clients | length > 0
+      - netdata_update_every | int >= 1
+      - >-
+        netdata_parent or netdata_parent_address is match('^[a-zA-Z0-9.-]+:[0-9]+$')
+      - not netdata_parent or netdata_stream_clients | length > 0
+  no_log: true
+
+- name: Inspect an existing static installation
+  ansible.builtin.stat:
+    path: /opt/netdata/bin/netdata
+  register: netdata_binary
+
+- name: Inspect the distribution-managed Netdata binary
+  ansible.builtin.stat:
+    path: /usr/sbin/netdata
+  register: netdata_distribution_binary
+
+- name: Refuse replacement of an appliance or package-managed agent
+  ansible.builtin.assert:
+    that:
+      - not netdata_distribution_binary.stat.exists or netdata_binary.stat.exists
+    fail_msg: A separate Netdata installation already exists. Review its owner before adoption.
+
+- name: Read the installed static version
+  ansible.builtin.command:
+    argv: [/opt/netdata/bin/netdata, -v]
+  register: netdata_installed_version
+  changed_when: false
+  check_mode: false
+  when: netdata_binary.stat.exists
+
+- name: Download the pinned static installer
+  ansible.builtin.get_url:
+    url: 'https://github.com/netdata/netdata/releases/download/v{{ netdata_version }}/netdata-x86_64-v{{ netdata_version }}.gz.run'
+    dest: '/var/cache/netdata-{{ netdata_version }}.gz.run'
+    checksum: '{{ netdata_installer_checksum }}'
+    mode: '0700'
+  when: not netdata_binary.stat.exists or netdata_installed_version.stdout | default('') != 'netdata v' ~ netdata_version
+
+- name: Install the verified agent without starting it or enabling automatic upgrades
+  ansible.builtin.command:
+    argv:
+      - /bin/sh
+      - '/var/cache/netdata-{{ netdata_version }}.gz.run'
+      - --accept
+      - --
+      - --dont-start-it
+      - --stable-channel
+      - --disable-telemetry
+  environment:
+    DISABLE_TELEMETRY: '1'
+    DO_NOT_TRACK: '1'
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - not netdata_binary.stat.exists or netdata_installed_version.stdout | default('') != 'netdata v' ~ netdata_version
+  notify: Restart Netdata
+
+- name: Configure the installed Netdata agent
+  when: not ansible_check_mode or netdata_binary.stat.exists
+  block:
+    - name: Install bounded collection and network settings
+      ansible.builtin.template:
+        src: netdata.conf.j2
+        dest: /opt/netdata/etc/netdata/netdata.conf
+        owner: root
+        group: netdata
+        mode: '0640'
+      notify: Restart Netdata
+
+    - name: Install private streaming settings
+      ansible.builtin.template:
+        src: stream.conf.j2
+        dest: /opt/netdata/etc/netdata/stream.conf
+        owner: root
+        group: netdata
+        mode: '0640'
+      no_log: true
+      diff: false
+      notify: Restart Netdata
+
+    - name: Keep the deployment local without Netdata Cloud
+      ansible.builtin.copy:
+        content: |
+          [global]
+              enabled = no
+        dest: /opt/netdata/etc/netdata/cloud.conf
+        owner: root
+        group: netdata
+        mode: '0640'
+      notify: Restart Netdata
+
+    - name: Disable outbound notification delivery
+      ansible.builtin.copy:
+        content: |
+          # The dashboard and chat expose alerts. No external notification destination.
+          SEND_EMAIL="NO"
+        dest: /opt/netdata/etc/netdata/health_alarm_notify.conf
+        owner: root
+        group: netdata
+        mode: '0640'
+      notify: Restart Netdata
+
+    - name: Start only the Netdata service
+      ansible.builtin.systemd_service:
+        name: netdata
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: not ansible_check_mode
+
+    - name: Apply Netdata configuration before verification
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify the local metrics API
+      ansible.builtin.uri:
+        url: http://127.0.0.1:19999/api/v1/info
+        return_content: true
+      register: netdata_info
+      retries: 10
+      delay: 3
+      until: netdata_info.status | default(0) == 200
+      changed_when: false
+      when: not ansible_check_mode

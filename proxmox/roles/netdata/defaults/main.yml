@@ -1,0 +1,12 @@
+---
+netdata_version: '2.12.3'
+netdata_installer_checksum: sha256:2b3c1afdf18ef788282108afc95ab8e7884c02cb94991b6f8de6ae49f98bd22c
+netdata_parent: false
+netdata_hostname: '{{ ansible_facts.hostname }}'
+netdata_bind: '127.0.0.1'
+netdata_web_clients: ['127.0.0.1', '::1']
+netdata_stream_clients: []
+netdata_parent_address: ''
+netdata_stream_key: ''
+netdata_update_every: 5
+netdata_mcp_clients: ['127.0.0.1', '::1']

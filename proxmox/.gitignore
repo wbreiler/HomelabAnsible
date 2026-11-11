@@ -43,3 +43,7 @@ Thumbs.db
 /HANDOFF.md
 /local-services.dns.json
 /local-services.urls.md
+
+# Private Netdata deployment and streaming credential
+/.netdata-inventory.yml
+/.netdata-stream-key

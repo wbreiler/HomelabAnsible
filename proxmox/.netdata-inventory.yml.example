@@ -1,0 +1,20 @@
+---
+# Copy to .netdata-inventory.yml. Merge with your existing inventory.
+netdata_nodes:
+  vars:
+    ansible_user: root
+    netdata_parent_address: 192.0.2.10:19999
+    netdata_stream_key: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/.netdata-stream-key') | trim }}"
+  hosts:
+    node-a: {}
+    node-b: {}
+    backup-node: {}
+    netdata-parent:
+      ansible_host: 192.0.2.10
+      ansible_ssh_private_key_file: ~/.ssh/lxc.pub
+      netdata_parent: true
+      netdata_bind: '127.0.0.1 192.0.2.10'
+      netdata_web_clients: ['127.0.0.1', '192.0.2.*']
+      netdata_mcp_clients: ['127.0.0.1', '192.0.2.20']
+      # Use each child's actual source address, including the NAS route.
+      netdata_stream_clients: ['192.0.2.11', '192.0.2.12', '192.0.2.13', '192.0.2.14']

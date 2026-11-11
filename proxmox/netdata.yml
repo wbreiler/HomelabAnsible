@@ -1,0 +1,8 @@
+---
+- name: Configure local Netdata collection on explicitly inventoried systems
+  hosts: netdata_nodes
+  become: true
+  gather_facts: true
+  serial: 1
+  roles:
+    - netdata
