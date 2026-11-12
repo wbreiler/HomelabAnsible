@@ -45,12 +45,43 @@ ANSIBLE_CONFIG=deploy/ansible.cfg ansible-playbook -i deploy/inventory.local.yml
 ANSIBLE_CONFIG=deploy/ansible.cfg ansible-playbook -i deploy/inventory.local.yml deploy/install.yml
 ```
 
-Disable template SSH units and other unused listeners after installation.
+For console-only deployments, disable template SSH units and other unused
+listeners after installation.
 Keep console access. Verify `ss -lntup`, the unprivileged UID map, synchronized
 host/guest time, unit syntax, timer state, root-only configuration, and a repeat
 installer run. Missing credential preflight failures are expected before setup.
 Use an inert configuration for any sandbox smoke test. Never substitute fake
 credentials into production credential paths or enable the timer to test installation.
+
+### Optional administrative SSH
+
+Enable SSH only when explicitly authorized. Preserve console access throughout
+the change. Back up the guest's authorized keys, SSH configuration, unit masks,
+and enablement state under a root-only `/root/ssh-access-backups/` directory.
+
+Determine the source address seen by the guest before adding an inbound TCP 22
+rule to the existing firewall resource in the ignored Terraform definition.
+Use a single trusted management source `/32`, not an entire VLAN. A Tailscale
+subnet router can translate several clients to the same source address; this
+firewall rule identifies that gateway, not an individual client. Review and
+apply a saved plan that updates only the observer firewall rules. Preserve
+the existing egress rules, DROP policies, and guest lifecycle.
+
+Install the existing administrative public key through the Proxmox console.
+Use `restrict,from="TRUSTED_SOURCE"` in `authorized_keys`, mode `0600`, beneath
+a root-owned mode-`0700` `.ssh` directory. Keep private keys on the controller.
+Configure `PasswordAuthentication no`, `KbdInteractiveAuthentication no`,
+`AuthenticationMethods publickey`, and `PermitRootLogin prohibit-password`
+in `/etc/ssh/sshd_config.d/00-homelab-admin.conf`. Verify the effective settings
+with `sshd -t` and `sshd -T` before unmasking and enabling `ssh.service`.
+Keep socket activation disabled when using the service directly.
+
+Create a 24-hour control socket using the repository's persistent-session
+procedure. Verify a command through that socket with `BatchMode=yes` and
+`IdentityAgent=none`. Require a no-change Terraform plan afterward. Confirm
+that the observer timer retains its previous state; SSH access does not
+authorize application activation. If the management route changes, review
+both the firewall source and the key's `from` restriction before reconnecting.
 
 ### Guest mount checks
 

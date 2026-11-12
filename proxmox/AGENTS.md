@@ -4,6 +4,11 @@ This file provides guidance to AI code assistants when working with code in this
 
 ## Guest provisioning ownership
 
+The offsite observer defaults to console-only administration. For explicitly
+authorized administrative SSH, follow [its access procedure](docs/offsite-observer.md#optional-administrative-ssh).
+Terraform owns the ingress rule. Preserve key-only authentication and the separate
+application activation gates.
+
 Terraform owns the existing guests. Do not add guest creation, startup,
 resizing, boot flags, or hardware mutation to application roles. The shared
 `tasks/create_lxc.yml` is now an existing-guest software bootstrap, despite its
