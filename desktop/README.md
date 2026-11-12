@@ -93,8 +93,14 @@ powershell.exe -NoProfile -File .\tests\copy-clips.Tests.ps1 -NetworkRoot '\\loc
 The harness accepts only localhost or loopback UNC paths. It creates a unique
 fixture directory inside that share. The mapped-drive case temporarily maps
 an unused drive letter without persistence, then removes that mapping.
+Windows needs an enabled guest adapter for these SMB cases. An offline VM can
+connect it only to an internal virtual hub, with no host or external network.
 The harness does not create shares, change credentials, install the shortcut,
 or change OBS, Ansible, routing, or the production share.
+
+The [2026-11-11 isolated validation](tests/validation-2026-11-11.md) recorded
+26 passed, 0 failed, and 0 skipped after correcting three harness issues.
+It used Windows Server 2022 and localhost SMB, not the live gaming PC.
 
 These tests do not prove SMB server durability, behavior during a process kill
 or power loss, Explorer UI behavior, or the live gaming PC setup. Injected

@@ -211,7 +211,7 @@ try {
         $result = Invoke-Upload @($first, $second, $third)
         Assert ($null -eq $result.Error) $result.Error
         Assert ($script:Calls.Count -eq 2) 'Expected one invocation per directory.'
-        Assert (($script:Calls | Where-Object { $_.Names.Count -eq 2 }).Count -eq 1) 'Same-directory files were not batched.'
+        Assert (@($script:Calls | Where-Object { $_.Names.Count -eq 2 }).Count -eq 1) 'Same-directory files were not batched.'
         Assert-Content $unselected
         Assert (-not [IO.File]::Exists((Join-Path $script:Destination 'unselected.mkv'))) 'Unselected file was uploaded.'
         foreach ($file in @($first, $second, $third)) {
@@ -255,11 +255,11 @@ try {
     }
     Test-Case 'Real Robocopy: named NTFS stream retains original and reports why' {
         $file = New-Clip
-        [IO.File]::WriteAllText("${file}:metadata", 'unverified metadata')
+        Set-Content -LiteralPath $file -Stream metadata -Value 'unverified metadata' -NoNewline
         $result = Invoke-Upload @($file) -Real
         Assert-Failure $result 'Could not complete verified removal.*additional data streams'
         Assert-Content $file
-        Assert ([IO.File]::ReadAllText("${file}:metadata") -ceq 'unverified metadata') 'Original named stream changed.'
+        Assert ((Get-Content -LiteralPath $file -Stream metadata -Raw) -ceq 'unverified metadata') 'Original named stream changed.'
         Assert-Content (Join-Path $script:Destination ([IO.Path]::GetFileName($file)))
     }
     Test-Case 'Open writer prevents verified removal' {
@@ -271,8 +271,8 @@ try {
             $message = $null
             try { Remove-VerifiedOriginal (Get-Item -LiteralPath $file) $target } catch { $message = $_.Exception.Message }
             Assert ($null -ne $message) 'Verification accepted a concurrently writable source.'
-            Assert-Content $file
         } finally { $writer.Dispose() }
+        Assert-Content $file
     }
     Test-Case 'Destination read lock blocks flush and preserves source' {
         $file = New-Clip
