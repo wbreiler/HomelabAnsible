@@ -10,6 +10,9 @@ The independent observer uses a console-based installer and a dedicated
 [Terraform template](proxmox/offsite-observer.tf.example). Follow its
 [deployment guide](../proxmox/docs/offsite-observer.md); it does not use the
 SSH/nesting application workflow below.
+Administrative SSH is an explicit opt-in. Its source-restricted ingress rule
+belongs in the ignored observer firewall definition. Follow the
+[optional SSH procedure](../proxmox/docs/offsite-observer.md#optional-administrative-ssh).
 
 ## Historical adoption baseline — 2026-10-26
 

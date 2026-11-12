@@ -68,7 +68,10 @@ It restores temporary definition edits and does not apply or run Ansible.
 
 The independent observer uses `proxmox/offsite-observer.tf.example` and its
 existing console installer, documented in `../proxmox/docs/offsite-observer.md`.
-Keep nesting and guest SSH absent. Review creation of only its guest/firewall,
+Keep nesting absent and default to console-only administration. Explicitly
+authorized SSH requires a source-restricted rule in its Terraform-owned firewall
+and key-only guest authentication. Follow the deployment guide's optional SSH
+procedure. Review creation of only its guest/firewall,
 then a power-only start plan. Do not route it through the SSH/nesting bootstrap
 or bypass its separate application activation gates.
 
